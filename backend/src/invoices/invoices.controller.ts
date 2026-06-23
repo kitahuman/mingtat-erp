@@ -173,6 +173,7 @@ export class InvoicesController {
     @Query('client_address') clientAddress: string,
     @Query('client_contact') clientContact: string,
     @Query('client_phone') clientPhone: string,
+    @Query('client_name') clientName: string,
     @Query() query: Record<string, unknown>,
     @Res({ passthrough: true }) res: Response,
   ) {
@@ -191,6 +192,7 @@ export class InvoicesController {
       overrideClientAddress: clientAddress,
       overrideClientContact: clientContact,
       overrideClientPhone: clientPhone,
+      overrideClientName: clientName,
       fontSizes: this.parseFontSizes(query),
     });
 
@@ -226,6 +228,7 @@ export class InvoicesController {
     @Query('client_address') clientAddress: string,
     @Query('client_contact') clientContact: string,
     @Query('client_phone') clientPhone: string,
+    @Query('client_name') clientName: string,
     @Query() query: Record<string, unknown>,
     @Res({ passthrough: true }) res: Response,
   ) {
@@ -244,9 +247,9 @@ export class InvoicesController {
       overrideClientAddress: clientAddress,
       overrideClientContact: clientContact,
       overrideClientPhone: clientPhone,
+      overrideClientName: clientName,
       fontSizes: this.parseFontSizes(query),
     });
-
     res.set({
       'Content-Type': 'text/html; charset=utf-8',
       'Cache-Control': 'no-store',
@@ -271,6 +274,7 @@ export class InvoicesController {
     @Query('client_address') clientAddress: string,
     @Query('client_contact') clientContact: string,
     @Query('client_phone') clientPhone: string,
+    @Query('client_name') clientName: string,
     @Query() query: Record<string, unknown>,
     @Res({ passthrough: true }) res: Response,
   ) {
@@ -290,6 +294,7 @@ export class InvoicesController {
       clientAddress,
       clientContact,
       clientPhone,
+      clientName,
       query,
       res,
     );

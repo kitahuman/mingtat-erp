@@ -642,6 +642,8 @@ model Partner {
   invoice_description String?   @db.Text
   quotation_remarks   String?   @db.Text
   invoice_remarks     String?   @db.Text
+  invoice_name_preference   String  @default("zh") // 'zh' = 中文名, 'en' = 英文名
+  quotation_name_preference String  @default("zh") // 'zh' = 中文名, 'en' = 英文名
   is_subsidiary       Boolean   @default(false)
   subsidiaries        String?
   status              String    @default("active")
@@ -902,6 +904,7 @@ model Quotation {
   client_id                 Int?
   quotation_date            DateTime  @db.Date
   contract_name             String?
+  display_client_name       String?
   project_name              String?
   project_id                Int?
   total_amount              Decimal   @default(0) @db.Decimal(12, 2)
@@ -2182,6 +2185,7 @@ model Invoice {
   quotation_id                 Int?
   company_id                   Int
   invoice_title                String? // 發票名稱/標題
+  display_client_name          String? // PDF 顯示用客戶名稱
   client_contract_no           String? // 客戶合約編號
   status                       String    @default("draft") @db.VarChar(30) // draft | issued | partially_paid | paid | void
   invoice_type                 String    @default("invoice") // values: "invoice" or "statement"

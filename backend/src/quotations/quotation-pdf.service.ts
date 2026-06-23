@@ -20,6 +20,7 @@ export interface QuotationPdfOptions {
   overrideClientAddress?: string;
   overrideClientContact?: string;
   overrideClientPhone?: string;
+  overrideClientName?: string;
   fontSizes?: {
     title?: number;
     itemName?: number;
@@ -156,6 +157,7 @@ export class QuotationPdfService {
         overrideClientAddress: options.overrideClientAddress ?? '',
         overrideClientContact: options.overrideClientContact ?? '',
         overrideClientPhone: options.overrideClientPhone ?? '',
+        overrideClientName: options.overrideClientName ?? '',
         fontSizes: finalFontSizes,
       }),
     };
@@ -165,6 +167,9 @@ export class QuotationPdfService {
     const labels = this.labels(options.language);
     const company = quotation.company || {};
     const client = quotation.client || {};
+    // PDF 顯示用客戶名稱：優先用 override（預覽即時輸入），其次資料庫 display_client_name，最後 fallback client.name
+    const clientDisplayName =
+      options.overrideClientName || quotation.display_client_name || client.name || '';
     const theme = this.sanitizeColor(company.invoice_color_theme || '#1a365d');
     const themeLightBg = this.hexToRgba(theme, 0.08);
     const themeLightBorder = this.hexToRgba(theme, 0.15);
@@ -202,7 +207,7 @@ export class QuotationPdfService {
       <div class="client-section">
         <div class="section-label">${labels.to}</div>
         <div class="client-box">
-          <div class="client-name">${this.escapeHtml(client.name || '')}</div>
+          <div class="client-name">${this.escapeHtml(clientDisplayName)}</div>
           ${clientLines}
         </div>
       </div>`
@@ -240,7 +245,7 @@ export class QuotationPdfService {
 <html lang="${options.language === 'en' ? 'en' : 'zh-Hant'}">
 <head>
   <meta charset="UTF-8" />
-  <title>${this.escapeHtml(quotation.quotation_no || `quotation-${quotation.id}`)}_${this.escapeHtml(client.code || client.name || '')}_${this.escapeHtml(quotation.contract_name || quotation.project_name || '')}</title>
+  <title>${this.escapeHtml(quotation.quotation_no || `quotation-${quotation.id}`)}_${this.escapeHtml(client.code || clientDisplayName || '')}_${this.escapeHtml(quotation.contract_name || quotation.project_name || '')}</title>
   <style>
     @page { size: A4 portrait; margin: 9mm 10mm 9mm 10mm; }
     * { box-sizing: border-box; }
@@ -370,7 +375,7 @@ export class QuotationPdfService {
             <div class="signature-block">
               <div class="signature-stamp-space empty"></div>
               <div class="signature-line"></div>
-              <div class="signature-company-name">${this.escapeHtml(client.name || '')}</div>
+              <div class="signature-company-name">${this.escapeHtml(clientDisplayName)}</div>
             </div>` : ''}
           </td>
           <td>

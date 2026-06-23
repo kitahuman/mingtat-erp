@@ -21,6 +21,7 @@ export interface InvoicePdfOptions {
   overrideClientAddress?: string;
   overrideClientContact?: string;
   overrideClientPhone?: string;
+  overrideClientName?: string;
   fontSizes?: {
     title?: number;
     itemName?: number;
@@ -215,6 +216,7 @@ export class InvoicePdfService {
         overrideClientAddress: options.overrideClientAddress || '',
         overrideClientContact: options.overrideClientContact || '',
         overrideClientPhone: options.overrideClientPhone || '',
+        overrideClientName: options.overrideClientName || '',
         fontSizes: finalFontSizes,
       }),
     };
@@ -238,6 +240,9 @@ export class InvoicePdfService {
     const labels = this.labels(options.language);
     const company = invoice.company || {};
     const client = invoice.client || {};
+    // PDF 顯示用客戶名稱：優先用 override（預覽即時輸入），其次資料庫 display_client_name，最後 fallback client.name
+    const clientDisplayName =
+      options.overrideClientName || invoice.display_client_name || client.name || '';
     const theme = this.sanitizeColor(company.invoice_color_theme || '#1a365d');
     const themeLightBg = this.hexToRgba(theme, 0.08);
     const themeLightBorder = this.hexToRgba(theme, 0.15);
@@ -304,7 +309,7 @@ export class InvoicePdfService {
       <div class="client-section">
         <div class="section-label">${labels.billTo}</div>
         <div class="client-box">
-          <div class="client-name">${this.escapeHtml(client.name || '')}</div>
+          <div class="client-name">${this.escapeHtml(clientDisplayName)}</div>
           ${clientLines}
         </div>
       </div>`
@@ -381,7 +386,7 @@ export class InvoicePdfService {
 <html lang="${options.language === 'en' ? 'en' : 'zh-Hant'}">
 <head>
   <meta charset="UTF-8" />
-  <title>${this.escapeHtml(invoice.invoice_no || '')}_${this.escapeHtml(client.code || client.name || '')}_${this.escapeHtml(invoice.invoice_title || '')}</title>
+  <title>${this.escapeHtml(invoice.invoice_no || '')}_${this.escapeHtml(client.code || clientDisplayName || '')}_${this.escapeHtml(invoice.invoice_title || '')}</title>
   <style>
     @page { size: A4 portrait; margin: 9mm 10mm 9mm 10mm; }
     * { box-sizing: border-box; }
@@ -530,7 +535,7 @@ export class InvoicePdfService {
               <div class="signature-block">
                 <div class="signature-stamp-space empty"></div>
                 <div class="signature-line"></div>
-                <div class="signature-company-name">${this.escapeHtml(client.name || '')}</div>
+                <div class="signature-company-name">${this.escapeHtml(clientDisplayName)}</div>
               </div>` : ''}
             </td>
             <td>

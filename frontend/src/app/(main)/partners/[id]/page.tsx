@@ -357,6 +357,20 @@ export default function PartnerDetailPage() {
             <div><label className="block text-sm font-medium text-gray-500 mb-1">銀行賬戶</label><input value={form.bank_account || ''} onChange={e => setForm({...form, bank_account: e.target.value})} className="input-field" /></div>
             <div><label className="block text-sm font-medium text-gray-500 mb-1">發票標題</label><input value={form.invoice_title || ''} onChange={e => setForm({...form, invoice_title: e.target.value})} className="input-field" /></div>
             <div><label className="block text-sm font-medium text-gray-500 mb-1">發票描述</label><input value={form.invoice_description || ''} onChange={e => setForm({...form, invoice_description: e.target.value})} className="input-field" /></div>
+            <div>
+              <label className="block text-sm font-medium text-gray-500 mb-1">發票預設客戶名稱</label>
+              <select value={form.invoice_name_preference || 'zh'} onChange={e => setForm({...form, invoice_name_preference: e.target.value})} className="input-field">
+                <option value="zh">中文名</option>
+                <option value="en">英文名</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-500 mb-1">報價單預設客戶名稱</label>
+              <select value={form.quotation_name_preference || 'zh'} onChange={e => setForm({...form, quotation_name_preference: e.target.value})} className="input-field">
+                <option value="zh">中文名</option>
+                <option value="en">英文名</option>
+              </select>
+            </div>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -364,6 +378,8 @@ export default function PartnerDetailPage() {
             <InfoField label="銀行賬戶" value={partner?.bank_account} />
             <InfoField label="發票標題" value={partner?.invoice_title} />
             <InfoField label="發票描述" value={partner?.invoice_description} />
+            <InfoField label="發票預設客戶名稱" value={(partner?.invoice_name_preference === 'en') ? '英文名' : '中文名'} />
+            <InfoField label="報價單預設客戶名稱" value={(partner?.quotation_name_preference === 'en') ? '英文名' : '中文名'} />
           </div>
         )}
       </div>

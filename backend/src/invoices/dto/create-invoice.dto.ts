@@ -33,6 +33,7 @@ export class CreateInvoiceDto {
   @IsOptional() @Type(() => Number) @IsNumber() quotation_id?: number;
   @Type(() => Number) @IsNumber() company_id: number;
   @IsOptional() @IsString() invoice_title?: string;
+  @IsOptional() @IsString() display_client_name?: string;
   @IsOptional() @IsString() client_contract_no?: string;
   @IsOptional() @IsString() status?: string;
   @IsOptional() @Type(() => Number) @IsNumber() amount?: number;
@@ -72,6 +73,7 @@ export class UpdateInvoiceDto {
   @IsOptional() @Type(() => Number) @IsNumber() quotation_id?: number;
   @IsOptional() @Type(() => Number) @IsNumber() company_id?: number;
   @IsOptional() @IsString() invoice_title?: string;
+  @IsOptional() @IsString() display_client_name?: string;
   @IsOptional() @IsString() client_contract_no?: string;
   @IsOptional() @IsString() status?: string;
   @IsOptional() @Type(() => Number) @IsNumber() subtotal?: number;

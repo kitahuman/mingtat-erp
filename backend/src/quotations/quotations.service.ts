@@ -93,6 +93,7 @@ export class QuotationsService {
     company: true,
     client: true,
     project: true,
+    // client: true 已含 name / name_en 等全部欄位
     creator: { select: { id: true, displayName: true, username: true } },
     items: { orderBy: { sort_order: 'asc' as const } },
     invoices: {
@@ -854,6 +855,7 @@ export class QuotationsService {
             source.quotation_date,
           ),
           contract_name: source.contract_name,
+          display_client_name: source.display_client_name,
           project_name: source.project_name,
           project_id: source.project_id,
           total_amount: source.total_amount,
@@ -997,6 +999,25 @@ export class QuotationsService {
       return defaultValue;
     };
 
+    // 計算 PDF 顯示用客戶名稱
+    // 若前端有傳 display_client_name 直接使用，否則依客戶的 quotation_name_preference 決定
+    let displayClientName: string | null =
+      (quotationData as { display_client_name?: string }).display_client_name?.trim()
+        ? (quotationData as { display_client_name?: string }).display_client_name!.trim()
+        : null;
+    if (!displayClientName && quotationData.client_id) {
+      const clientPartner = await this.prisma.partner.findUnique({
+        where: { id: Number(quotationData.client_id) },
+        select: { name: true, name_en: true, quotation_name_preference: true },
+      });
+      if (clientPartner) {
+        displayClientName =
+          clientPartner.quotation_name_preference === 'en'
+            ? clientPartner.name_en || clientPartner.name
+            : clientPartner.name;
+      }
+    }
+
     // Calculate total
     let total_amount = 0;
     const processedItems: (QuotationItemDto & {
@@ -1023,6 +1044,7 @@ export class QuotationsService {
         ...quotationData,
         company_id: quotationData.company_id,
         quotation_no,
+        display_client_name: displayClientName,
         total_amount,
         quotation_date: new Date(quotationDate),
         quotation_parent_id: null,
@@ -1115,6 +1137,10 @@ export class QuotationsService {
     const updatePayload: Prisma.QuotationUncheckedUpdateInput = {
       ...updateData,
     };
+    if ((updateData as { display_client_name?: string }).display_client_name !== undefined) {
+      updatePayload.display_client_name =
+        (updateData as { display_client_name?: string }).display_client_name || null;
+    }
     if (pdf_font_sizes !== undefined) {
       updatePayload.pdf_font_sizes = this.toNullableJson(pdf_font_sizes);
     }

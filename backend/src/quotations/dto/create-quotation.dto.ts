@@ -37,6 +37,7 @@ export class CreateQuotationDto {
   @IsOptional() @IsString() status?: string;
   @IsOptional() @IsString() subject?: string;
   @IsOptional() @IsString() contract_name?: string;
+  @IsOptional() @IsString() display_client_name?: string;
   @IsOptional() @IsString() project_name?: string;
   @IsOptional() @IsString() validity_period?: string;
   @IsOptional() @IsString() payment_terms?: string;

@@ -21,6 +21,7 @@ type PdfPreviewOptions = {
   client_address: string;
   client_contact: string;
   client_phone: string;
+  display_client_name: string;
   font_size_title: number;
   font_size_item_name: number;
   font_size_item_desc: number;
@@ -40,6 +41,7 @@ const DEFAULT_OPTIONS: PdfPreviewOptions = {
   client_address: '',
   client_contact: '',
   client_phone: '',
+  display_client_name: '',
   font_size_title: 25,
   font_size_item_name: 13,
   font_size_item_desc: 9,
@@ -70,6 +72,7 @@ export default function InvoicePdfPreviewPage() {
 
   const buildSavePayload = useCallback((current: PdfPreviewOptions) => ({
     invoice_custom_payment_terms: current.override_payment_terms || null,
+    display_client_name: current.display_client_name || null,
     invoice_language: current.language,
     invoice_show_bank: current.show_bank,
     invoice_show_client_address: current.show_client_address,
@@ -102,6 +105,7 @@ export default function InvoicePdfPreviewPage() {
       client_address: options.client_address,
       client_contact: options.client_contact,
       client_phone: options.client_phone,
+      client_name: options.display_client_name,
       font_size_title: options.font_size_title,
       font_size_item_name: options.font_size_item_name,
       font_size_item_desc: options.font_size_item_desc,
@@ -120,6 +124,7 @@ export default function InvoicePdfPreviewPage() {
       options.client_address,
       options.client_contact,
       options.client_phone,
+      options.display_client_name,
       options.font_size_title,
       options.font_size_item_name,
       options.font_size_item_desc,
@@ -168,6 +173,10 @@ export default function InvoicePdfPreviewPage() {
             override_payment_terms:
               res.data.invoice_custom_payment_terms ||
               res.data.payment_terms ||
+              '',
+            display_client_name:
+              res.data.display_client_name ||
+              res.data.client?.name ||
               '',
             client_address: prev.client_address || res.data.client?.address || '',
             client_contact:
@@ -300,7 +309,7 @@ export default function InvoicePdfPreviewPage() {
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      const clientCode = invoice?.client?.code || invoice?.client?.name || '';
+      const clientCode = invoice?.client?.code || options.display_client_name || invoice?.client?.name || '';
       const invoiceTitle = invoice?.invoice_title || '';
       link.download = `${invoice?.invoice_no || `invoice-${invoiceId}`}_${clientCode}_${invoiceTitle}.pdf`;
       document.body.appendChild(link);
@@ -391,6 +400,18 @@ export default function InvoicePdfPreviewPage() {
           >
             {savingChanges ? '儲存中...' : '返回'}
           </button>
+        </div>
+
+        <div className="mt-3 flex flex-col gap-1 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-gray-700">
+          <label className="font-medium text-gray-700">客戶名稱（顯示於 PDF）</label>
+          <input
+            type="text"
+            value={options.display_client_name}
+            onChange={(e) => updateOption('display_client_name', e.target.value)}
+            placeholder="客戶名稱"
+            className="input-field h-8 w-full max-w-md py-0 text-sm"
+          />
+          <span className="text-xs text-gray-500">修改後會在離開或儲存時自動更新此發票的客戶顯示名稱。</span>
         </div>
 
         <div className="mt-3 flex flex-wrap items-center gap-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-700">

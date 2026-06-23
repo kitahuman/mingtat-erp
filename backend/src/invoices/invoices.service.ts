@@ -108,6 +108,7 @@ export class InvoicesService {
       select: {
         id: true,
         name: true,
+        name_en: true,
         code: true,
         address: true,
         contact_person: true,
@@ -830,6 +831,7 @@ export class InvoicesService {
         data: {
           invoice_no: invoiceNo,
           invoice_title: source.invoice_title,
+          display_client_name: source.display_client_name,
           client_contract_no: source.client_contract_no,
           date: this.parseRevisionDate(dto.date, source.date),
           due_date: this.parseRevisionNullableDate(
@@ -934,6 +936,7 @@ export class InvoicesService {
       quotation_id?: number | string;
       company_id: number | string;
       invoice_title?: string;
+      display_client_name?: string;
       client_contract_no?: string;
       retention_rate?: number | string;
       other_charges?: { name: string; amount: number }[];
@@ -996,10 +999,29 @@ export class InvoicesService {
       systemSettings.map((setting) => [setting.key, setting.value]),
     );
 
+    // 計算 PDF 顯示用客戶名稱
+    // 若前端有傳 display_client_name 直接使用，否則依客戶的 invoice_name_preference 決定
+    let displayClientName: string | null = dto.display_client_name?.trim()
+      ? dto.display_client_name.trim()
+      : null;
+    if (!displayClientName && clientId) {
+      const client = await this.prisma.partner.findUnique({
+        where: { id: clientId },
+        select: { name: true, name_en: true, invoice_name_preference: true },
+      });
+      if (client) {
+        displayClientName =
+          client.invoice_name_preference === 'en'
+            ? client.name_en || client.name
+            : client.name;
+      }
+    }
+
     const invoice = await this.prisma.invoice.create({
       data: {
         invoice_no: invoiceNo,
         invoice_title: dto.invoice_title || null,
+        display_client_name: displayClientName,
         client_contract_no: dto.client_contract_no || null,
         date: invoiceDate,
         due_date: dto.due_date ? new Date(dto.due_date) : null,
@@ -1128,9 +1150,19 @@ export class InvoicesService {
       [],
     );
 
+    // 依客戶的 invoice_name_preference 決定 PDF 顯示用客戶名稱
+    let displayClientName: string | null = null;
+    if (quotation.client) {
+      displayClientName =
+        quotation.client.invoice_name_preference === 'en'
+          ? quotation.client.name_en || quotation.client.name
+          : quotation.client.name;
+    }
+
     const invoice = await this.prisma.invoice.create({
       data: {
         invoice_no: invoiceNo,
+        display_client_name: displayClientName,
         date: invoiceDate,
         due_date: dto?.due_date ? new Date(dto.due_date) : null,
         client_id: quotation.client_id,
@@ -1209,6 +1241,8 @@ export class InvoicesService {
       data.quotation_id = dto.quotation_id ? Number(dto.quotation_id) : null;
     if (dto.invoice_title !== undefined)
       data.invoice_title = dto.invoice_title || null;
+    if (dto.display_client_name !== undefined)
+      data.display_client_name = dto.display_client_name || null;
     if (dto.client_contract_no !== undefined)
       data.client_contract_no = dto.client_contract_no || null;
     if (dto.retention_rate !== undefined)

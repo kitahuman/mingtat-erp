@@ -123,6 +123,7 @@ export class QuotationsController {
     @Query('client_address') clientAddress: string,
     @Query('client_contact') clientContact: string,
     @Query('client_phone') clientPhone: string,
+    @Query('client_name') clientName: string,
     @Query() query: Record<string, unknown>,
     @Res({ passthrough: true }) res: Response,
   ) {
@@ -142,13 +143,18 @@ export class QuotationsController {
         overrideClientAddress: clientAddress,
         overrideClientContact: clientContact,
         overrideClientPhone: clientPhone,
+        overrideClientName: clientName,
         fontSizes: this.parseFontSizes(query),
       },
     );
 
     const quotationNo = result.quotation.quotation_no || `quotation-${id}`;
     const clientCode =
-      result.quotation.client?.code || result.quotation.client?.name || '';
+      result.quotation.client?.code ||
+      clientName ||
+      result.quotation.display_client_name ||
+      result.quotation.client?.name ||
+      '';
     const quotationTitle =
       result.quotation.project_name || result.quotation.contract_name || '';
     const rawFilename = `${quotationNo}_${clientCode}_${quotationTitle}.pdf`;
@@ -178,6 +184,7 @@ export class QuotationsController {
     @Query('client_address') clientAddress: string,
     @Query('client_contact') clientContact: string,
     @Query('client_phone') clientPhone: string,
+    @Query('client_name') clientName: string,
     @Query() query: Record<string, unknown>,
     @Res({ passthrough: true }) res: Response,
   ) {
@@ -197,6 +204,7 @@ export class QuotationsController {
         overrideClientAddress: clientAddress,
         overrideClientContact: clientContact,
         overrideClientPhone: clientPhone,
+        overrideClientName: clientName,
         fontSizes: this.parseFontSizes(query),
       },
     );

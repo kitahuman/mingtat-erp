@@ -29,6 +29,8 @@ export class CreatePartnerDto {
   @IsOptional() @IsString() invoice_description?: string;
   @IsOptional() @IsString() quotation_remarks?: string;
   @IsOptional() @IsString() invoice_remarks?: string;
+  @IsOptional() @IsString() invoice_name_preference?: string;
+  @IsOptional() @IsString() quotation_name_preference?: string;
   @IsOptional() @IsString() description?: string;
   @IsOptional() @IsString() notes?: string;
   @IsOptional() @IsString() status?: string;
