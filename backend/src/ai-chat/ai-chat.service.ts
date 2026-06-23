@@ -689,7 +689,8 @@ export class AiChatService {
   // ════════════════════════════════════════════════════
 
   private async getCompanies(status?: string) {
-    const where = status && status !== 'all' ? { status } : {};
+    const where: any = { deleted_at: null };
+    if (status && status !== 'all') where.status = status;
     const companies = await this.prisma.company.findMany({
       where,
       select: { id: true, name: true, name_en: true, company_type: true, status: true, internal_prefix: true },
@@ -775,7 +776,7 @@ export class AiChatService {
   }
 
   private async getEmployees(status?: string, role?: string, companyId?: number, search?: string) {
-    let where: any = {};
+    let where: any = { deleted_at: null };
 
     // 預設查在職員工，除非明確指定 'all' 或 'inactive'
     const effectiveStatus = status || 'active';
@@ -831,7 +832,7 @@ export class AiChatService {
   }
 
   private async getVehicles(status?: string, companyId?: number) {
-    const where: any = {};
+    const where: any = { deleted_at: null };
     if (status && status !== 'all') where.status = status;
     if (companyId) where.owner_company_id = companyId;
 
@@ -876,7 +877,7 @@ export class AiChatService {
   }
 
   private async getMachinery(status?: string, machineType?: string) {
-    const where: any = {};
+    const where: any = { deleted_at: null };
     if (status && status !== 'all') where.status = status;
     if (machineType) where.machine_type = { contains: machineType, mode: 'insensitive' };
 
@@ -918,7 +919,7 @@ export class AiChatService {
   }
 
   private async getPartners(partnerType?: string, status?: string, search?: string) {
-    const where: any = {};
+    const where: any = { deleted_at: null };
     if (partnerType) where.partner_type = { contains: partnerType, mode: 'insensitive' };
     if (status && status !== 'all') where.status = status;
     if (search) {
@@ -963,7 +964,7 @@ export class AiChatService {
   }
 
   private async getProjects(status?: string, search?: string) {
-    const where: any = {};
+    const where: any = { deleted_at: null };
     if (status && status !== 'all') where.status = status;
     if (search) where.project_name = { contains: search, mode: 'insensitive' };
 
@@ -992,7 +993,7 @@ export class AiChatService {
   }
 
   private async getContracts(status?: string, search?: string) {
-    const where: any = {};
+    const where: any = { deleted_at: null };
     if (status && status !== 'all') where.status = status;
     if (search) {
       where.OR = [
@@ -1023,8 +1024,8 @@ export class AiChatService {
   }
 
   private async getContractDetail(contractNo: string) {
-    const contract = await this.prisma.contract.findUnique({
-      where: { contract_no: contractNo },
+    const contract = await this.prisma.contract.findFirst({
+      where: { contract_no: contractNo, deleted_at: null },
       include: {
         client: true,
         bq_items: { take: 10 },
@@ -1099,7 +1100,7 @@ export class AiChatService {
   }
 
   private async getExpenses(isPaid?: boolean, dateFrom?: string, dateTo?: string, limit?: number) {
-    const where: any = {};
+    const where: any = { deleted_at: null };
     if (isPaid !== undefined) where.is_paid = isPaid;
     if (dateFrom || dateTo) {
       where.date = {};
@@ -1198,7 +1199,7 @@ export class AiChatService {
   }
 
   private async getInvoices(status?: string, search?: string, limit?: number) {
-    const where: any = { invoice_is_active: true };
+    const where: any = { invoice_is_active: true, deleted_at: null };
     if (status && status !== 'all') where.status = status;
     if (search) {
       where.OR = [
@@ -1249,7 +1250,7 @@ export class AiChatService {
   }
 
   private async getWorkLogs(dateFrom?: string, dateTo?: string, status?: string, limit?: number) {
-    const where: any = {};
+    const where: any = { deleted_at: null };
     if (status) where.status = status;
     if (dateFrom || dateTo) {
       where.scheduled_date = {};
@@ -1337,7 +1338,8 @@ export class AiChatService {
   }
 
   private async getFinancialSummary(projectNo?: string) {
-    const contractWhere = projectNo ? { projects: { some: { project_no: projectNo } } } : {};
+    const contractWhere: any = { deleted_at: null };
+    if (projectNo) contractWhere.projects = { some: { project_no: projectNo } };
     const contracts = await this.prisma.contract.findMany({
       where: contractWhere,
       include: {
@@ -1364,10 +1366,11 @@ export class AiChatService {
 
     // Also get expense summary
     const expenseSummary = await this.prisma.expense.aggregate({
+      where: { deleted_at: null },
       _sum: { total_amount: true },
     });
     const unpaidExpenses = await this.prisma.expense.aggregate({
-      where: { is_paid: false },
+      where: { is_paid: false, deleted_at: null },
       _sum: { total_amount: true },
     });
 
@@ -1400,16 +1403,18 @@ export class AiChatService {
       this.prisma.variationOrder.count({ where: { status: 'submitted' } }),
       this.prisma.paymentApplication.count({ where: { status: 'draft' } }),
       this.prisma.paymentApplication.count({ where: { status: 'submitted' } }),
-      this.prisma.expense.count({ where: { is_paid: false } }),
+      this.prisma.expense.count({ where: { is_paid: false, deleted_at: null } }),
       this.prisma.employeeLeave.count({ where: { status: 'pending' } }),
       this.prisma.vehicle.count({
         where: {
+          deleted_at: null,
           status: 'active',
           insurance_expiry: { lte: thirtyDaysLater, gte: now },
         },
       }),
       this.prisma.machinery.count({
         where: {
+          deleted_at: null,
           status: 'active',
           insurance_expiry: { lte: thirtyDaysLater, gte: now },
         },
@@ -1492,7 +1497,7 @@ export class AiChatService {
   }
 
   private async getQuotations(status?: string, search?: string, dateFrom?: string, dateTo?: string, limit?: number) {
-    const where: any = {};
+    const where: any = { deleted_at: null };
     if (status && status !== 'all') where.status = status;
     if (dateFrom || dateTo) {
       where.quotation_date = {};
@@ -1680,6 +1685,7 @@ export class AiChatService {
     if (searchTables.includes('employees')) {
       const employees = await this.prisma.employee.findMany({
         where: {
+          deleted_at: null,
           OR: [
             { name_zh: { contains: q, mode: 'insensitive' } },
             { name_en: { contains: q, mode: 'insensitive' } },
@@ -1696,6 +1702,7 @@ export class AiChatService {
     if (searchTables.includes('vehicles')) {
       const vehicles = await this.prisma.vehicle.findMany({
         where: {
+          deleted_at: null,
           OR: [
             { plate_number: { contains: q, mode: 'insensitive' } },
             { brand: { contains: q, mode: 'insensitive' } },
@@ -1711,6 +1718,7 @@ export class AiChatService {
     if (searchTables.includes('machinery')) {
       const machinery = await this.prisma.machinery.findMany({
         where: {
+          deleted_at: null,
           OR: [
             { machine_code: { contains: q, mode: 'insensitive' } },
             { machine_type: { contains: q, mode: 'insensitive' } },
@@ -1726,6 +1734,7 @@ export class AiChatService {
     if (searchTables.includes('contracts')) {
       const contracts = await this.prisma.contract.findMany({
         where: {
+          deleted_at: null,
           OR: [
             { contract_no: { contains: q, mode: 'insensitive' } },
             { contract_name: { contains: q, mode: 'insensitive' } },
@@ -1740,6 +1749,7 @@ export class AiChatService {
     if (searchTables.includes('projects')) {
       const projects = await this.prisma.project.findMany({
         where: {
+          deleted_at: null,
           OR: [
             { project_no: { contains: q, mode: 'insensitive' } },
             { project_name: { contains: q, mode: 'insensitive' } },
@@ -1754,6 +1764,7 @@ export class AiChatService {
     if (searchTables.includes('partners')) {
       const partners = await this.prisma.partner.findMany({
         where: {
+          deleted_at: null,
           OR: [
             { name: { contains: q, mode: 'insensitive' } },
             { name_en: { contains: q, mode: 'insensitive' } },
@@ -1769,6 +1780,7 @@ export class AiChatService {
     if (searchTables.includes('work_logs')) {
       const workLogs = await this.prisma.workLog.findMany({
         where: {
+          deleted_at: null,
           OR: [
             { start_location: { contains: q, mode: 'insensitive' } },
             { end_location: { contains: q, mode: 'insensitive' } },
@@ -1787,6 +1799,7 @@ export class AiChatService {
       const invoices = await this.prisma.invoice.findMany({
         where: {
           invoice_is_active: true,
+          deleted_at: null,
           invoice_no: { contains: q, mode: 'insensitive' },
         },
         select: { invoice_no: true, date: true, total_amount: true, status: true },

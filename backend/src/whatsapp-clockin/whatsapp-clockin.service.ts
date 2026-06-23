@@ -174,20 +174,23 @@ export class WhatsappClockinService {
       // 4. 載入 ERP 參考資料
       const [employees, machinery, vehicles, partners, contracts] = await Promise.all([
         this.prisma.employee.findMany({
-          where: { status: 'active' },
+          where: { status: 'active', deleted_at: null },
           select: { id: true, nickname: true, name_zh: true, name_en: true },
         }),
         this.prisma.machinery.findMany({
+          where: { deleted_at: null },
           select: { id: true, machine_code: true, brand: true, model: true, machine_type: true, tonnage: true },
         }),
         this.prisma.vehicle.findMany({
+          where: { deleted_at: null },
           select: { id: true, plate_number: true, machine_type: true, tonnage: true },
         }),
         this.prisma.partner.findMany({
-          where: { partner_type: 'client' },
+          where: { partner_type: 'client', deleted_at: null },
           select: { id: true, name: true, name_en: true },
         }),
         this.prisma.contract.findMany({
+          where: { deleted_at: null },
           select: { id: true, contract_no: true, contract_name: true },
         }),
       ]);
