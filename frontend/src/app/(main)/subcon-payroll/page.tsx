@@ -6,12 +6,15 @@ import {
   partnersApi,
   companiesApi,
   subconRateCardsApi,
+  subconFleetDriversApi,
 } from '@/lib/api';
 import SearchableSelect from '@/components/SearchableSelect';
+import MultiSelectPopup from '@/components/MultiSelectPopup';
 import { fmtDate } from '@/lib/dateUtils';
 import { useAuth } from '@/lib/auth';
 import DateInput from '@/components/DateInput';
 import { useRefetchOnFocus } from '@/hooks/useRefetchOnFocus';
+import type { MultiSelectOption } from '@/components/MultiSelectPopup';
 
 type Option = { value: any; label: string };
 type ExtraItem = { name: string; amount: string };
@@ -241,6 +244,12 @@ export default function SubconPayrollPage() {
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
 
+  // ── Fleet plates state ──
+  const [plateOptions, setPlateOptions] = useState<MultiSelectOption[]>([]);
+  const [selectedPlates, setSelectedPlates] = useState<string[]>([]);
+  const [showPlateSelector, setShowPlateSelector] = useState(false);
+  const [loadingPlates, setLoadingPlates] = useState(false);
+
   // ── Result state ──
   const [loading, setLoading] = useState(false);
   const [confirming, setConfirming] = useState(false);
@@ -296,6 +305,36 @@ export default function SubconPayrollPage() {
       .catch(console.error);
   });
 
+  // ── Load plates when subcon changes ──
+  useEffect(() => {
+    if (!selectedSubcon) {
+      setPlateOptions([]);
+      setSelectedPlates([]);
+      return;
+    }
+
+    setLoadingPlates(true);
+    subconFleetDriversApi
+      .list({ subcontractor_id: selectedSubcon, status: 'active', limit: 200 })
+      .then((res) => {
+        const drivers = res.data || [];
+        const options: MultiSelectOption[] = drivers
+          .filter((d: any) => d.plate_no)
+          .map((d: any) => ({
+            id: d.plate_no,
+            label: d.plate_no,
+            sublabel: d.name_zh || d.machine_type || undefined,
+          }));
+        setPlateOptions(options);
+        setSelectedPlates([]);
+      })
+      .catch((err) => {
+        console.error('Failed to load plates:', err);
+        setPlateOptions([]);
+      })
+      .finally(() => setLoadingPlates(false));
+  }, [selectedSubcon]);
+
   const handlePreview = async () => {
     if (!selectedSubcon || !dateFrom || !dateTo) {
       setError('請選擇供應商和日期範圍');
@@ -310,6 +349,7 @@ export default function SubconPayrollPage() {
         date_from: dateFrom,
         date_to: dateTo,
         company_id: selectedCompany || undefined,
+        plate_nos: selectedPlates.length > 0 ? selectedPlates : undefined,
       });
       setResult(res.data);
       setActiveTab('grouped');
@@ -343,6 +383,7 @@ export default function SubconPayrollPage() {
         date_from: dateFrom,
         date_to: dateTo,
         company_id: selectedCompany || undefined,
+        plate_nos: selectedPlates.length > 0 ? selectedPlates : undefined,
         extra_items: validExtras.length > 0 ? validExtras : undefined,
       });
       // Navigate to the detail page
@@ -437,6 +478,18 @@ export default function SubconPayrollPage() {
               onChange={(v) => setSelectedCompany(v as number | null)}
               placeholder="全部公司"
             />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              車牌（可選）
+            </label>
+            <button
+              onClick={() => setShowPlateSelector(true)}
+              disabled={!selectedSubcon || loadingPlates}
+              className="w-full border rounded px-3 py-1.5 text-sm text-left bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {loadingPlates ? '載入中...' : selectedPlates.length > 0 ? `已選 ${selectedPlates.length} 台車` : '全部車（點擊選擇）'}
+            </button>
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -889,6 +942,20 @@ export default function SubconPayrollPage() {
             )}
           </div>
         </>
+      )}
+
+      {/* ── Plate Selector Modal ── */}
+      {showPlateSelector && (
+        <MultiSelectPopup
+          title="選擇車牌"
+          options={plateOptions}
+          selected={selectedPlates}
+          onConfirm={(selected) => {
+            setSelectedPlates(selected);
+            setShowPlateSelector(false);
+          }}
+          onClose={() => setShowPlateSelector(false)}
+        />
       )}
     </div>
   );

@@ -24,6 +24,7 @@ export class SubconPayrollService {
     date_from: string;
     date_to: string;
     company_id?: number;
+    plate_nos?: string[];
   }) {
     const subcon = await this.prisma.partner.findUnique({
       where: { id: dto.subcon_id },
@@ -36,7 +37,11 @@ export class SubconPayrollService {
       where: { subcontractor_id: dto.subcon_id, status: 'active' },
       select: { id: true, plate_no: true, name_zh: true, machine_type: true },
     });
-    const plateNos = drivers.filter(d => d.plate_no).map(d => d.plate_no!);
+    // 如果有傳入 plate_nos，則只用這些車牌；否則用所有 active 車牌
+    let plateNos = drivers.filter(d => d.plate_no).map(d => d.plate_no!);
+    if (dto.plate_nos && dto.plate_nos.length > 0) {
+      plateNos = plateNos.filter(p => dto.plate_nos!.includes(p));
+    }
 
     if (plateNos.length === 0) {
       return {
@@ -170,6 +175,7 @@ export class SubconPayrollService {
       date_from: dto.date_from,
       date_to: dto.date_to,
       company_id: dto.company_id,
+      plate_nos: dto.plate_nos,
     });
 
     const workLogs = previewResult.work_logs || [];

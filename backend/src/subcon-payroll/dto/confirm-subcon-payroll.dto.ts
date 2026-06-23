@@ -28,6 +28,11 @@ export class ConfirmSubconPayrollDto {
 
   @IsOptional()
   @IsArray()
+  @IsString({ each: true })
+  plate_nos?: string[];
+
+  @IsOptional()
+  @IsArray()
   @ValidateNested({ each: true })
   @Type(() => ExtraItemDto)
   extra_items?: ExtraItemDto[];

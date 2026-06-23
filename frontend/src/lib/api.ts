@@ -1632,12 +1632,14 @@ export const subconPayrollApi = {
     date_from: string;
     date_to: string;
     company_id?: number;
+    plate_nos?: string[];
   }) => api.post('/subcon-payroll/preview', data),
   confirm: (data: {
     subcon_id: number;
     date_from: string;
     date_to: string;
     company_id?: number;
+    plate_nos?: string[];
     extra_items?: { name: string; amount: number }[];
   }) => api.post('/subcon-payroll/confirm', data),
   list: (params?: {

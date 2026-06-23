@@ -10,7 +10,7 @@ export class SubconPayrollController {
   constructor(private readonly service: SubconPayrollService) {}
 
   @Post('preview')
-  preview(@Body() dto: { subcon_id: number; date_from: string; date_to: string; company_id?: number }) {
+  preview(@Body() dto: { subcon_id: number; date_from: string; date_to: string; company_id?: number; plate_nos?: string[] }) {
     return this.service.preview(dto);
   }
 
