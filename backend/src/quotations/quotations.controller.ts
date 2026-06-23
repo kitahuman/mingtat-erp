@@ -150,7 +150,7 @@ export class QuotationsController {
     const clientCode =
       result.quotation.client?.code || result.quotation.client?.name || '';
     const quotationTitle =
-      result.quotation.contract_name || result.quotation.project_name || '';
+      result.quotation.project_name || result.quotation.contract_name || '';
     const rawFilename = `${quotationNo}_${clientCode}_${quotationTitle}.pdf`;
     const encodedFilename = encodeURIComponent(rawFilename);
 

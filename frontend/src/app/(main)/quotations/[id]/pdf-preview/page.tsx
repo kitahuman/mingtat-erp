@@ -283,7 +283,7 @@ export default function QuotationPdfPreviewPage() {
       const link = document.createElement('a');
       link.href = url;
       const clientCode = quotation?.client?.code || quotation?.client?.name || '';
-      const quotationName = quotation?.contract_name || quotation?.project_name || '';
+      const quotationName = quotation?.project_name || quotation?.contract_name || '';
       const fileNameParts = [quotation?.quotation_no || `quotation-${quotationId}`, clientCode, quotationName].filter(Boolean);
       link.download = `${fileNameParts.join('_')}.pdf`;
       document.body.appendChild(link);
