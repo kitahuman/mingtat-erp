@@ -840,6 +840,18 @@ export default function ExpenseDetailPage() {
             </div>
             <div className="md:col-span-2 lg:col-span-3">
               <label className="block text-xs font-medium text-gray-600 mb-1">
+                項目描述
+              </label>
+              <input
+                type="text"
+                value={form.item || ''}
+                onChange={(e) => setForm({ ...form, item: e.target.value })}
+                className="input-field text-sm"
+                placeholder="輸入支出名稱/項目描述"
+              />
+            </div>
+            <div className="md:col-span-2 lg:col-span-3">
+              <label className="block text-xs font-medium text-gray-600 mb-1">
                 備註
               </label>
               <textarea
