@@ -1702,6 +1702,8 @@ export default function WorkLogsPage() {
     setFilterDateFrom('');
     setFilterDateTo('');
     setColumnFilters({});
+    setSortBy('created_at');
+    setSortOrder('DESC');
     setPage(1);
   };
 
