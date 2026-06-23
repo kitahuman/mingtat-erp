@@ -230,22 +230,27 @@ export class PaymentInService {
     if (!dto.amount || dto.amount <= 0) {
       throw new BadRequestException('金額必須大於 0');
     }
+    // Normalize source_type to lowercase for consistency
+    const normalizedSourceType = dto.source_type
+      ? dto.source_type.toLowerCase()
+      : dto.source_type;
+
     // Auto-populate payer from source document if applicable
     let payerPartnerId = dto.payer_partner_id || null;
     let payerName = dto.payer_name || null;
     if (
       !payerPartnerId &&
-      (dto.source_type === 'invoice' || dto.source_type === 'payment_certificate') &&
+      (normalizedSourceType === 'invoice' || normalizedSourceType === 'payment_certificate') &&
       dto.source_ref_id
     ) {
-      payerPartnerId = await this.resolvePayerFromSource(dto.source_type, dto.source_ref_id);
+      payerPartnerId = await this.resolvePayerFromSource(normalizedSourceType, dto.source_ref_id);
     }
 
     const record = await this.prisma.paymentIn.create({
       data: {
         date: new Date(dto.date),
         amount: dto.amount,
-        source_type: dto.source_type,
+        source_type: normalizedSourceType,
         source_ref_id: dto.source_ref_id || null,
         project_id: dto.project_id || null,
         contract_id: dto.contract_id || null,
@@ -259,6 +264,19 @@ export class PaymentInService {
       },
       include: this.listInclude,
     });
+
+    // Auto-create PaymentInAllocation when source is invoice
+    if (normalizedSourceType === 'invoice' && dto.source_ref_id) {
+      await this.prisma.paymentInAllocation.create({
+        data: {
+          payment_in_allocation_payment_in_id: record.id,
+          payment_in_allocation_invoice_id: dto.source_ref_id,
+          payment_in_allocation_amount: dto.amount,
+          payment_in_allocation_remarks: dto.remarks || null,
+        },
+      });
+    }
+
     // Auto-recalculate source document (legacy path + allocations)
     await this.recalculatePaymentStatus(record.source_type, record.source_ref_id);
     await this.recalculateAllocationTargets(record.id);
@@ -515,8 +533,9 @@ export class PaymentInService {
     }
   }
 
-  // ── Find PaymentIn records by Invoice ID (via allocations) ─────────
+  // ── Find PaymentIn records by Invoice ID (via allocations + legacy source_ref_id) ─────────
   async findByInvoiceId(invoiceId: number) {
+    // 1. Find via allocations table (new way)
     const allocations = await this.prisma.paymentInAllocation.findMany({
       where: { payment_in_allocation_invoice_id: invoiceId },
       include: {
@@ -533,12 +552,42 @@ export class PaymentInService {
       },
       orderBy: { payment_in: { date: 'desc' } },
     });
-    return allocations.map((a) => ({
+    const allocationResults = allocations.map((a) => ({
       allocation_id: a.id,
       allocation_amount: a.payment_in_allocation_amount,
       allocation_remarks: a.payment_in_allocation_remarks,
       ...a.payment_in,
     }));
+
+    // 2. Find legacy records via source_type + source_ref_id (no allocation created)
+    const allocationPaymentInIds = allocations.map((a) => a.payment_in_allocation_payment_in_id);
+    const legacyRecords = await this.prisma.paymentIn.findMany({
+      where: {
+        source_type: { in: ['invoice', 'INVOICE'] },
+        source_ref_id: invoiceId,
+        id: { notIn: allocationPaymentInIds },
+      },
+      include: {
+        bank_account: {
+          include: {
+            company: { select: { id: true, name: true, internal_prefix: true } },
+          },
+        },
+        deductions: true,
+      },
+      orderBy: { date: 'desc' },
+    });
+    const legacyResults = legacyRecords.map((r) => ({
+      allocation_id: null,
+      allocation_amount: r.amount,
+      allocation_remarks: r.remarks,
+      ...r,
+    }));
+
+    // Merge and sort by date desc
+    const merged = [...allocationResults, ...legacyResults];
+    merged.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    return merged;
   }
 
   private async recalcIpa(
