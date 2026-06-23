@@ -371,8 +371,11 @@ export default function InvoiceDetailPage() {
   const handleSave = async () => {
     setSaving(true);
     try {
+      // Only send invoice_no if user manually changed it;
+      // otherwise omit it so backend can auto-regenerate when company/client/date changes
+      const invoiceNoChanged = form.invoice_no !== invoice?.invoice_no;
       const payload: any = {
-        invoice_no: form.invoice_no || null,
+        ...(invoiceNoChanged ? { invoice_no: form.invoice_no || null } : {}),
         date: form.date,
         due_date: form.due_date || null,
         company_id: form.company_id ? Number(form.company_id) : null,
