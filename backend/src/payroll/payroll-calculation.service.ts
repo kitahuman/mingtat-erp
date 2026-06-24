@@ -617,9 +617,11 @@ export class PayrollCalculationService {
       const mpfDays = dailyCalc.reduce((sum: number, day: any) => {
         const logs = day.work_logs || [];
         if (logs.length === 0) return sum;
-        const dayQ = day.day_quantity != null ? Number(day.day_quantity) : 1;
+        const dayQ = day.day_quantity != null ? Number(day.day_quantity) : 0;
         const nightQ = day.night_quantity != null ? Number(day.night_quantity) : 0;
-        return sum + Math.min(dayQ + nightQ, 1);
+        // 有工作記錄但 quantity 都是 null，fallback 計 1 天
+        const qty = (dayQ + nightQ) || 1;
+        return sum + Math.min(qty, 1);
       }, 0);
       const defaultIndustryDailyIncome = mpfDays > 0 ? defaultMpfBase / mpfDays : 0;
       const industryDailyIncome =
