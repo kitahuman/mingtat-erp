@@ -106,6 +106,17 @@ export function useColumnConfig(pageKey: string, defaultColumns: Column[]) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pageKey]);
 
+  // Re-merge when defaultColumns changes (e.g. custom fields loaded async)
+  const columnsKeyRef = useRef<string>('');
+  useEffect(() => {
+    const newKey = defaultColumns.map(c => c.key).join(',');
+    if (columnsKeyRef.current && columnsKeyRef.current !== newKey) {
+      // defaultColumns changed after initial render - merge new columns into config
+      setColumnConfigs(prev => mergeWithDefaults(prev));
+    }
+    columnsKeyRef.current = newKey;
+  }, [defaultColumns, mergeWithDefaults]);
+
   // Save to localStorage whenever config changes
   useEffect(() => {
     try {
