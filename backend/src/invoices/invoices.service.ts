@@ -1299,6 +1299,14 @@ export class InvoicesService {
       data.invoice_show_client_address = dto.invoice_show_client_address;
     if (dto.invoice_show_client_phone !== undefined)
       data.invoice_show_client_phone = dto.invoice_show_client_phone;
+    if (dto.invoice_show_client_contact !== undefined)
+      data.invoice_show_client_contact = dto.invoice_show_client_contact;
+    if (dto.invoice_show_client_signature !== undefined)
+      data.invoice_show_client_signature = dto.invoice_show_client_signature;
+    if (dto.invoice_show_company_signature !== undefined)
+      data.invoice_show_company_signature = dto.invoice_show_company_signature;
+    if (dto.invoice_show_company_stamp !== undefined)
+      data.invoice_show_company_stamp = dto.invoice_show_company_stamp;
     if (dto.pdf_font_sizes !== undefined)
       data.pdf_font_sizes = this.toNullableJson(dto.pdf_font_sizes);
     if (dto.remarks !== undefined) data.remarks = dto.remarks;
@@ -2243,6 +2251,10 @@ export class InvoicesService {
         invoice_show_bank: source.invoice_show_bank,
         invoice_show_client_address: source.invoice_show_client_address,
         invoice_show_client_phone: source.invoice_show_client_phone,
+        invoice_show_client_contact: source.invoice_show_client_contact,
+        invoice_show_client_signature: source.invoice_show_client_signature,
+        invoice_show_company_signature: source.invoice_show_company_signature,
+        invoice_show_company_stamp: source.invoice_show_company_stamp,
         pdf_font_sizes: this.toNullableJson(source.pdf_font_sizes),
         remarks: source.remarks,
         invoice_parent_id: null,

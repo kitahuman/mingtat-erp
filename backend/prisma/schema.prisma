@@ -2221,6 +2221,10 @@ model Invoice {
   invoice_show_bank            Boolean   @default(true)
   invoice_show_client_address  Boolean   @default(true)
   invoice_show_client_phone    Boolean   @default(true)
+  invoice_show_client_contact  Boolean   @default(true)
+  invoice_show_client_signature Boolean  @default(true)
+  invoice_show_company_signature Boolean @default(true)
+  invoice_show_company_stamp   Boolean   @default(false)
   remarks                      String?   @db.Text
   invoice_parent_id            Int?
   invoice_revision_number      Int       @default(0)

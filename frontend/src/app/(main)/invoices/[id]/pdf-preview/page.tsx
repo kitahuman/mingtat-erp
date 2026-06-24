@@ -77,6 +77,10 @@ export default function InvoicePdfPreviewPage() {
     invoice_show_bank: current.show_bank,
     invoice_show_client_address: current.show_client_address,
     invoice_show_client_phone: current.show_client_phone,
+    invoice_show_client_contact: current.show_client_contact,
+    invoice_show_client_signature: current.show_client_signature,
+    invoice_show_company_signature: current.show_company_signature,
+    invoice_show_company_stamp: current.show_company_stamp,
     pdf_font_sizes: {
       title: current.font_size_title,
       itemName: current.font_size_item_name,
@@ -170,6 +174,14 @@ export default function InvoicePdfPreviewPage() {
               res.data.invoice_show_client_address ?? prev.show_client_address,
             show_client_phone:
               res.data.invoice_show_client_phone ?? prev.show_client_phone,
+            show_client_contact:
+              res.data.invoice_show_client_contact ?? prev.show_client_contact,
+            show_client_signature:
+              res.data.invoice_show_client_signature ?? prev.show_client_signature,
+            show_company_signature:
+              res.data.invoice_show_company_signature ?? prev.show_company_signature,
+            show_company_stamp:
+              res.data.invoice_show_company_stamp ?? prev.show_company_stamp,
             override_payment_terms:
               res.data.invoice_custom_payment_terms ||
               res.data.payment_terms ||
@@ -362,8 +374,13 @@ export default function InvoicePdfPreviewPage() {
     });
   };
 
+  const [showSavedToast, setShowSavedToast] = useState(false);
   const handleSaveToDocument = async () => {
-    await savePdfPreviewOptions();
+    const success = await savePdfPreviewOptions();
+    if (success) {
+      setShowSavedToast(true);
+      setTimeout(() => setShowSavedToast(false), 2000);
+    }
   };
 
   return (
@@ -392,6 +409,13 @@ export default function InvoicePdfPreviewPage() {
             disabled={printing || loadingPreview || !pdfUrl}
           >
             {printing ? '開啟中...' : '列印'}
+          </button>
+          <button
+            onClick={handleSaveToDocument}
+            className="btn-secondary px-3 py-1.5 text-sm disabled:opacity-50"
+            disabled={savingChanges}
+          >
+            {savingChanges ? '儲存中...' : showSavedToast ? '✅ 已儲存' : '儲存設定'}
           </button>
           <button
             onClick={handleBack}
