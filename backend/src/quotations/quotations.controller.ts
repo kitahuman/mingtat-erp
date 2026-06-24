@@ -24,6 +24,7 @@ import {
   CreateQuotationRevisionDto,
   SyncQuotationToRateCardsDto,
   UpdateQuotationDto,
+  PreviewNumberDto,
 } from './dto/create-quotation.dto';
 
 type AuthenticatedRequest = {
@@ -245,6 +246,18 @@ export class QuotationsController {
   @Get('by-project/:projectId')
   findByProject(@Param('projectId') projectId: number) {
     return this.service.findByProject(Number(projectId));
+  }
+
+  // 必須放在 :id 路由之前，否則會被 :id 攔截
+  @Post('preview-number')
+  previewNumber(@Body() dto: PreviewNumberDto) {
+    return this.service
+      .previewQuotationNo(
+        Number(dto.company_id),
+        dto.client_id ? Number(dto.client_id) : null,
+        dto.date,
+      )
+      .then((quotation_no) => ({ quotation_no }));
   }
 
   @Get(':id/revisions')

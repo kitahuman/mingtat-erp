@@ -270,6 +270,21 @@ export default function QuotationDetailPage() {
     } finally { setSyncing(false); }
   };
 
+  const handleRefreshQuotationNo = async () => {
+    try {
+      const res = await quotationsApi.previewNumber({
+        company_id: Number(form.company_id),
+        client_id: form.client_id ? Number(form.client_id) : null,
+        date: form.quotation_date,
+      });
+      if (res.data?.quotation_no) {
+        setForm({ ...form, quotation_no: res.data.quotation_no });
+      }
+    } catch (err: any) {
+      alert(err.response?.data?.message || '取得預覽号碼失敗');
+    }
+  };
+
   const handleCreateInvoice = async () => {
     setCreatingInvoice(true);
     try {
@@ -473,7 +488,17 @@ export default function QuotationDetailPage() {
           {editing ? (
             <>
               <div><label className="block text-sm font-medium text-gray-500 mb-1">報價單號</label>
-                <input value={form.quotation_no || ''} onChange={e => setForm({...form, quotation_no: e.target.value})} className="input-field font-mono" />
+                <div className="flex gap-2">
+                  <input value={form.quotation_no || ''} onChange={e => setForm({...form, quotation_no: e.target.value})} className="input-field font-mono flex-1" />
+                  <button
+                    type="button"
+                    onClick={handleRefreshQuotationNo}
+                    className="px-3 py-2 rounded border border-gray-300 bg-gray-50 hover:bg-blue-50 hover:border-blue-300 hover:text-blue-600 text-gray-400 transition-colors text-sm"
+                    title="刷新号碼"
+                  >
+                    🔄
+                  </button>
+                </div>
               </div>
               <div><label className="block text-sm font-medium text-gray-500 mb-1">報價類型</label>
                 <select value={form.quotation_type} onChange={e => setForm({...form, quotation_type: e.target.value})} className="input-field">

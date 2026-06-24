@@ -211,6 +211,51 @@ export class QuotationsService {
   }
 
   /**
+   * Preview the next quotation number WITHOUT consuming the sequence.
+   * Peeks at last_seq + 1 for the matching prefix + yearMonth.
+   * Returns 0001 (hex) if no sequence record exists yet. Does not perform any UPDATE.
+   */
+  async previewQuotationNo(
+    companyId: number,
+    clientId: number | null,
+    date: string,
+  ): Promise<string> {
+    const company = await this.prisma.company.findUnique({
+      where: { id: companyId },
+    });
+    if (!company || !company.internal_prefix) {
+      throw new NotFoundException('公司不存在或未設定前綴');
+    }
+
+    let clientCode = '';
+    if (clientId) {
+      const partner = await this.prisma.partner.findUnique({
+        where: { id: clientId },
+      });
+      if (partner?.english_code) {
+        clientCode = partner.english_code;
+      }
+    }
+
+    const d = new Date(date);
+    const yy = String(d.getFullYear()).slice(-2);
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const yearMonth = `${yy}${mm}`;
+
+    const prefix = clientCode
+      ? `${company.internal_prefix}Q${clientCode}`
+      : `${company.internal_prefix}Q`;
+
+    const seq = await this.prisma.quotationSequence.findFirst({
+      where: { prefix, year_month: yearMonth },
+    });
+    const nextSeq = (seq?.last_seq ?? 0) + 1;
+    const seqHex = nextSeq.toString(16).toUpperCase().padStart(4, '0');
+
+    return `${prefix}${yearMonth}${seqHex}`;
+  }
+
+  /**
    * Generate project number: {公司代碼}-{年份}-P{序號}
    */
   private async generateProjectNo(companyId: number): Promise<string> {

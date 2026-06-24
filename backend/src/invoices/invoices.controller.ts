@@ -30,6 +30,7 @@ import {
   CreateInvoiceRevisionDto,
   SetActiveInvoiceRevisionDto,
   CreateFromQuotationDto,
+  PreviewNumberDto,
 } from './dto/create-invoice.dto';
 
 type AuthenticatedInvoiceRequest = ExpressRequest & {
@@ -133,6 +134,18 @@ export class InvoicesController {
   @Post('batch-void')
   batchVoid(@Body() body: InvoiceBatchOperationBody) {
     return this.service.batchVoid(body.invoice_ids || []);
+  }
+
+  // 必須放在 :id 路由之前，否則會被 :id 攔截
+  @Post('preview-number')
+  previewNumber(@Body() dto: PreviewNumberDto) {
+    return this.service
+      .previewInvoiceNo(
+        Number(dto.company_id),
+        dto.client_id ? Number(dto.client_id) : null,
+        new Date(dto.date),
+      )
+      .then((invoice_no) => ({ invoice_no }));
   }
 
   @Post('batch-move-to-statement')
@@ -312,6 +325,14 @@ export class InvoicesController {
     @Request() req: AuthenticatedInvoiceRequest,
   ) {
     return this.service.createRevision(Number(id), dto, this.getUserId(req));
+  }
+
+  @Post(':id/duplicate')
+  duplicate(
+    @Param('id') id: number,
+    @Request() req: AuthenticatedInvoiceRequest,
+  ) {
+    return this.service.duplicate(Number(id), this.getUserId(req));
   }
 
   @Patch(':id/set-active')

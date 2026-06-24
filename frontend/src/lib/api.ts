@@ -517,6 +517,11 @@ export const quotationsApi = {
     api.get(`/quotations/${id}/pdf-html`, { params }),
   exportPdf: (id: number, params: any) =>
     api.get(`/quotations/${id}/pdf`, { params, responseType: 'blob' }),
+  previewNumber: (data: {
+    company_id: number;
+    client_id?: number | null;
+    date: string;
+  }) => api.post('/quotations/preview-number', data),
 };
 
 // Field Options (選項管理)
@@ -1456,6 +1461,12 @@ export const invoicesApi = {
     api.post(`/invoices/${id}/match-rates`, data),
   updateItems: (id: number, data: { items: any[] }) =>
     api.put(`/invoices/${id}/items`, data),
+  duplicate: (id: number) => api.post(`/invoices/${id}/duplicate`, {}),
+  previewNumber: (data: {
+    company_id: number;
+    client_id?: number | null;
+    date: string;
+  }) => api.post('/invoices/preview-number', data),
   delete: (id: number) => api.delete(`/invoices/${id}`),
 };
 

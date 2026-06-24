@@ -71,3 +71,9 @@ export class SyncQuotationToRateCardsDto {
   @IsOptional() @IsString() expiry_date?: string;
   @IsOptional() overwrite?: boolean;
 }
+
+export class PreviewNumberDto {
+  @Type(() => Number) @IsNumber() company_id: number;
+  @IsOptional() @Type(() => Number) @IsNumber() client_id?: number;
+  @IsString() date: string;
+}

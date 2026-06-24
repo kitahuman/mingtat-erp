@@ -320,7 +320,7 @@ export default function InvoiceDetailPage() {
   };
 
   const handleCreateRevision = async () => {
-    if (isReadOnly) return;
+    if (isReadOnly()) return;
     if (!confirm('確定要以目前版本內容建立新的修訂版嗎？')) return;
     setCreatingRevision(true);
     try {
@@ -338,7 +338,7 @@ export default function InvoiceDetailPage() {
   };
 
   const handleSetActiveRevision = async (revisionId: number) => {
-    if (isReadOnly) return;
+    if (isReadOnly()) return;
     if (!confirm('確定要將此版本設為正式版嗎？同組其他版本會改為非正式。'))
       return;
     setSettingActiveId(revisionId);
@@ -358,7 +358,7 @@ export default function InvoiceDetailPage() {
   };
 
   const handleUnlinkWorkLog = async (workLogId: number) => {
-    if (isReadOnly) return;
+    if (isReadOnly()) return;
     if (!confirm('確定要解除此工作紀錄與發票的關聯嗎？')) return;
     try {
       await invoicesApi.unlinkWorkLogs(currentInvoiceId, [workLogId]);
@@ -483,12 +483,40 @@ export default function InvoiceDetailPage() {
   };
 
   const handleDelete = async () => {
-    if (!confirm('確定要刪除此發票嗎？此操作無法復原。')) return;
+    if (!confirm('確定要刪除此發票吗？此操作無法復原。')) return;
     try {
       await invoicesApi.delete(currentInvoiceId);
       router.push('/invoices');
     } catch (err: any) {
       alert(err.response?.data?.message || '刪除失敗');
+    }
+  };
+
+  const handleDuplicate = async () => {
+    if (isReadOnly()) return;
+    try {
+      const res = await invoicesApi.duplicate(currentInvoiceId);
+      const newInvoiceId = Number(res.data?.id);
+      if (newInvoiceId) {
+        router.push(`/invoices/${newInvoiceId}`);
+      }
+    } catch (err: any) {
+      alert(err.response?.data?.message || '複製發票失敗');
+    }
+  };
+
+  const handleRefreshInvoiceNo = async () => {
+    try {
+      const res = await invoicesApi.previewNumber({
+        company_id: Number(form.company_id),
+        client_id: form.client_id ? Number(form.client_id) : null,
+        date: form.date,
+      });
+      if (res.data?.invoice_no) {
+        setForm({ ...form, invoice_no: res.data.invoice_no });
+      }
+    } catch (err: any) {
+      alert(err.response?.data?.message || '取得預覽号碼失敗');
     }
   };
 
@@ -547,15 +575,24 @@ export default function InvoiceDetailPage() {
           >
             匯出 PDF
           </button>
-          {!isReadOnly && (
-            <button
-              type="button"
-              onClick={handleCreateRevision}
-              disabled={creatingRevision}
-              className="rounded-lg bg-indigo-600 px-4 py-2 text-sm text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {creatingRevision ? '建立中...' : '新增修訂版'}
-            </button>
+          {!isReadOnly() && (
+            <>
+              <button
+                type="button"
+                onClick={handleDuplicate}
+                className="rounded-lg bg-purple-600 px-4 py-2 text-sm text-white hover:bg-purple-700"
+              >
+                複製
+              </button>
+              <button
+                type="button"
+                onClick={handleCreateRevision}
+                disabled={creatingRevision}
+                className="rounded-lg bg-indigo-600 px-4 py-2 text-sm text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {creatingRevision ? '建立中...' : '新增修訂版'}
+              </button>
+            </>
           )}
           {invoice.status === 'draft' && (
             <button
@@ -668,7 +705,7 @@ export default function InvoiceDetailPage() {
               直接編輯發票不會自動產生新版本，需透過「作廢」按鈕手動建立修訂版。
             </p>
           </div>
-          {!isReadOnly && (
+          {!isReadOnly() && (
             <button
               type="button"
               onClick={handleCreateRevision}
@@ -765,7 +802,7 @@ export default function InvoiceDetailPage() {
                           >
                             PDF
                           </button>
-                          {!isReadOnly && !revision.invoice_is_active && (
+                          {!isReadOnly() && !revision.invoice_is_active && (
                             <button
                               type="button"
                               onClick={() =>
@@ -801,15 +838,25 @@ export default function InvoiceDetailPage() {
               <label className="block text-xs font-medium text-gray-500 mb-1">
                 發票編號
               </label>
-              <input
-                type="text"
-                value={form.invoice_no || ''}
-                onChange={(e) =>
-                  setForm({ ...form, invoice_no: e.target.value })
-                }
-                className="input-field font-mono"
-                placeholder="例如：INV-001-R1"
-              />
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={form.invoice_no || ''}
+                  onChange={(e) =>
+                    setForm({ ...form, invoice_no: e.target.value })
+                  }
+                  className="input-field font-mono flex-1"
+                  placeholder="例如：INV-001-R1"
+                />
+                <button
+                  type="button"
+                  onClick={handleRefreshInvoiceNo}
+                  className="px-3 py-2 rounded border border-gray-300 bg-gray-50 hover:bg-blue-50 hover:border-blue-300 hover:text-blue-600 text-gray-400 transition-colors text-sm"
+                  title="刷新号碼"
+                >
+                  🔄
+                </button>
+              </div>
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-500 mb-1">
@@ -1450,7 +1497,7 @@ export default function InvoiceDetailPage() {
                         {log.work_order_no || log.receipt_no || '—'}
                       </td>
                       <td className="px-4 py-3 text-center">
-                        {!isReadOnly ? (
+                        {!isReadOnly() ? (
                           <button
                             onClick={() => handleUnlinkWorkLog(log.id)}
                             className="text-xs text-red-600 hover:text-red-700"

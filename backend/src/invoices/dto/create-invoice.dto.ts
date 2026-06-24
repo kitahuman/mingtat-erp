@@ -206,3 +206,10 @@ export class UpdateInvoiceItemsDto {
   @Type(() => UpdateInvoiceItemDto)
   items: UpdateInvoiceItemDto[];
 }
+
+export class PreviewNumberDto {
+  @Type(() => Number) @IsNumber() company_id: number;
+  // client_id 可選；date 必填
+  @IsOptional() @Type(() => Number) @IsNumber() client_id?: number;
+  @IsString() date: string;
+}

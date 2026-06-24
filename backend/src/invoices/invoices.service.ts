@@ -2111,4 +2111,132 @@ export class InvoicesService {
     });
     return { success: true };
   }
+
+  /**
+   * Preview the next invoice number WITHOUT consuming the sequence.
+   * Peeks at last_seq + 1 for the matching prefix + yearMonth.
+   * Returns 001 if no sequence record exists yet. Does not perform any UPDATE.
+   */
+  async previewInvoiceNo(
+    companyId: number,
+    clientId: number | null,
+    date: Date,
+  ): Promise<string> {
+    const company = await this.prisma.company.findUnique({
+      where: { id: companyId },
+    });
+    const companyPrefix = company?.internal_prefix || 'INV';
+
+    let clientCode = '';
+    if (clientId) {
+      const client = await this.prisma.partner.findUnique({
+        where: { id: clientId },
+      });
+      clientCode = client?.english_code || '';
+    }
+
+    const prefix = `${companyPrefix}S${clientCode}`;
+    const yy = String(date.getUTCFullYear()).slice(-2);
+    const mm = String(date.getUTCMonth() + 1).padStart(2, '0');
+    const yearMonth = `${yy}${mm}`;
+
+    const seq = await this.prisma.invoiceSequence.findFirst({
+      where: { prefix, year_month: yearMonth },
+    });
+    const nextSeq = (seq?.last_seq ?? 0) + 1;
+
+    return `${prefix}${yearMonth}${String(nextSeq).padStart(3, '0')}`;
+  }
+
+  /**
+   * Duplicate an invoice into a brand new draft invoice.
+   * - Copies all invoice data, items and PDF settings.
+   * - invoice_title = original + "(2)".
+   * - invoice_no = freshly generated via generateInvoiceNo (consumes sequence).
+   * - date = today; created_by = current user; status = draft.
+   * - Resets payments (paid_amount=0, outstanding=total_amount) and revision links.
+   */
+  async duplicate(id: number, userId?: number) {
+    const source = await this.prisma.invoice.findUnique({
+      where: { id },
+      include: { items: { orderBy: { sort_order: 'asc' } } },
+    });
+    if (!source || source.deleted_at) {
+      throw new NotFoundException('發票不存在');
+    }
+
+    const newDate = new Date();
+    const invoiceNo = await this.generateInvoiceNo(
+      source.company_id,
+      source.client_id,
+      newDate,
+    );
+
+    const newTitle = `${source.invoice_title || ''}(2)`;
+
+    const invoice = await this.prisma.invoice.create({
+      data: {
+        invoice_no: invoiceNo,
+        invoice_title: newTitle,
+        display_client_name: source.display_client_name,
+        client_contract_no: source.client_contract_no,
+        date: newDate,
+        due_date: source.due_date,
+        client_id: source.client_id,
+        project_id: source.project_id,
+        quotation_id: source.quotation_id,
+        company_id: source.company_id,
+        created_by: userId || null,
+        status: 'draft',
+        subtotal: source.subtotal,
+        tax_rate: source.tax_rate,
+        tax_amount: source.tax_amount,
+        retention_rate: source.retention_rate,
+        retention_amount: source.retention_amount,
+        other_charges: this.toNullableJson(source.other_charges),
+        total_amount: source.total_amount,
+        paid_amount: 0,
+        outstanding: source.total_amount,
+        payment_terms: source.payment_terms,
+        invoice_custom_payment_terms: source.invoice_custom_payment_terms,
+        invoice_language: source.invoice_language,
+        invoice_show_bank: source.invoice_show_bank,
+        invoice_show_client_address: source.invoice_show_client_address,
+        invoice_show_client_phone: source.invoice_show_client_phone,
+        pdf_font_sizes: this.toNullableJson(source.pdf_font_sizes),
+        remarks: source.remarks,
+        invoice_parent_id: null,
+        invoice_revision_number: 0,
+        invoice_is_active: true,
+        items: {
+          create: source.items.map((item) => ({
+            item_name: item.item_name,
+            description: item.description,
+            quantity: item.quantity,
+            unit: item.unit,
+            unit_price: item.unit_price,
+            amount: item.amount,
+            sort_order: item.sort_order,
+          })),
+        },
+      },
+      include: this.includeRelations,
+    });
+
+    if (userId) {
+      try {
+        await this.auditLogsService.log({
+          userId,
+          action: 'create',
+          targetTable: 'invoices',
+          targetId: invoice.id,
+          changesAfter: invoice,
+        });
+      } catch (e) {
+        console.error('Audit log error:', e);
+      }
+    }
+
+    return invoice;
+  }
 }
