@@ -34,6 +34,7 @@ import SummaryTab from './SummaryTab';
 import { useColumnConfig } from '@/hooks/useColumnConfig';
 import { useRefetchOnFocus } from '@/hooks/useRefetchOnFocus';
 import { useWorkLogSocket } from '@/hooks/useWorkLogSocket';
+import { usePageRefresh } from '@/hooks/usePageRefresh';
 import ColumnCustomizer from '@/components/ColumnCustomizer';
 import BatchEditDialog from './BatchEditDialog';
 import { fmtDate } from '@/lib/dateUtils';
@@ -1128,6 +1129,14 @@ export default function WorkLogsPage() {
   useEffect(() => {
     fetchLogs();
   }, [fetchLogs]);
+
+  usePageRefresh({
+    onRefresh: fetchLogs,
+    isDirty: hasDirty,
+    onBeforeRefresh: async () => {
+      return confirm('有未儲存的修改，確定要重新整理嗎？未儲存的修改將會遺失。');
+    },
+  });
 
   useEffect(() => {
     if (selected.size === 0 || rows.length === 0) return;

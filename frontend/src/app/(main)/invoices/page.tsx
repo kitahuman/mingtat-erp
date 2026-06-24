@@ -20,6 +20,7 @@ import Modal from '@/components/Modal';
 import { useAuth } from '@/lib/auth';
 import { useRefetchOnFocus } from '@/hooks/useRefetchOnFocus';
 import { useColumnConfig } from '@/hooks/useColumnConfig';
+import { usePageRefresh } from '@/hooks/usePageRefresh';
 
 const fmt$ = (v: any) =>
   `$${Number(v || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -685,6 +686,8 @@ export default function InvoicesPage() {
       .list({ limit: 500 })
       .then((res) => setQuotations(res.data?.data || res.data || []));
   });
+
+  usePageRefresh({ onRefresh: fetchData });
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);

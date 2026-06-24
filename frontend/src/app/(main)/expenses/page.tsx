@@ -19,6 +19,7 @@ import {
 import BatchPaymentModal from './BatchPaymentModal';
 import { useColumnConfig } from '@/hooks/useColumnConfig';
 import { useRefetchOnFocus } from '@/hooks/useRefetchOnFocus';
+import { usePageRefresh } from '@/hooks/usePageRefresh';
 import InlineEditDataTable, {
   InlineColumn,
 } from '@/components/InlineEditDataTable';
@@ -280,6 +281,7 @@ export default function ExpensesPage() {
     loadReferenceData();
   }, [loadReferenceData]);
   useRefetchOnFocus(loadReferenceData);
+  usePageRefresh({ onRefresh: load });
 
   // ── Derived option lists ─────────────────────────────────────────────────
   const allSubCategories = useMemo(() => {

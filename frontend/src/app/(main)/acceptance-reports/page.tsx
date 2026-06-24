@@ -11,6 +11,7 @@ import { fmtDate } from '@/lib/dateUtils';
 import DateInput from '@/components/DateInput';
 import { useAuth } from '@/lib/auth';
 import { useRefetchOnFocus } from '@/hooks/useRefetchOnFocus';
+import { usePageRefresh } from '@/hooks/usePageRefresh';
 
 const statusLabels: Record<string, string> = {
   draft: '草稿',
@@ -119,9 +120,9 @@ export default function AcceptanceReportsAdminPage() {
             .map((o: any) => o.label),
         );
       })
-      .catch(() => {});
+            .catch(() => {});
   });
-
+  usePageRefresh({ onRefresh: loadData });
   useEffect(() => {
     loadData();
   }, [
