@@ -3,6 +3,8 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CompanyProfilesService } from '../company-profiles/company-profiles.service';
 import { CustomFieldsService } from '../custom-fields/custom-fields.service';
 import { WhatsappService } from '../verification/whatsapp.service';
+import { roundMoney } from '../common/math.util';
+import { getHKTDayRange, toHKTDate } from '../common/date.helper';
 
 @Injectable()
 export class DashboardService {
@@ -18,7 +20,7 @@ export class DashboardService {
   }
 
   private round2(n: number): number {
-    return parseFloat(n.toFixed(2));
+    return roundMoney(n);
   }
 
   // ═══════════════════════════════════════════════════════════
@@ -1103,21 +1105,11 @@ export class DashboardService {
   // ════════════════════════════════════════════════════════════
 
   private getHKTDayRange(): { start: Date; end: Date } {
-    const now = new Date();
-    const hktOffset = 8 * 60;
-    const utcMs = now.getTime() + now.getTimezoneOffset() * 60000;
-    const hktMs = utcMs + hktOffset * 60000;
-    const hktNow = new Date(hktMs);
-    const hktDayStart = new Date(hktNow.getFullYear(), hktNow.getMonth(), hktNow.getDate());
-    const start = new Date(hktDayStart.getTime() - hktOffset * 60000);
-    const end = new Date(start.getTime() + 24 * 60 * 60 * 1000);
-    return { start, end };
+    return getHKTDayRange();
   }
 
   private toHKTDate(d: Date): Date {
-    const hktOffset = 8 * 60;
-    const utcMs = d.getTime() + d.getTimezoneOffset() * 60000;
-    return new Date(utcMs + hktOffset * 60000);
+    return toHKTDate(d);
   }
 
   async getAttendanceSummary() {
@@ -1322,13 +1314,7 @@ export class DashboardService {
       '85262366968-1600675068@g.us': '公司打卡',
     };
     // Use HKT (UTC+8) for today boundary
-    const now = new Date();
-    const hktOffset = 8 * 60;
-    const utcMs = now.getTime() + now.getTimezoneOffset() * 60000;
-    const hktMs = utcMs + hktOffset * 60000;
-    const hktNow = new Date(hktMs);
-    const hktDayStart = new Date(hktNow.getFullYear(), hktNow.getMonth(), hktNow.getDate());
-    const todayStart = new Date(hktDayStart.getTime() - hktOffset * 60000);
+    const { start: todayStart } = getHKTDayRange();
     const messages = await this.prisma.verificationWaMessage.findMany({
       where: {
         wa_msg_group_id: { in: CLOCKIN_GROUPS },

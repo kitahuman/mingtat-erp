@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { roundMoney } from '../common/math.util';
 
 export interface OverviewRow {
   id: number;
@@ -460,6 +461,6 @@ export class ProjectProfitLossService {
   }
 
   private round2(n: number): number {
-    return parseFloat(n.toFixed(2));
+    return roundMoney(n);
   }
 }

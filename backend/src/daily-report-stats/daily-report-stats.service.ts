@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { roundMoneyHalfUp } from '../common/math.util';
 
 export interface StatsQuery {
   date_from?: string;
@@ -673,6 +674,6 @@ export class DailyReportStatsService {
   }
 
   private round2(v: number): number {
-    return Math.round(v * 100) / 100;
+    return roundMoneyHalfUp(v);
   }
 }

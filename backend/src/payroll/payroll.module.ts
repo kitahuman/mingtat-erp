@@ -12,10 +12,12 @@ import { AuditLogsModule } from '../audit-logs/audit-logs.module';
 import { FleetRateCardsModule } from '../fleet-rate-cards/fleet-rate-cards.module';
 import { PettyCashModule } from '../petty-cash/petty-cash.module';
 import { PaymentOutModule } from '../payment-out/payment-out.module';
+import { CommonModule } from '../common/common.module';
 
 @Module({
   imports: [
     PrismaModule,
+    CommonModule,
     ExpensesModule,
     ExpenseCategoriesModule,
     PricingModule,

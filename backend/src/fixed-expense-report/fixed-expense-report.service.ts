@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { roundMoney } from '../common/math.util';
 
 @Injectable()
 export class FixedExpenseReportService {
@@ -10,7 +11,7 @@ export class FixedExpenseReportService {
   }
 
   private round2(value: number): number {
-    return parseFloat(value.toFixed(2));
+    return roundMoney(value);
   }
 
   async getMonthlyStats(params: { year?: number; companyId?: number }) {

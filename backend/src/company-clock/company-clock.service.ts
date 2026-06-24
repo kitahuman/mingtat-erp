@@ -8,6 +8,7 @@ import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
 import { PrismaService } from '../prisma/prisma.service';
 import { FaceRecognitionService } from './face-recognition.service';
+import { getHKTDayRange } from '../common/date.helper';
 
 @Injectable()
 export class CompanyClockService {
@@ -436,15 +437,7 @@ export class CompanyClockService {
 
   // ── Helper: get HKT day boundaries ────────────────────────────
   private getHKTDayRange(): { start: Date; end: Date } {
-    const now = new Date();
-    const hktOffset = 8 * 60;
-    const utcMs = now.getTime() + now.getTimezoneOffset() * 60000;
-    const hktMs = utcMs + hktOffset * 60000;
-    const hktNow = new Date(hktMs);
-    const hktDayStart = new Date(hktNow.getFullYear(), hktNow.getMonth(), hktNow.getDate());
-    const start = new Date(hktDayStart.getTime() - hktOffset * 60000);
-    const end = new Date(start.getTime() + 24 * 60 * 60 * 1000);
-    return { start, end };
+    return getHKTDayRange();
   }
 
   // ── Get today's attendance records (for operator view) ──────────

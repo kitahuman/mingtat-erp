@@ -7,6 +7,7 @@ import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
 import { PrismaService } from '../prisma/prisma.service';
 import { GeoService } from '../geo/geo.service';
+import { getHKTDayRange, getHKTMonthStart } from '../common/date.helper';
 
 @Injectable()
 export class EmployeePortalService {
@@ -244,27 +245,11 @@ export class EmployeePortalService {
 
   // ── Helper: get HKT day boundaries ────────────────────────────
   private getHKTDayRange(date?: Date): { start: Date; end: Date } {
-    const now = date || new Date();
-    // Get current time in HKT (UTC+8)
-    const hktOffset = 8 * 60; // minutes
-    const utcMs = now.getTime() + now.getTimezoneOffset() * 60000;
-    const hktMs = utcMs + hktOffset * 60000;
-    const hktNow = new Date(hktMs);
-    // Get start of day in HKT, then convert back to UTC
-    const hktDayStart = new Date(hktNow.getFullYear(), hktNow.getMonth(), hktNow.getDate());
-    const start = new Date(hktDayStart.getTime() - hktOffset * 60000);
-    const end = new Date(start.getTime() + 24 * 60 * 60 * 1000);
-    return { start, end };
+    return getHKTDayRange(date);
   }
 
   private getHKTMonthStart(): Date {
-    const now = new Date();
-    const hktOffset = 8 * 60;
-    const utcMs = now.getTime() + now.getTimezoneOffset() * 60000;
-    const hktMs = utcMs + hktOffset * 60000;
-    const hktNow = new Date(hktMs);
-    const hktMonthStart = new Date(hktNow.getFullYear(), hktNow.getMonth(), 1);
-    return new Date(hktMonthStart.getTime() - hktOffset * 60000);
+    return getHKTMonthStart();
   }
 
   // ── Get today's attendance ─────────────────────────────────────

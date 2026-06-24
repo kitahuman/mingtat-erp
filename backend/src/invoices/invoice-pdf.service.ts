@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import puppeteer from 'puppeteer';
+import { PdfUtilService } from '../common/pdf-util.service';
 import { existsSync, readFileSync } from 'fs';
 import { extname, join, normalize } from 'path';
 
@@ -41,7 +41,10 @@ interface BankInfo {
 
 @Injectable()
 export class InvoicePdfService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly pdfUtil: PdfUtilService,
+  ) {}
 
   async generateInvoiceHtml(
     invoiceId: number,
@@ -57,27 +60,9 @@ export class InvoicePdfService {
       options,
     );
 
-    const browser = await puppeteer.launch({
-      executablePath:
-        process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/chromium',
-      headless: true,
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-      ],
-    });
-
-    try {
-      const page = await browser.newPage();
-      await page.setViewport({ width: 794, height: 1123, deviceScaleFactor: 1 });
-      await page.setContent(html, { waitUntil: 'load' });
-      await page.evaluateHandle('document.fonts.ready');
-      const companyName = this.escapeHtml(
-        this.invoiceCompanyNameEn(invoice.company) || invoice.company?.name || 'Invoice',
-      );
-      const invoiceNo = invoice.invoice_no || '';
-      const pdf = await page.pdf({
+    const invoiceNo = invoice.invoice_no || '';
+    const pdf = await this.pdfUtil.renderHtmlToPdf(html, {
+      pdfOptions: {
         format: 'A4',
         preferCSSPageSize: true,
         printBackground: true,
@@ -90,11 +75,9 @@ export class InvoicePdfService {
           </div>
         `,
         margin: { top: '0', right: '0', bottom: '14mm', left: '0' },
-      });
-      return { pdf: Buffer.from(pdf), invoice };
-    } finally {
-      await browser.close();
-    }
+      },
+    });
+    return { pdf, invoice };
   }
 
   private async buildInvoiceHtmlData(

@@ -5,6 +5,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { PricingService } from '../common/pricing.service';
 import { AuditLogsService } from '../audit-logs/audit-logs.service';
 import { OrderByClause, WhereClause, WorkLogQuery } from '../common/types';
+import { formatHongKongDate } from '../common/date.helper';
 import { WorkLogsGateway } from './work-logs.gateway';
 import { AiKnowledgeCandidateService } from '../ai-knowledge/ai-knowledge-candidate.service';
 import { DailyReportVerificationService } from '../verification/daily-report-verification.service';
@@ -596,17 +597,7 @@ export class WorkLogsService {
     value: Date | null | undefined,
     includeTime = false,
   ): string {
-    if (!value) return '';
-    const formatter = new Intl.DateTimeFormat('en-CA', {
-      timeZone: 'Asia/Hong_Kong',
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      ...(includeTime
-        ? { hour: '2-digit', minute: '2-digit', hour12: false }
-        : {}),
-    });
-    return formatter.format(value).replace(', ', ' ');
+    return formatHongKongDate(value, includeTime);
   }
 
   private makeDateRange(value: string) {

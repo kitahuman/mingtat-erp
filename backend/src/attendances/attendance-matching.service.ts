@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { formatDateInHongKong, getHKHour } from '../common/date.helper';
 
 /**
  * 打卡配對增強服務
@@ -219,23 +220,7 @@ export class AttendanceMatchingService {
    * 將 Date 以 Asia/Hong_Kong 時區格式化為 YYYY-MM-DD，避免 toISOString() 使用 UTC 導致日期偏移。
    */
   private formatDateInHongKong(value: Date | string | null | undefined): string | null {
-    if (!value) return null;
-    const date = value instanceof Date ? value : new Date(value);
-    if (Number.isNaN(date.getTime())) return null;
-
-    const parts = new Intl.DateTimeFormat('en-CA', {
-      timeZone: 'Asia/Hong_Kong',
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-    })
-      .formatToParts(date)
-      .reduce<Record<string, string>>((acc, part) => {
-        if (part.type !== 'literal') acc[part.type] = part.value;
-        return acc;
-      }, {});
-
-    return `${parts.year}-${parts.month}-${parts.day}`;
+    return formatDateInHongKong(value);
   }
 
   /**
@@ -294,13 +279,7 @@ export class AttendanceMatchingService {
     let attShift = '—';
     if (clockIn?.timestamp) {
       // 使用香港時區取得小時數，避免 UTC 導致班次判斷錯誤
-      const hkHour = Number(
-        new Date(clockIn.timestamp).toLocaleString('en-US', {
-          hour: 'numeric',
-          hour12: false,
-          timeZone: 'Asia/Hong_Kong',
-        }),
-      );
+      const hkHour = getHKHour(new Date(clockIn.timestamp));
       // 6:00-14:00 → 日班, 14:00-22:00 → 中直, 22:00-6:00 → 夜班
       if (hkHour >= 6 && hkHour < 14) attShift = '日';
       else if (hkHour >= 14 && hkHour < 22) attShift = '中直';
@@ -438,13 +417,7 @@ export class AttendanceMatchingService {
           const clockIn = empAtts.find((a: any) => a.type === 'clock_in');
           if (clockIn) {
             // 使用香港時區取得小時數，避免 UTC 導致班次判斷錯誤
-            const hkHour = Number(
-              new Date(clockIn.timestamp).toLocaleString('en-US', {
-                hour: 'numeric',
-                hour12: false,
-                timeZone: 'Asia/Hong_Kong',
-              }),
-            );
+            const hkHour = getHKHour(new Date(clockIn.timestamp));
             let attShift: string;
             if (hkHour >= 6 && hkHour < 14) attShift = '日';
             else if (hkHour >= 14 && hkHour < 22) attShift = '中直';

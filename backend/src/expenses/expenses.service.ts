@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import { AuditLogsService } from '../audit-logs/audit-logs.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { PettyCashService } from '../petty-cash/petty-cash.service';
+import { roundMoneyHalfUp } from '../common/math.util';
 
 const EXPENSE_INCLUDE = {
   company: true,
@@ -121,7 +122,7 @@ export class ExpensesService {
   ) {}
 
   private roundMoney(value: number) {
-    return Math.round(value * 100) / 100;
+    return roundMoneyHalfUp(value);
   }
 
   private normalizeOtherCharges(value: unknown): ExpenseOtherCharge[] {

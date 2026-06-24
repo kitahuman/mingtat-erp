@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import puppeteer from 'puppeteer';
+import { PdfUtilService } from '../common/pdf-util.service';
 import { existsSync, readFileSync } from 'fs';
 import { extname, join, normalize } from 'path';
 
@@ -31,7 +31,10 @@ export interface QuotationPdfOptions {
 
 @Injectable()
 export class QuotationPdfService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly pdfUtil: PdfUtilService,
+  ) {}
 
   async generateQuotationHtml(
     quotationId: number,
@@ -47,33 +50,16 @@ export class QuotationPdfService {
       options,
     );
 
-    const browser = await puppeteer.launch({
-      executablePath:
-        process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/chromium',
-      headless: true,
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-      ],
-    });
-
-    try {
-      const page = await browser.newPage();
-      await page.setViewport({ width: 794, height: 1123, deviceScaleFactor: 1 });
-      await page.setContent(html, { waitUntil: 'load' });
-      await page.evaluateHandle('document.fonts.ready');
-      const pdf = await page.pdf({
+    const pdf = await this.pdfUtil.renderHtmlToPdf(html, {
+      pdfOptions: {
         format: 'A4',
         preferCSSPageSize: true,
         printBackground: true,
         displayHeaderFooter: false,
         margin: { top: '0', right: '0', bottom: '0', left: '0' },
-      });
-      return { pdf: Buffer.from(pdf), quotation };
-    } finally {
-      await browser.close();
-    }
+      },
+    });
+    return { pdf, quotation };
   }
 
   private async buildQuotationHtmlData(

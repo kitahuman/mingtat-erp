@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { roundMoney } from '../common/math.util';
 import {
   EquipmentProfitSummary,
   EquipmentProfitDetail,
@@ -16,7 +17,7 @@ export class EquipmentProfitService {
   }
 
   private round2(n: number): number {
-    return parseFloat(n.toFixed(2));
+    return roundMoney(n);
   }
 
   // ═══════════════════════════════════════════════════════════
