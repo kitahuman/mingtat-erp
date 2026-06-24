@@ -50,7 +50,7 @@ export class VehiclesService {
     const sortBy = allowedSortFields.includes(query.sortBy || '') ? query.sortBy! : 'id';
     const sortOrder = query.sortOrder?.toUpperCase() === 'DESC' ? 'desc' : 'asc';
 
-    const [data, total, customFields, customFieldValues] = await Promise.all([
+    const [data, total, customFields] = await Promise.all([
       this.prisma.vehicle.findMany({
         where,
         include: { owner_company: true, current_plate: true },
@@ -64,19 +64,18 @@ export class VehiclesService {
         where: { module: 'vehicle', is_active: true },
         orderBy: [{ sort_order: 'asc' }, { id: 'asc' }],
       }),
-      // 批量取得所有返回車輛的自定義欄位值
-      (async () => {
-        // 先查詢所有車輛 ID，然後一次性取得所有自定義欄位值
-        const vehicleIds = data.map(v => v.id);
-        if (vehicleIds.length === 0) return [];
-        return this.prisma.customFieldValue.findMany({
+    ]);
+
+    // 批量取得所有返回車輛的自定義欄位值（需要先取得 vehicle IDs）
+    const vehicleIds = data.map(v => v.id);
+    const customFieldValues = vehicleIds.length > 0
+      ? await this.prisma.customFieldValue.findMany({
           where: {
             module: 'vehicle',
             entity_id: { in: vehicleIds },
           },
-        });
-      })(),
-    ]);
+        })
+      : [];
 
     // 將自定義欄位值按 entity_id 分組
     const customFieldValuesByEntityId: Record<number, any[]> = {};
