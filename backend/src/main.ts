@@ -113,3 +113,4 @@ async function bootstrap() {
   logger.log(`Backend running on port ${port}`);
 }
 bootstrap();
+// DB schema sync Wed Jun 24 07:40:06 UTC 2026
