@@ -261,6 +261,10 @@ type DailyCalculationRecord = {
   is_top_up_overridden?: boolean | null;
   day_quantity?: number | null;
   night_quantity?: number | null;
+  auto_day_quantity?: number | null;
+  manual_day_quantity?: number | null;
+  is_manual_day_quantity?: boolean | null;
+  effective_day_quantity?: number | null;
   daily_allowances?: DailyAllowance[];
   allowances?: DailyAllowance[];
   allowance_badges?: DailyBadge[];
@@ -1158,6 +1162,26 @@ function PayrollTabs({
     await mutateAndReload(() => payrollApi.restoreBadge(payrollId, { date, badge_key: badgeKey }), "還原津貼失敗");
   }
 
+  async function saveDayQuantity(date: string, value: number) {
+    if (!payrollId) return;
+    if (!Number.isFinite(value) || value < 0) {
+      alert("請輸入大於等於 0 的天數");
+      return;
+    }
+    await mutateAndReload(
+      () => payrollApi.updateDayQuantity(payrollId, date, value),
+      "儲存天數失敗",
+    );
+  }
+
+  async function resetDayQuantity(date: string) {
+    if (!payrollId) return;
+    await mutateAndReload(
+      () => payrollApi.resetDayQuantity(payrollId, date),
+      "還原天數失敗",
+    );
+  }
+
   async function saveTopUpOverride(date: string) {
     const input = window.prompt("請輸入補底薪手動覆蓋金額", "0");
     if (input === null) return;
@@ -1209,7 +1233,7 @@ function PayrollTabs({
 
       {activeTab === "detail" && <DetailTab rows={rows} saving={saving} readOnly={readOnly} onUpdateWorkLog={commitDetailRowUpdate} onBatchUpdateWorkLogs={batchUpdateRows} onBatchDeleteWorkLogs={excludeRows} />}
       {activeTab === "grouped" && <GroupedTab groups={groups} readOnly={readOnly || saving || !payrollId} onBillingTypeChange={setGroupBillingQuantityType} onSetGroupRate={setGroupRate} onSetGroupOtRate={setGroupOtRate} onSetGroupMidShiftRate={setGroupMidShiftRate} onOpenRateCard={openRateCardModal} onAmountSelectionChange={updateGroupedAmountSelection} onOpenManualMatch={(group) => setManualMatchGroup(group)} onUnmatch={unmatchGroupRateCard} onViewRateCard={(id) => setViewRateCardId(id)} />}
-      {activeTab === "daily" && <DailyTab days={dailyRows} allowanceOptions={calculation.allowance_options || []} adjustments={calculation.adjustments || []} expandedDay={expandedDay} readOnly={readOnly || saving || !payrollId} onToggleExpand={(date) => setExpandedDay((prev) => (prev === date ? null : date))} onAddAllowance={addDailyAllowance} onRemoveAllowance={removeDailyAllowance} onAddAdjustment={addAdjustment} onRemoveAdjustment={removeAdjustment} onExcludeBadge={excludeBadge} onRestoreBadge={restoreBadge} onSaveTopUpOverride={saveTopUpOverride} />}
+      {activeTab === "daily" && <DailyTab days={dailyRows} allowanceOptions={calculation.allowance_options || []} adjustments={calculation.adjustments || []} expandedDay={expandedDay} readOnly={readOnly || saving || !payrollId} onToggleExpand={(date) => setExpandedDay((prev) => (prev === date ? null : date))} onAddAllowance={addDailyAllowance} onRemoveAllowance={removeDailyAllowance} onAddAdjustment={addAdjustment} onRemoveAdjustment={removeAdjustment} onExcludeBadge={excludeBadge} onRestoreBadge={restoreBadge} onSaveTopUpOverride={saveTopUpOverride} onSaveDayQuantity={saveDayQuantity} onResetDayQuantity={resetDayQuantity} />}
       {activeTab === "unmatched" && <UnmatchedTab groups={computedUnmatchedGroups} readOnly={readOnly || saving || !payrollId} onOpenRateCard={openRateCardModal} />}
       {activeTab === "calculation" && <CalculationTab calculation={calculation} snapshot={snapshot} salarySetting={snapshot?.salary_setting} workLogs={rows} dailyCalculation={dailyRows} payrollId={payrollId} readOnly={readOnly} onItemUpdated={loadSnapshot} />}
       {activeTab === "print" && <PrintTab payrollId={payrollId} showGroupedInPrint={showGroupedInPrint} onShowGroupedChange={setShowGroupedInPrint} />}
@@ -1662,7 +1686,7 @@ function isAdjustmentOnDate(adjustment: Adjustment, date: string | null | undefi
   return Boolean(adjustmentDate && date && adjustmentDate === dateOnly(date));
 }
 
-function DailyTab({ days, allowanceOptions, adjustments, expandedDay, readOnly, onToggleExpand, onAddAllowance, onRemoveAllowance, onAddAdjustment, onRemoveAdjustment, onExcludeBadge, onRestoreBadge, onSaveTopUpOverride }: { days: DailyCalculationRecord[]; allowanceOptions: AllowanceOption[]; adjustments: Adjustment[]; expandedDay: string | null; readOnly: boolean; onToggleExpand: (date: string) => void; onAddAllowance: (date: string, option: AllowanceOption) => Promise<void>; onRemoveAllowance: (id: number | string) => Promise<void>; onAddAdjustment: (date: string, item: { item_name: string; amount: number }) => Promise<void>; onRemoveAdjustment: (id: number | string) => Promise<void>; onExcludeBadge: (date: string, badgeKey: string) => Promise<void>; onRestoreBadge: (date: string, badgeKey: string) => Promise<void>; onSaveTopUpOverride: (date: string) => Promise<void> }) {
+function DailyTab({ days, allowanceOptions, adjustments, expandedDay, readOnly, onToggleExpand, onAddAllowance, onRemoveAllowance, onAddAdjustment, onRemoveAdjustment, onExcludeBadge, onRestoreBadge, onSaveTopUpOverride, onSaveDayQuantity, onResetDayQuantity }: { days: DailyCalculationRecord[]; allowanceOptions: AllowanceOption[]; adjustments: Adjustment[]; expandedDay: string | null; readOnly: boolean; onToggleExpand: (date: string) => void; onAddAllowance: (date: string, option: AllowanceOption) => Promise<void>; onRemoveAllowance: (id: number | string) => Promise<void>; onAddAdjustment: (date: string, item: { item_name: string; amount: number }) => Promise<void>; onRemoveAdjustment: (id: number | string) => Promise<void>; onExcludeBadge: (date: string, badgeKey: string) => Promise<void>; onRestoreBadge: (date: string, badgeKey: string) => Promise<void>; onSaveTopUpOverride: (date: string) => Promise<void>; onSaveDayQuantity: (date: string, value: number) => Promise<void>; onResetDayQuantity: (date: string) => Promise<void> }) {
   const [addingDate, setAddingDate] = useState<string | null>(null);
   const [selectedAllowance, setSelectedAllowance] = useState("");
   const [customAllowanceName, setCustomAllowanceName] = useState("");
@@ -1791,7 +1815,14 @@ function DailyTab({ days, allowanceOptions, adjustments, expandedDay, readOnly, 
                         {day.weekday && <span className="text-xs text-gray-400">({day.weekday})</span>}
                         {!day.weekday && day.date && <span className="text-xs text-gray-400">({getWeekdayLabel(day.date)})</span>}
                         {workLogs.length >= 1 && <span className="text-xs font-bold text-blue-600">({workLogs.length}筆)</span>}
-                        {workLogs.length >= 1 && day.day_quantity !== undefined && day.day_quantity < 1 && <span className="text-xs font-bold text-amber-600">({day.day_quantity}天)</span>}
+                        {workLogs.length >= 1 && (
+                          <DayQuantityCell
+                            day={day}
+                            readOnly={readOnly}
+                            onSave={(value) => day.date && onSaveDayQuantity(day.date, value)}
+                            onReset={() => day.date && onResetDayQuantity(day.date)}
+                          />
+                        )}
                         {day.is_holiday && <span className="rounded bg-red-100 px-1.5 py-0.5 text-xs font-medium text-red-700">法定假期</span>}
                         {holidayName && (
                           <SpecialDateBadge
@@ -2097,10 +2128,19 @@ function DailyWorkLogDetails({ workLogs }: { workLogs: WorkLogRecord[] }) {
         const otAmount = row.ot_line_amount ?? (row.matched_ot_rate && row.ot_quantity ? toNumber(row.matched_ot_rate) * toNumber(row.ot_quantity) : 0);
         const midShiftAmount = row.mid_shift_line_amount ?? (row.is_mid_shift && row.matched_mid_shift_rate ? toNumber(row.matched_mid_shift_rate) : 0);
 
+        // 該筆的 quantity：null/空表示「沒填」，不顯示；有值才顯示 (X)
+        const rawQty = row.quantity;
+        const showLogQuantity = rawQty !== null && rawQty !== undefined && rawQty !== "";
+
         return (
           <div key={row.id || index} className="border-b border-gray-200 py-1 last:border-0">
             <div className="flex items-center justify-between gap-4">
-              <span className="font-medium text-gray-700">{description || "—"}</span>
+              <span className="font-medium text-gray-700">
+                {description || "—"}
+                {showLogQuantity && (
+                  <span className="ml-1 font-bold text-amber-600">({formatPlainNumber(rawQty)})</span>
+                )}
+              </span>
               <span className="font-mono font-bold text-primary-600">{formatCompactMoney(row.line_amount ?? row.amount)}</span>
             </div>
             {row.matched_rate && (
@@ -2114,6 +2154,106 @@ function DailyWorkLogDetails({ workLogs }: { workLogs: WorkLogRecord[] }) {
         );
       })}
     </div>
+  );
+}
+
+// 逐日天數顯示 + inline edit 元件
+function DayQuantityCell({
+  day,
+  readOnly,
+  onSave,
+  onReset,
+}: {
+  day: DailyCalculationRecord;
+  readOnly: boolean;
+  onSave: (value: number) => void;
+  onReset: () => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState("");
+  const inputRef = useRef<HTMLInputElement | null>(null);
+
+  // effective_day_quantity 為主要來源，向後相容 day_quantity
+  const effective =
+    day.effective_day_quantity != null
+      ? Number(day.effective_day_quantity)
+      : day.day_quantity != null
+        ? Number(day.day_quantity)
+        : null;
+  const isManual = day.is_manual_day_quantity === true;
+
+  useEffect(() => {
+    if (editing && inputRef.current) {
+      // 避免 React Portal/滾動跳動
+      const el = inputRef.current;
+      setTimeout(() => el.focus({ preventScroll: true }), 50);
+      el.select?.();
+    }
+  }, [editing]);
+
+  function startEdit() {
+    if (readOnly) return;
+    setDraft(effective != null ? formatPlainNumber(effective) : "");
+    setEditing(true);
+  }
+
+  function commit() {
+    setEditing(false);
+    const value = Number(draft);
+    if (!Number.isFinite(value) || value < 0) return;
+    if (effective != null && Math.abs(value - effective) < 1e-9 && isManual) return;
+    onSave(value);
+  }
+
+  if (editing) {
+    return (
+      <input
+        ref={inputRef}
+        type="number"
+        min="0"
+        step="0.5"
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            commit();
+          } else if (e.key === "Escape") {
+            setEditing(false);
+          }
+        }}
+        className="h-5 w-16 rounded border border-amber-300 px-1 text-xs font-bold text-amber-700"
+      />
+    );
+  }
+
+  const label = effective != null ? `(${formatPlainNumber(effective)}天)` : "(—天)";
+
+  return (
+    <span className="inline-flex items-center gap-0.5">
+      <button
+        type="button"
+        disabled={readOnly}
+        onClick={startEdit}
+        className={`text-xs font-bold text-amber-600 ${readOnly ? "cursor-default" : "hover:underline"}`}
+        title={readOnly ? undefined : "點擊修改天數"}
+      >
+        {label}
+      </button>
+      {isManual && (
+        <button
+          type="button"
+          disabled={readOnly}
+          onClick={onReset}
+          className="text-[10px] text-amber-500"
+          title={readOnly ? "手動覆蓋值" : "手動覆蓋值（點擊還原為自動計算）"}
+          aria-label="手動覆蓋值"
+        >
+          ✎
+        </button>
+      )}
+    </span>
   );
 }
 

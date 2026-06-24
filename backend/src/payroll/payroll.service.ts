@@ -388,6 +388,7 @@ export class PayrollService {
 
     // Build daily calculation
     const dailyAllowances = payroll.daily_allowances || [];
+    const manualDayQuantityMap = await this.loadManualDayQuantityMap(id);
     const dailyCalc = this.calcService.buildDailyCalculation(
       activePwls,
       salarySetting,
@@ -399,13 +400,18 @@ export class PayrollService {
         leaves,
         employeeJoinDate: payroll.employee?.join_date ? toDateStr(payroll.employee.join_date) : null,
         employeeTerminationDate: payroll.employee?.termination_date ? toDateStr(payroll.employee.termination_date) : null,
+        manualDayQuantityMap,
       },
     );
 
     const workDayCount = dailyCalc.reduce((sum: number, day: any) => {
       const logs = day.work_logs || [];
       if (logs.length === 0) return sum;
-      const dayQ = day.day_quantity != null ? Number(day.day_quantity) : 1;
+      // 統一使用 effective_day_quantity（有手動值用手動值，否則自動計算值）
+      if (day.effective_day_quantity != null) {
+        return sum + Number(day.effective_day_quantity);
+      }
+      const dayQ = day.day_quantity != null ? Number(day.day_quantity) : 0;
       const nightQ = day.night_quantity != null ? Number(day.night_quantity) : 0;
       return sum + Math.min(dayQ + nightQ, 1);
     }, 0);
@@ -451,6 +457,118 @@ export class PayrollService {
         0,
       ),
     };
+  }
+
+  // ── 載入手動覆蓋天數 map（calc_date → 手動值），供逐日計算使用 ──
+  private async loadManualDayQuantityMap(
+    payrollId: number,
+  ): Promise<
+    Map<string, { id?: number; manual_day_quantity: number | null; is_manual_day_quantity: boolean }>
+  > {
+    const records = await this.prisma.payrollDailyCalc.findMany({
+      where: { payroll_id: payrollId },
+    });
+    const map = new Map<
+      string,
+      { id?: number; manual_day_quantity: number | null; is_manual_day_quantity: boolean }
+    >();
+    for (const r of records) {
+      map.set(toDateStr(r.calc_date), {
+        id: r.id,
+        manual_day_quantity:
+          r.manual_day_quantity != null ? Number(r.manual_day_quantity) : null,
+        is_manual_day_quantity: r.is_manual_day_quantity,
+      });
+    }
+    return map;
+  }
+
+  // ── 更新某天的手動覆蓋天數（PATCH endpoint 使用）──
+  // dayKey 可為 calc_date(YYYY-MM-DD) 字串或 PayrollDailyCalc.id
+  async updateDayQuantity(
+    payrollId: number,
+    dayKey: string,
+    manualDayQuantity: number,
+  ) {
+    const payroll = await this.prisma.payroll.findUnique({
+      where: { id: payrollId },
+    });
+    if (!payroll) throw new NotFoundException('Payroll not found');
+    if (payroll.status !== 'draft' && payroll.status !== 'preparing') {
+      throw new BadRequestException('只能編輯草稿或準備中狀態的糧單');
+    }
+
+    const value = Number(manualDayQuantity);
+    if (isNaN(value) || value < 0) {
+      throw new BadRequestException('天數必須為大於等於 0 的數值');
+    }
+
+    // 解析 dayKey：純數字且非日期格式 → 視為記錄 id；否則視為日期字串
+    let calcDate: string | null = null;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(dayKey)) {
+      calcDate = dayKey;
+    } else if (/^\d+$/.test(dayKey)) {
+      const existing = await this.prisma.payrollDailyCalc.findFirst({
+        where: { id: Number(dayKey), payroll_id: payrollId },
+      });
+      if (!existing) throw new NotFoundException('PayrollDailyCalc not found');
+      calcDate = toDateStr(existing.calc_date);
+    } else {
+      throw new BadRequestException('無效的日期識別');
+    }
+
+    // upsert（payroll_id + calc_date 唯一鍵）：設定手動值並標記 is_manual_day_quantity = true
+    await this.prisma.payrollDailyCalc.upsert({
+      where: {
+        payroll_id_calc_date: {
+          payroll_id: payrollId,
+          calc_date: new Date(calcDate),
+        },
+      },
+      update: {
+        manual_day_quantity: value,
+        is_manual_day_quantity: true,
+      },
+      create: {
+        payroll_id: payrollId,
+        calc_date: new Date(calcDate),
+        manual_day_quantity: value,
+        is_manual_day_quantity: true,
+      },
+    });
+
+    // 存值後觸發 recalculate（保護手動值）
+    await this.recalculate(payrollId, false);
+    return this.findOne(payrollId);
+  }
+
+  // ── 清除某天的手動覆蓋天數（還原為自動計算）──
+  async resetDayQuantity(payrollId: number, dayKey: string) {
+    const payroll = await this.prisma.payroll.findUnique({
+      where: { id: payrollId },
+    });
+    if (!payroll) throw new NotFoundException('Payroll not found');
+    if (payroll.status !== 'draft' && payroll.status !== 'preparing') {
+      throw new BadRequestException('只能編輯草稿或準備中狀態的糧單');
+    }
+
+    let calcDate: string | null = null;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(dayKey)) {
+      calcDate = dayKey;
+    } else if (/^\d+$/.test(dayKey)) {
+      const existing = await this.prisma.payrollDailyCalc.findFirst({
+        where: { id: Number(dayKey), payroll_id: payrollId },
+      });
+      if (existing) calcDate = toDateStr(existing.calc_date);
+    }
+    if (calcDate) {
+      await this.prisma.payrollDailyCalc.updateMany({
+        where: { payroll_id: payrollId, calc_date: new Date(calcDate) },
+        data: { is_manual_day_quantity: false, manual_day_quantity: null },
+      });
+    }
+    await this.recalculate(payrollId, false);
+    return this.findOne(payrollId);
   }
 
 
@@ -676,6 +794,7 @@ export class PayrollService {
     });
 
     // Build daily calculation for preview
+    // preview 為未儲存糧單，無持久化手動覆蓋天數，故用空 map
     const dailyCalc = this.calcService.buildDailyCalculationFromWorkLogs(
       enrichedWorkLogs,
       salarySetting,
@@ -693,7 +812,11 @@ export class PayrollService {
     const workDayCount = dailyCalc.reduce((sum: number, day: any) => {
       const logs = day.work_logs || [];
       if (logs.length === 0) return sum;
-      const dayQ = day.day_quantity != null ? Number(day.day_quantity) : 1;
+      // 統一使用 effective_day_quantity（有手動值用手動值，否則自動計算值）
+      if (day.effective_day_quantity != null) {
+        return sum + Number(day.effective_day_quantity);
+      }
+      const dayQ = day.day_quantity != null ? Number(day.day_quantity) : 0;
       const nightQ = day.night_quantity != null ? Number(day.night_quantity) : 0;
       return sum + Math.min(dayQ + nightQ, 1);
     }, 0);
@@ -2320,6 +2443,9 @@ export class PayrollService {
     );
     const calculationDailyAllowances = await this.getCalculationDailyAllowances(id);
 
+    // 載入手動覆蓋天數 map（recalculate 時保護 is_manual_day_quantity = true 的天）
+    const manualDayQuantityMap = await this.loadManualDayQuantityMap(id);
+
     const calc = await this.calcService.calculatePayroll(
       emp,
       salarySetting,
@@ -2332,6 +2458,7 @@ export class PayrollService {
       excludedBadgeKeys,
       calculationDailyAllowances,
       adjustmentTotal,
+      manualDayQuantityMap,
     );
 
     // Update payroll items; preserve manually excluded items by stable item signature.

@@ -75,6 +75,10 @@ export class PayrollCalculationService {
     excludedBadgeKeys?: Set<string>,
     dailyAllowances: PayrollDailyAllowanceForCalculation[] = [],
     adjustmentTotalForMpf = 0,
+    manualDayQuantityMap?: Map<
+      string,
+      { id?: number; manual_day_quantity: number | null; is_manual_day_quantity: boolean }
+    >,
   ) {
     const excluded = excludedBadgeKeys || new Set<string>();
     const salaryType = salarySetting.salary_type || 'daily';
@@ -111,6 +115,7 @@ export class PayrollCalculationService {
         dateFrom,
         dateTo,
         holidayDates,
+        manualDayQuantityMap,
       },
     );
 
@@ -141,15 +146,25 @@ export class PayrollCalculationService {
       otTotal += day.daily_ot_amount || 0;
       midShiftTotal += day.daily_mid_shift_amount || 0;
 
-      // 工作天數（按 quantity 比例計算）
+      // 工作天數：統一使用 effective_day_quantity（有手動值用手動值，否則自動計算值）
       if (day.work_logs && day.work_logs.length > 0) {
         const dayShiftWls = day.work_logs.filter((wl: any) => wl.day_night !== '夜');
         const nightShiftWls = day.work_logs.filter((wl: any) => wl.day_night === '夜');
-        if (dayShiftWls.length > 0) {
-          workDays += Math.min(dayShiftWls.reduce((sum: number, wl: any) => sum + (Number(wl.quantity) || 1), 0), 1);
-        }
-        if (nightShiftWls.length > 0) {
-          workNights += Math.min(nightShiftWls.reduce((sum: number, wl: any) => sum + (Number(wl.quantity) || 1), 0), 1);
+        if (day.is_manual_day_quantity) {
+          // 手動覆蓋：把 effective 天數歸到有班的一側（日班優先）
+          const eff = Number(day.effective_day_quantity) || 0;
+          if (dayShiftWls.length > 0) {
+            workDays += eff;
+          } else if (nightShiftWls.length > 0) {
+            workNights += eff;
+          }
+        } else {
+          if (dayShiftWls.length > 0) {
+            workDays += Math.min(dayShiftWls.reduce((sum: number, wl: any) => sum + (Number(wl.quantity) || 0), 0), 1);
+          }
+          if (nightShiftWls.length > 0) {
+            workNights += Math.min(nightShiftWls.reduce((sum: number, wl: any) => sum + (Number(wl.quantity) || 0), 0), 1);
+          }
         }
       }
 
@@ -326,6 +341,10 @@ export class PayrollCalculationService {
         // 計算需補底薪的實際天數（按 quantity 比例）
         const topUpDayCount = dailyCalc.reduce((sum: number, day: any) => {
           if ((day.top_up_amount || 0) <= 0) return sum;
+          // 統一使用 effective_day_quantity 作為補底薪天數
+          if (day.effective_day_quantity != null) {
+            return sum + Number(day.effective_day_quantity);
+          }
           const dayQ = day.day_quantity != null ? Number(day.day_quantity) : (day.work_logs || []).filter((wl: any) => wl.day_night !== '夜').length > 0 ? 1 : 0;
           const nightQ = day.night_quantity != null ? Number(day.night_quantity) : (day.work_logs || []).filter((wl: any) => wl.day_night === '夜').length > 0 ? 1 : 0;
           return sum + Math.min(dayQ + nightQ, 1);
@@ -617,10 +636,13 @@ export class PayrollCalculationService {
       const mpfDays = dailyCalc.reduce((sum: number, day: any) => {
         const logs = day.work_logs || [];
         if (logs.length === 0) return sum;
+        // 統一使用 effective_day_quantity（有手動值用手動值，否則自動計算值）
+        if (day.effective_day_quantity != null) {
+          return sum + Number(day.effective_day_quantity);
+        }
         const dayQ = day.day_quantity != null ? Number(day.day_quantity) : 0;
         const nightQ = day.night_quantity != null ? Number(day.night_quantity) : 0;
-        // 有工作記錄但 quantity 都是 null，fallback 計 1 天
-        const qty = (dayQ + nightQ) || 1;
+        const qty = dayQ + nightQ;
         return sum + Math.min(qty, 1);
       }, 0);
       const defaultIndustryDailyIncome = mpfDays > 0 ? defaultMpfBase / mpfDays : 0;
@@ -836,6 +858,7 @@ export class PayrollCalculationService {
     dayWorkLogs: any[],
     salarySetting: any | null,
     dayAllowances: any[],
+    effectiveDayQuantity?: number,
   ): { key: string; name: string; amount: number }[] {
     if (!salarySetting || dayWorkLogs.length === 0) return [];
 
@@ -927,11 +950,14 @@ export class PayrollCalculationService {
         );
         if (isExcluded) continue;
 
-        // 按當天工作量比例計算金額
-        const dayQuantity = Math.min(
-          dayWorkLogs.reduce((sum, wl) => sum + (Number(wl.quantity) || 1), 0),
-          1
-        );
+        // 按當天 effective_day_quantity 比例計算金額（與 day_quantity 同源）
+        const dayQuantity =
+          effectiveDayQuantity != null
+            ? effectiveDayQuantity
+            : Math.min(
+                dayWorkLogs.reduce((sum, wl) => sum + (Number(wl.quantity) || 0), 0),
+                1,
+              );
 
         result.push({
           key,
@@ -957,8 +983,14 @@ export class PayrollCalculationService {
       employeeJoinDate?: string | null;
       employeeTerminationDate?: string | null;
       monthlySalary?: number;
+      // 手動覆蓋天數 map：calc_date(YYYY-MM-DD) → { id, manual_day_quantity, is_manual_day_quantity }
+      manualDayQuantityMap?: Map<
+        string,
+        { id?: number; manual_day_quantity: number | null; is_manual_day_quantity: boolean }
+      >;
     } = {},
   ): any[] {
+    const manualDayQuantityMap = options.manualDayQuantityMap || new Map();
     const salaryType = salarySetting?.salary_type || 'daily';
     const baseSalary =
       salaryType === 'daily'
@@ -1092,14 +1124,39 @@ export class PayrollCalculationService {
         0,
       );
       // 計算日班和夜班的工作天數（按 quantity 比例）
-      const dayQuantity = Math.min(
-        dayShiftPwls.reduce((sum: number, pwl: any) => sum + (Number(pwl.quantity) || 1), 0),
+      const autoDayQuantity = Math.min(
+        dayShiftPwls.reduce((sum: number, pwl: any) => sum + (Number(pwl.quantity) || 0), 0),
         1,
       );
-      const nightQuantity = Math.min(
-        nightShiftPwls.reduce((sum: number, pwl: any) => sum + (Number(pwl.quantity) || 1), 0),
+      const autoNightQuantity = Math.min(
+        nightShiftPwls.reduce((sum: number, pwl: any) => sum + (Number(pwl.quantity) || 0), 0),
         1,
       );
+      // 自動計算的總天數（日 + 夜，封頂 1 天）
+      const autoDayQuantityTotal = Math.min(autoDayQuantity + autoNightQuantity, 1);
+
+      // ── 手動覆蓋天數（single source of truth：PayrollDailyCalc）──
+      const manualEntry = manualDayQuantityMap.get(date);
+      const isManualDayQuantity =
+        !!manualEntry &&
+        manualEntry.is_manual_day_quantity === true &&
+        manualEntry.manual_day_quantity != null;
+      const manualDayQuantity = isManualDayQuantity
+        ? Number(manualEntry!.manual_day_quantity)
+        : null;
+      // effective_day_quantity：有手動值用手動值，否則用自動計算值
+      const effectiveDayQuantity = isManualDayQuantity
+        ? (manualDayQuantity as number)
+        : autoDayQuantityTotal;
+
+      // 日/夜班補底薪使用 effective day quantity 比例。
+      // 若有手動覆蓋：按日/夜 workIncome 是否存在，分配 effective 天數做補底薪基準。
+      const dayQuantity = isManualDayQuantity
+        ? (dayShiftPwls.length > 0 ? effectiveDayQuantity : 0)
+        : autoDayQuantity;
+      const nightQuantity = isManualDayQuantity
+        ? (nightShiftPwls.length > 0 ? (dayShiftPwls.length > 0 ? 0 : effectiveDayQuantity) : 0)
+        : autoNightQuantity;
       const autoDayTopUpAmount =
         !isHolidayDay && dayShiftPwls.length > 0 && baseSalary > 0
           ? Math.max(baseSalary * dayQuantity - dayWorkIncome, 0)
@@ -1181,6 +1238,7 @@ export class PayrollCalculationService {
         dayPwls,
         salarySetting,
         dayAllowances,
+        effectiveDayQuantity,
       );
       const dailyOtAmount = dayPwls.reduce(
         (sum: number, pwl: any) => sum + getSalaryOtAmount(pwl),
@@ -1212,7 +1270,7 @@ export class PayrollCalculationService {
           client_name: pwl.client_name,
           client_short_name: pwl.company_name || null,
           client_contract_no: pwl.client_contract_no,
-          quantity: Number(pwl.quantity) || 1,
+          quantity: pwl.quantity == null || pwl.quantity === '' ? null : (Number(pwl.quantity) || 0),
           product_quantity: this.getProductQuantity(pwl),
           product_unit: pwl.payroll_work_log_product_unit || null,
           billing_quantity_type: this.normalizeBillingQuantityType(
@@ -1251,6 +1309,12 @@ export class PayrollCalculationService {
         night_top_up_amount: salaryType === 'monthly' ? 0 : nightTopUpAmount,
         day_quantity: dayQuantity,
         night_quantity: nightQuantity,
+        // ── 逐日天數（手動覆蓋相關）──
+        id: manualEntry?.id ?? null,
+        auto_day_quantity: autoDayQuantityTotal,
+        manual_day_quantity: manualDayQuantity,
+        is_manual_day_quantity: isManualDayQuantity,
+        effective_day_quantity: effectiveDayQuantity,
         is_top_up_overridden: salaryType === 'monthly' ? false : isTopUpOverridden,
         top_up_override_id: salaryType === 'monthly' ? null : (override?.id ?? null),
         effective_income: effectiveIncome,
@@ -1283,6 +1347,10 @@ export class PayrollCalculationService {
       employeeJoinDate?: string | null;
       employeeTerminationDate?: string | null;
       monthlySalary?: number;
+      manualDayQuantityMap?: Map<
+        string,
+        { id?: number; manual_day_quantity: number | null; is_manual_day_quantity: boolean }
+      >;
     } = {},
   ): any[] {
     return this.buildDailyCalculation(

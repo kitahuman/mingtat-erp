@@ -58,6 +58,10 @@ export class UpdatePayrollItemDto {
   @IsOptional() @IsBoolean() reset_manual_amount?: boolean;
 }
 
+export class UpdateDayQuantityDto {
+  @Type(() => Number) @IsNumber() manual_day_quantity: number;
+}
+
 export class ExcludeBadgeDto {
   @IsString()
   date: string;

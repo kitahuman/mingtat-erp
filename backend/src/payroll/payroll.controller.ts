@@ -1,5 +1,5 @@
 import {
-  Controller, Get, Post, Put, Delete,
+  Controller, Get, Post, Put, Patch, Delete,
   Param, Query, Body,
   UseGuards, Request, Res, StreamableFile,
 } from '@nestjs/common';
@@ -7,7 +7,7 @@ import { AuthGuard } from '@nestjs/passport';
 import type { Response } from 'express';
 import { PayrollService } from './payroll.service';
 import { PayrollPdfService } from './payroll-pdf.service';
-import { UpdatePayrollDto, UpdatePayrollWorkLogDto, UpdatePayrollItemDto, ExcludeBadgeDto } from './dto/update-payroll.dto';
+import { UpdatePayrollDto, UpdatePayrollWorkLogDto, UpdatePayrollItemDto, UpdateDayQuantityDto, ExcludeBadgeDto } from './dto/update-payroll.dto';
 import { CreatePayrollPaymentDto, AddToRateCardDto, MatchGroupRateCardDto, UnmatchGroupRateCardDto } from './dto/payroll-payment.dto';
 import { AttachPayrollExpensesDto, GenerateMpfEmployerExpenseDto } from './dto/payroll-expense.dto';
 
@@ -172,6 +172,29 @@ export class PayrollController {
   @Post(':id/recalculate')
   recalculate(@Param('id') id: string, @Body() body?: { override_manual_rates?: boolean }) {
     return this.payrollService.recalculate(+id, body?.override_manual_rates);
+  }
+
+  // 更新某天的手動覆蓋天數（dailyCalcId 可為 calc_date 字串或 PayrollDailyCalc id）
+  @Patch(':payrollId/daily-calc/:dailyCalcId/day-quantity')
+  updateDayQuantity(
+    @Param('payrollId') payrollId: string,
+    @Param('dailyCalcId') dailyCalcId: string,
+    @Body() body: UpdateDayQuantityDto,
+  ) {
+    return this.payrollService.updateDayQuantity(
+      +payrollId,
+      dailyCalcId,
+      body.manual_day_quantity,
+    );
+  }
+
+  // 清除某天的手動覆蓋天數（還原為自動計算）
+  @Delete(':payrollId/daily-calc/:dailyCalcId/day-quantity')
+  resetDayQuantity(
+    @Param('payrollId') payrollId: string,
+    @Param('dailyCalcId') dailyCalcId: string,
+  ) {
+    return this.payrollService.resetDayQuantity(+payrollId, dailyCalcId);
   }
 
   // 設定歸組單價（批量更新同組工作記錄的單價）

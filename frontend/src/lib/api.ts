@@ -692,6 +692,18 @@ export const payrollApi = {
     api.post('/payroll/bulk/generate-mpf-employer-expense', { payroll_ids: payrollIds }),
   recalculate: (id: number, body?: { override_manual_rates?: boolean }) =>
     api.post(`/payroll/${id}/recalculate`, body || {}),
+  // 更新某天的手動覆蓋天數（dailyCalcId 可為 calc_date 字串或 PayrollDailyCalc id）
+  updateDayQuantity: (
+    payrollId: number,
+    dailyCalcId: string | number,
+    manualDayQuantity: number,
+  ) =>
+    api.patch(`/payroll/${payrollId}/daily-calc/${dailyCalcId}/day-quantity`, {
+      manual_day_quantity: manualDayQuantity,
+    }),
+  // 清除某天的手動覆蓋天數（還原為自動計算）
+  resetDayQuantity: (payrollId: number, dailyCalcId: string | number) =>
+    api.delete(`/payroll/${payrollId}/daily-calc/${dailyCalcId}/day-quantity`),
   resetRefetch: (id: number) => api.post(`/payroll/${id}/reset-refetch`),
   setGroupRate: (id: number, groupKey: string, rate: number) =>
     api.post(`/payroll/${id}/set-group-rate`, { group_key: groupKey, rate }),

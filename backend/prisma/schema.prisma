@@ -1502,6 +1502,7 @@ model Payroll {
   payroll_work_logs       PayrollWorkLog[]
   adjustments             PayrollAdjustment[]
   daily_allowances        PayrollDailyAllowance[]
+  daily_calcs             PayrollDailyCalc[]
   payroll_payments        PayrollPayment[]
   payment_outs            PaymentOut[]
   payroll_expenses        PayrollExpense[]
@@ -1626,6 +1627,22 @@ model PayrollDailyAllowance {
   payroll Payroll @relation(fields: [payroll_id], references: [id], onDelete: Cascade)
 
   @@map("payroll_daily_allowances")
+}
+
+model PayrollDailyCalc {
+  id                     Int      @id @default(autoincrement())
+  payroll_id             Int
+  calc_date              DateTime @db.Date
+  manual_day_quantity    Decimal? @db.Decimal(10, 2)
+  is_manual_day_quantity Boolean  @default(false)
+  created_at             DateTime @default(now())
+  updated_at             DateTime @default(now()) @updatedAt
+
+  payroll Payroll @relation(fields: [payroll_id], references: [id], onDelete: Cascade)
+
+  @@unique([payroll_id, calc_date])
+  @@index([payroll_id])
+  @@map("payroll_daily_calcs")
 }
 
 model PayrollPayment {
