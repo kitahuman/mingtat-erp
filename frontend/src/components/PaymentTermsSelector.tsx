@@ -77,9 +77,17 @@ export default function PaymentTermsSelector({
   }, [templates]);
 
   const handleTemplateChange = (templateId: string) => {
-    setSelectedTemplateId(templateId);
+    if (!templateId) return;
     const template = templates.find(item => String(item.id) === templateId);
-    if (template) onChange(template.content);
+    if (template) {
+      // 追加模板內容到現有文字後面，而非覆蓋
+      const newValue = value.trim()
+        ? value.trim() + '\n' + template.content
+        : template.content;
+      onChange(newValue);
+    }
+    // 重置下拉選單，讓用戶可以重複選擇同一模板追加
+    setSelectedTemplateId('');
   };
 
   const handleSaveTemplate = async () => {
