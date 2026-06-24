@@ -1169,6 +1169,54 @@ export class QuotationsService {
       pdf_font_sizes?: Record<string, unknown>;
     };
 
+    // Validate and sync quotation_no if changed
+    if (updateData.quotation_no !== undefined) {
+      const quotationNo = String(updateData.quotation_no).trim();
+      if (!quotationNo) {
+        throw new BadRequestException('報價單編號不能為空');
+      }
+
+      // Check if quotation_no is already used by another quotation
+      const duplicate = await this.prisma.quotation.findFirst({
+        where: {
+          quotation_no: quotationNo,
+          id: { not: id },
+          deleted_at: null,
+        },
+      });
+      if (duplicate) {
+        throw new BadRequestException('此報價單編號已被使用');
+      }
+
+      // Try to sync sequence if quotation_no matches system format
+      // Format: prefix + YYMM + 4-digit hex sequence
+      // Extract last 8 characters: YYMM (4) + seq (4 hex)
+      if (quotationNo.length >= 8) {
+        const lastEight = quotationNo.slice(-8);
+        const yearMonthStr = lastEight.slice(0, 4);
+        const seqStr = lastEight.slice(4, 8);
+
+        // Validate format: YYMM should be 4 digits, seq should be 4 hex digits
+        if (/^\d{4}$/.test(yearMonthStr) && /^[0-9A-Fa-f]{4}$/.test(seqStr)) {
+          const parsedSeq = parseInt(seqStr, 16);
+          const prefix = quotationNo.slice(0, -8);
+
+          // Find and update QuotationSequence if parsed seq > last_seq
+          const seq = await this.prisma.quotationSequence.findFirst({
+            where: { prefix, year_month: yearMonthStr },
+          });
+
+          if (seq && parsedSeq > seq.last_seq) {
+            await this.prisma.quotationSequence.update({
+              where: { id: seq.id },
+              data: { last_seq: parsedSeq },
+            });
+          }
+        }
+      }
+    }
+
+
     // Recalculate total
     if (items && items.length > 0) {
       let total_amount = 0;

@@ -1223,7 +1223,47 @@ export class InvoicesService {
     if (dto.invoice_no !== undefined) {
       const invoiceNo = dto.invoice_no.trim();
       if (!invoiceNo) throw new BadRequestException('發票編號不能為空');
+      
+      // Check if invoice_no is already used by another invoice
+      const duplicate = await this.prisma.invoice.findFirst({
+        where: {
+          invoice_no: invoiceNo,
+          id: { not: id },
+          deleted_at: null,
+        },
+      });
+      if (duplicate) {
+        throw new BadRequestException('此發票編號已被使用');
+      }
+      
       data.invoice_no = invoiceNo;
+      
+      // Try to sync sequence if invoice_no matches system format
+      // Format: prefix + YYMM + 3-digit sequence
+      // Extract last 7 characters: YYMM (4) + seq (3)
+      if (invoiceNo.length >= 7) {
+        const lastSeven = invoiceNo.slice(-7);
+        const yearMonthStr = lastSeven.slice(0, 4);
+        const seqStr = lastSeven.slice(4, 7);
+        
+        // Validate format: YYMM should be 4 digits, seq should be 3 digits
+        if (/^\d{4}$/.test(yearMonthStr) && /^\d{3}$/.test(seqStr)) {
+          const parsedSeq = parseInt(seqStr, 10);
+          const prefix = invoiceNo.slice(0, -7);
+          
+          // Find and update InvoiceSequence if parsed seq > last_seq
+          const seq = await this.prisma.invoiceSequence.findFirst({
+            where: { prefix, year_month: yearMonthStr },
+          });
+          
+          if (seq && parsedSeq > seq.last_seq) {
+            await this.prisma.invoiceSequence.update({
+              where: { id: seq.id },
+              data: { last_seq: parsedSeq },
+            });
+          }
+        }
+      }
     }
     if (dto.date !== undefined) data.date = new Date(dto.date);
     if (dto.company_id !== undefined) {
