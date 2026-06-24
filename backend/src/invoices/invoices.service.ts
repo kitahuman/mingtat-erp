@@ -183,18 +183,35 @@ export class InvoicesService {
       let seq = await tx.invoiceSequence.findFirst({
         where: { prefix, year_month: yearMonth },
       });
-
       if (!seq) {
         seq = await tx.invoiceSequence.create({
           data: { prefix, year_month: yearMonth, last_seq: 0 },
         });
       }
 
+      // Check actual invoices table for max existing sequence to sync
+      const existingInvoices = await tx.invoice.findMany({
+        where: {
+          invoice_no: { startsWith: `${prefix}${yearMonth}` },
+          deleted_at: null,
+        },
+        select: { invoice_no: true },
+      });
+      let actualMax = 0;
+      for (const inv of existingInvoices) {
+        const seqPart = inv.invoice_no.slice(prefix.length + yearMonth.length);
+        const parsed = parseInt(seqPart, 10);
+        if (!isNaN(parsed) && parsed > actualMax) {
+          actualMax = parsed;
+        }
+      }
+
+      // Use the higher of sequence table vs actual invoices
+      const baseSeq = Math.max(seq.last_seq, actualMax);
       const updated = await tx.invoiceSequence.update({
         where: { id: seq.id },
-        data: { last_seq: seq.last_seq + 1 },
+        data: { last_seq: baseSeq + 1 },
       });
-
       return `${prefix}${yearMonth}${String(updated.last_seq).padStart(3, '0')}`;
     });
   }
@@ -1252,6 +1269,7 @@ export class InvoicesService {
           const prefix = invoiceNo.slice(0, -7);
           
           // Find and update InvoiceSequence if parsed seq > last_seq
+          // Also create the record if it doesn't exist
           const seq = await this.prisma.invoiceSequence.findFirst({
             where: { prefix, year_month: yearMonthStr },
           });
@@ -1260,6 +1278,10 @@ export class InvoicesService {
             await this.prisma.invoiceSequence.update({
               where: { id: seq.id },
               data: { last_seq: parsedSeq },
+            });
+          } else if (!seq) {
+            await this.prisma.invoiceSequence.create({
+              data: { prefix, year_month: yearMonthStr, last_seq: parsedSeq },
             });
           }
         }
@@ -2188,10 +2210,32 @@ export class InvoicesService {
     const mm = String(date.getUTCMonth() + 1).padStart(2, '0');
     const yearMonth = `${yy}${mm}`;
 
+    // Get last_seq from sequence table
     const seq = await this.prisma.invoiceSequence.findFirst({
       where: { prefix, year_month: yearMonth },
     });
-    const nextSeq = (seq?.last_seq ?? 0) + 1;
+    const seqTableMax = seq?.last_seq ?? 0;
+
+    // Also check actual invoices table for the max existing sequence number
+    const existingInvoices = await this.prisma.invoice.findMany({
+      where: {
+        invoice_no: { startsWith: `${prefix}${yearMonth}` },
+        deleted_at: null,
+      },
+      select: { invoice_no: true },
+    });
+
+    let actualMax = 0;
+    for (const inv of existingInvoices) {
+      const seqPart = inv.invoice_no.slice(prefix.length + yearMonth.length);
+      const parsed = parseInt(seqPart, 10);
+      if (!isNaN(parsed) && parsed > actualMax) {
+        actualMax = parsed;
+      }
+    }
+
+    // Use the higher of sequence table vs actual invoices
+    const nextSeq = Math.max(seqTableMax, actualMax) + 1;
 
     return `${prefix}${yearMonth}${String(nextSeq).padStart(3, '0')}`;
   }

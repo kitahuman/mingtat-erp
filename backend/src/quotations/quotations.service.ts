@@ -246,10 +246,32 @@ export class QuotationsService {
       ? `${company.internal_prefix}Q${clientCode}`
       : `${company.internal_prefix}Q`;
 
+    // Get last_seq from sequence table
     const seq = await this.prisma.quotationSequence.findFirst({
       where: { prefix, year_month: yearMonth },
     });
-    const nextSeq = (seq?.last_seq ?? 0) + 1;
+    const seqTableMax = seq?.last_seq ?? 0;
+
+    // Also check actual quotations table for the max existing sequence number
+    const existingQuotations = await this.prisma.quotation.findMany({
+      where: {
+        quotation_no: { startsWith: `${prefix}${yearMonth}` },
+        deleted_at: null,
+      },
+      select: { quotation_no: true },
+    });
+
+    let actualMax = 0;
+    for (const q of existingQuotations) {
+      const seqPart = q.quotation_no.slice(prefix.length + yearMonth.length);
+      const parsed = parseInt(seqPart, 16);
+      if (!isNaN(parsed) && parsed > actualMax) {
+        actualMax = parsed;
+      }
+    }
+
+    // Use the higher of sequence table vs actual quotations
+    const nextSeq = Math.max(seqTableMax, actualMax) + 1;
     const seqHex = nextSeq.toString(16).toUpperCase().padStart(4, '0');
 
     return `${prefix}${yearMonth}${seqHex}`;
@@ -1202,6 +1224,7 @@ export class QuotationsService {
           const prefix = quotationNo.slice(0, -8);
 
           // Find and update QuotationSequence if parsed seq > last_seq
+          // Also create the record if it doesn't exist
           const seq = await this.prisma.quotationSequence.findFirst({
             where: { prefix, year_month: yearMonthStr },
           });
@@ -1210,6 +1233,10 @@ export class QuotationsService {
             await this.prisma.quotationSequence.update({
               where: { id: seq.id },
               data: { last_seq: parsedSeq },
+            });
+          } else if (!seq) {
+            await this.prisma.quotationSequence.create({
+              data: { prefix, year_month: yearMonthStr, last_seq: parsedSeq },
             });
           }
         }

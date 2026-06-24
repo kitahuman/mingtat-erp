@@ -958,7 +958,7 @@ export default function WorkLogsPage() {
   useRefetchOnFocus(() => loadReferenceData(false));
 
   const buildListParams = useCallback(
-    (overrides: Record<string, unknown> = {}, { skipColumnFilters = false }: { skipColumnFilters?: boolean } = {}) => {
+    (overrides: Record<string, unknown> = {}, { skipColumnFilters = false, excludeColumnFilter }: { skipColumnFilters?: boolean; excludeColumnFilter?: string } = {}) => {
       const params: Record<string, unknown> = {
         sortBy,
         sortOrder,
@@ -993,6 +993,7 @@ export default function WorkLogsPage() {
       }
       if (!skipColumnFilters) {
         for (const [col, vals] of Object.entries(columnFilters)) {
+          if (col === excludeColumnFilter) continue;
           if (Array.isArray(vals) && vals.length > 0) {
             params[`filter_${col}`] = JSON.stringify(vals);
           }
@@ -3130,7 +3131,7 @@ export default function WorkLogsPage() {
                               onFetchOptions={async (key) => {
                                 const res = await workLogsApi.filterOptions(
                                   key,
-                                  buildListParams({}, { skipColumnFilters: true }),
+                                  buildListParams({}, { excludeColumnFilter: key }),
                                 );
                                 return res.data as string[];
                               }}
