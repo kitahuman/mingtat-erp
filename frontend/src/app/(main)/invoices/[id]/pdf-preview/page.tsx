@@ -150,8 +150,21 @@ export default function InvoicePdfPreviewPage() {
         show_client_signature: settings.print_invoice_show_client_signature !== 'false',
         show_company_signature: settings.print_invoice_show_company_signature !== 'false',
         show_company_stamp: settings.print_invoice_show_company_stamp === 'true',
+        font_size_title: Number(settings.invoice_pdf_title_font_size) || 25,
+        font_size_item_name: Number(settings.invoice_pdf_item_name_font_size) || 13,
+        font_size_item_desc: Number(settings.invoice_pdf_item_desc_font_size) || 9,
+        font_size_payment_terms: Number(settings.invoice_pdf_payment_terms_font_size) || 11,
       };
-      setOptions(prev => ({ ...SYSTEM_DEFAULTS, ...prev }));
+      setOptions(prev => {
+        // Only keep prev values that differ from DEFAULT_OPTIONS (i.e., already loaded from invoice)
+        const invoiceOverrides: Partial<PdfPreviewOptions> = {};
+        for (const key of Object.keys(prev) as (keyof PdfPreviewOptions)[]) {
+          if (prev[key] !== DEFAULT_OPTIONS[key]) {
+            (invoiceOverrides as any)[key] = prev[key];
+          }
+        }
+        return { ...SYSTEM_DEFAULTS, ...invoiceOverrides };
+      });
     }).catch(() => {
       // Use default if system settings fail to load
     });

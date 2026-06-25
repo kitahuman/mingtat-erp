@@ -77,8 +77,21 @@ export default function QuotationPdfPreviewPage() {
         show_client_signature: settings.print_quotation_show_client_signature !== 'false',
         show_company_signature: settings.print_quotation_show_company_signature !== 'false',
         show_company_stamp: settings.print_quotation_show_company_stamp === 'true',
+        font_size_title: Number(settings.quotation_pdf_title_font_size) || 25,
+        font_size_item_name: Number(settings.quotation_pdf_item_name_font_size) || 13,
+        font_size_item_desc: Number(settings.quotation_pdf_item_desc_font_size) || 9,
+        font_size_payment_terms: Number(settings.quotation_pdf_payment_terms_font_size) || 11,
       };
-      setOptions(prev => ({ ...SYSTEM_DEFAULTS, ...prev }));
+      setOptions(prev => {
+        // Only keep prev values that differ from DEFAULT_OPTIONS (i.e., already loaded from quotation)
+        const quotationOverrides: Partial<PdfPreviewOptions> = {};
+        for (const key of Object.keys(prev) as (keyof PdfPreviewOptions)[]) {
+          if (prev[key] !== DEFAULT_OPTIONS[key]) {
+            (quotationOverrides as any)[key] = prev[key];
+          }
+        }
+        return { ...SYSTEM_DEFAULTS, ...quotationOverrides };
+      });
     }).catch(() => {
       // Use default if system settings fail to load
     });
