@@ -66,6 +66,12 @@ export class EmployeePortalController {
   }
 
   @UseGuards(AuthGuard('jwt'))
+  @Post('refresh')
+  async refresh(@Request() req: any) {
+    return this.service.refreshToken(req.user.sub);
+  }
+
+  @UseGuards(AuthGuard('jwt'))
   @Get('profile')
   async getProfile(@Request() req: any) {
     return this.service.getEmployeeProfile(req.user.sub);

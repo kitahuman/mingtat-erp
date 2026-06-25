@@ -87,10 +87,50 @@ portalApi.interceptors.request.use((config) => {
   return config;
 });
 
+// Silent refresh: retry once on 401 with a fresh token
+let isRefreshing = false;
+let refreshPromise: Promise<string | null> | null = null;
+
+async function doRefresh(): Promise<string | null> {
+  try {
+    const res = await axios.post(
+      `${API_BASE_URL}/employee-portal/refresh`,
+      {},
+      { headers: { Authorization: `Bearer ${Cookies.get('ep_token')}` } },
+    );
+    const newToken = res.data.access_token;
+    Cookies.set('ep_token', newToken, { expires: 30 });
+    Cookies.set('ep_user', JSON.stringify(res.data.user), { expires: 30 });
+    return newToken;
+  } catch {
+    return null;
+  }
+}
+
 portalApi.interceptors.response.use(
   (res) => res,
-  (error) => {
-    if (error.response?.status === 401) {
+  async (error) => {
+    const originalRequest = error.config;
+    if (
+      error.response?.status === 401 &&
+      !originalRequest._retry &&
+      !originalRequest.url?.includes('/employee-portal/login') &&
+      !originalRequest.url?.includes('/employee-portal/refresh')
+    ) {
+      originalRequest._retry = true;
+      if (!isRefreshing) {
+        isRefreshing = true;
+        refreshPromise = doRefresh();
+      }
+      const newToken = await refreshPromise;
+      isRefreshing = false;
+      refreshPromise = null;
+
+      if (newToken) {
+        originalRequest.headers.Authorization = `Bearer ${newToken}`;
+        return portalApi(originalRequest);
+      }
+      // Refresh failed - logout
       Cookies.remove('ep_token');
       Cookies.remove('ep_user');
       if (typeof window !== 'undefined' && !window.location.pathname.includes('/employee-portal/login')) {
@@ -105,6 +145,8 @@ export const employeePortalApi = {
   // Auth - accepts phone number OR admin username
   login: (identifier: string, password: string) =>
     portalApi.post('/employee-portal/login', { identifier, password }),
+
+  refresh: () => portalApi.post('/employee-portal/refresh'),
 
   getProfile: () => portalApi.get('/employee-portal/profile'),
 

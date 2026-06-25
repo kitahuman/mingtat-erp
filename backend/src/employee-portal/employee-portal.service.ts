@@ -165,6 +165,61 @@ export class EmployeePortalService {
     return null;
   }
 
+  // ── Refresh token ───────────────────────────────────────────────
+  async refreshToken(userId: number) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user || !user.isActive) {
+      throw new UnauthorizedException('帳號已被停用或不存在');
+    }
+
+    // Find linked employee
+    let employee: any = null;
+    try {
+      const userWithEmployee = await this.prisma.user.findUnique({
+        where: { id: user.id },
+        include: {
+          employee: { select: { id: true, name_zh: true, name_en: true, emp_code: true, role: true, company_id: true } },
+        },
+      });
+      employee = userWithEmployee?.employee ?? null;
+      if (!employee && user.phone) {
+        employee = await this.prisma.employee.findFirst({
+          where: { phone: user.phone },
+          select: { id: true, name_zh: true, name_en: true, emp_code: true, role: true, company_id: true },
+        });
+      }
+    } catch {
+      // employee lookup is optional
+    }
+
+    const isAdmin = ['admin', 'superadmin', 'manager'].includes(user.role);
+    const payload = {
+      sub: user.id,
+      username: user.username,
+      role: user.role,
+      employeeId: employee?.id ?? null,
+      portal: 'employee',
+    };
+
+    return {
+      access_token: this.jwtService.sign(payload),
+      user: {
+        id: user.id,
+        username: user.username,
+        displayName: user.displayName,
+        role: user.role,
+        phone: user.phone ?? null,
+        isAdmin,
+        employeeId: employee?.id ?? null,
+        employee,
+        canCompanyClock: (user as any).user_can_company_clock ?? false,
+        can_approve_mid_shift: (user as any).can_approve_mid_shift ?? false,
+        can_daily_report: (user as any).can_daily_report ?? false,
+        can_acceptance_report: (user as any).can_acceptance_report ?? false,
+      },
+    };
+  }
+
   // ── Get employee profile ───────────────────────────────────────
   async getEmployeeProfile(userId: number) {
     const user = await this.prisma.user.findUnique({

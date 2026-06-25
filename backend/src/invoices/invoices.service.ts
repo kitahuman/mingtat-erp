@@ -1176,9 +1176,18 @@ export class InvoicesService {
           : quotation.client.name;
     }
 
+    // Auto-generate invoice title from quotation: "{年}年{月}月份- {報價單名稱}"
+    const quotationName = quotation.project_name || quotation.contract_name || '';
+    const invoiceYear = invoiceDate.getFullYear();
+    const invoiceMonth = invoiceDate.getMonth() + 1;
+    const autoTitle = quotationName
+      ? `${invoiceYear}年${invoiceMonth}月份- ${quotationName}`
+      : null;
+
     const invoice = await this.prisma.invoice.create({
       data: {
         invoice_no: invoiceNo,
+        invoice_title: autoTitle,
         display_client_name: displayClientName,
         date: invoiceDate,
         due_date: dto?.due_date ? new Date(dto.due_date) : null,
@@ -1186,6 +1195,7 @@ export class InvoicesService {
         project_id: quotation.project_id,
         quotation_id: quotationId,
         company_id: quotation.company_id,
+        client_contract_no: quotation.contract_name || null,
         created_by: userId || null,
         retention_rate: retentionRate,
         retention_amount,
