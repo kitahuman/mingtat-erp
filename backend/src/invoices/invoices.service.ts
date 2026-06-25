@@ -963,6 +963,10 @@ export class InvoicesService {
       invoice_show_bank?: boolean;
       invoice_show_client_address?: boolean;
       invoice_show_client_phone?: boolean;
+      invoice_show_client_contact?: boolean;
+      invoice_show_client_signature?: boolean;
+      invoice_show_company_signature?: boolean;
+      invoice_show_company_stamp?: boolean;
       remarks?: string;
       items?: {
         item_name?: string;
@@ -1064,6 +1068,10 @@ export class InvoicesService {
         invoice_show_bank: dto.invoice_show_bank ?? (systemDefaults.print_invoice_show_bank === 'true' ? true : systemDefaults.print_invoice_show_bank === 'false' ? false : true),
         invoice_show_client_address: dto.invoice_show_client_address ?? (systemDefaults.print_invoice_show_client_address === 'true' ? true : systemDefaults.print_invoice_show_client_address === 'false' ? false : true),
         invoice_show_client_phone: dto.invoice_show_client_phone ?? (systemDefaults.print_invoice_show_client_phone === 'true' ? true : systemDefaults.print_invoice_show_client_phone === 'false' ? false : true),
+        invoice_show_client_contact: dto.invoice_show_client_contact ?? (systemDefaults.print_invoice_show_client_contact === 'true' ? true : systemDefaults.print_invoice_show_client_contact === 'false' ? false : false),
+        invoice_show_client_signature: dto.invoice_show_client_signature ?? (systemDefaults.print_invoice_show_client_signature === 'true' ? true : systemDefaults.print_invoice_show_client_signature === 'false' ? false : false),
+        invoice_show_company_signature: dto.invoice_show_company_signature ?? (systemDefaults.print_invoice_show_company_signature === 'true' ? true : systemDefaults.print_invoice_show_company_signature === 'false' ? false : true),
+        invoice_show_company_stamp: dto.invoice_show_company_stamp ?? (systemDefaults.print_invoice_show_company_stamp === 'true' ? true : systemDefaults.print_invoice_show_company_stamp === 'false' ? false : false),
         remarks: dto.remarks || null,
         invoice_revision_number: 0,
         invoice_is_active: true,
@@ -1184,6 +1192,27 @@ export class InvoicesService {
       ? `${invoiceYear}年${invoiceMonth}月份- ${quotationName}`
       : null;
 
+    // Query system settings for print display defaults
+    const systemSettings = await this.prisma.systemSetting.findMany({
+      where: {
+        key: {
+          in: [
+            'print_invoice_language',
+            'print_invoice_show_bank',
+            'print_invoice_show_client_address',
+            'print_invoice_show_client_phone',
+            'print_invoice_show_client_contact',
+            'print_invoice_show_client_signature',
+            'print_invoice_show_company_signature',
+            'print_invoice_show_company_stamp',
+          ],
+        },
+      },
+    });
+    const systemDefaults = Object.fromEntries(
+      systemSettings.map((setting) => [setting.key, setting.value]),
+    );
+
     const invoice = await this.prisma.invoice.create({
       data: {
         invoice_no: invoiceNo,
@@ -1206,6 +1235,14 @@ export class InvoicesService {
         outstanding: total_amount,
         payment_terms: dto?.payment_terms || quotation.payment_terms || null,
         remarks: dto?.remarks || null,
+        invoice_language: systemDefaults.print_invoice_language || 'zh',
+        invoice_show_bank: systemDefaults.print_invoice_show_bank === 'true' ? true : systemDefaults.print_invoice_show_bank === 'false' ? false : true,
+        invoice_show_client_address: systemDefaults.print_invoice_show_client_address === 'true' ? true : systemDefaults.print_invoice_show_client_address === 'false' ? false : true,
+        invoice_show_client_phone: systemDefaults.print_invoice_show_client_phone === 'true' ? true : systemDefaults.print_invoice_show_client_phone === 'false' ? false : true,
+        invoice_show_client_contact: systemDefaults.print_invoice_show_client_contact === 'true' ? true : systemDefaults.print_invoice_show_client_contact === 'false' ? false : false,
+        invoice_show_client_signature: systemDefaults.print_invoice_show_client_signature === 'true' ? true : systemDefaults.print_invoice_show_client_signature === 'false' ? false : false,
+        invoice_show_company_signature: systemDefaults.print_invoice_show_company_signature === 'true' ? true : systemDefaults.print_invoice_show_company_signature === 'false' ? false : true,
+        invoice_show_company_stamp: systemDefaults.print_invoice_show_company_stamp === 'true' ? true : systemDefaults.print_invoice_show_company_stamp === 'false' ? false : false,
         items: {
           create: items,
         },
