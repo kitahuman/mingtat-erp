@@ -200,6 +200,9 @@ export class InvoicesService {
       let actualMax = 0;
       for (const inv of existingInvoices) {
         const seqPart = inv.invoice_no.slice(prefix.length + yearMonth.length);
+        // Only consider pure numeric sequence parts (system-generated)
+        // Skip old system imported invoices with non-standard numbers
+        if (!/^\d+$/.test(seqPart)) continue;
         const parsed = parseInt(seqPart, 10);
         if (!isNaN(parsed) && parsed > actualMax) {
           actualMax = parsed;
@@ -2275,6 +2278,9 @@ export class InvoicesService {
     let actualMax = 0;
     for (const inv of existingInvoices) {
       const seqPart = inv.invoice_no.slice(prefix.length + yearMonth.length);
+      // Only consider pure numeric sequence parts (system-generated)
+      // Skip old system imported invoices with non-standard numbers
+      if (!/^\d+$/.test(seqPart)) continue;
       const parsed = parseInt(seqPart, 10);
       if (!isNaN(parsed) && parsed > actualMax) {
         actualMax = parsed;

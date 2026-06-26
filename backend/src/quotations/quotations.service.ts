@@ -264,6 +264,9 @@ export class QuotationsService {
     let actualMax = 0;
     for (const q of existingQuotations) {
       const seqPart = q.quotation_no.slice(prefix.length + yearMonth.length);
+      // Only consider valid hex sequence parts (system-generated)
+      // Skip old system imported quotations with non-standard numbers
+      if (!/^[0-9A-Fa-f]+$/.test(seqPart)) continue;
       const parsed = parseInt(seqPart, 16);
       if (!isNaN(parsed) && parsed > actualMax) {
         actualMax = parsed;
