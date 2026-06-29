@@ -12,6 +12,7 @@ import {
   projectsApi,
   quotationsApi,
   fieldOptionsApi,
+  dashboardApi,
 } from '@/lib/api';
 import ClientContractCombobox from '@/components/ClientContractCombobox';
 import SearchableSelect from '@/components/SearchableSelect';
@@ -408,7 +409,15 @@ export default function InvoicesPage() {
   const [data, setData] = useState<any[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [invoiceTab, setInvoiceTab] = useState<'invoices' | 'void' | 'statements'>('invoices');
+  const [invoiceTab, setInvoiceTab] = useState<'invoices' | 'void' | 'statements' | 'billing-reminders'>('invoices');
+
+  // Billing reminders tab state
+  const [billingMonth, setBillingMonth] = useState(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  });
+  const [billingReminders, setBillingReminders] = useState<any[]>([]);
+  const [billingRemindersLoading, setBillingRemindersLoading] = useState(false);
   const [statementRecords, setStatementRecords] = useState<any[]>([]);
   const [statementRecordsTotal, setStatementRecordsTotal] = useState(0);
   const [statementRecordsLoading, setStatementRecordsLoading] = useState(false);
@@ -688,6 +697,22 @@ export default function InvoicesPage() {
   });
 
   usePageRefresh({ onRefresh: fetchData });
+
+  // Fetch billing reminders when tab is active or month changes
+  useEffect(() => {
+    if (invoiceTab !== 'billing-reminders') return;
+    setBillingRemindersLoading(true);
+    dashboardApi.billingReminders(billingMonth)
+      .then((res) => {
+        setBillingReminders(res.data?.reminders || []);
+      })
+      .catch(() => {
+        setBillingReminders([]);
+      })
+      .finally(() => {
+        setBillingRemindersLoading(false);
+      });
+  }, [invoiceTab, billingMonth]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -1182,6 +1207,30 @@ export default function InvoicesPage() {
           >
             發票清單
           </button>
+          <button
+            type="button"
+            onClick={() => {
+              setInvoiceTab('billing-reminders');
+              setStatusFilter('');
+              setSelectedInvoiceRows({});
+              setPage(1);
+            }}
+            className={`border-b-2 px-1 pb-3 text-sm flex items-center gap-1.5 ${
+              invoiceTab === 'billing-reminders'
+                ? 'border-orange-500 font-semibold text-orange-600'
+                : 'border-transparent font-medium text-orange-500 hover:border-orange-300 hover:text-orange-600'
+            }`}
+          >
+            開單提示
+            {(() => {
+              const pendingCount = billingReminders.filter((r) => !r.has_invoice).length;
+              return pendingCount > 0 ? (
+                <span className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-red-500 text-white text-xs font-bold leading-none">
+                  {pendingCount > 99 ? '99+' : pendingCount}
+                </span>
+              ) : null;
+            })()}
+          </button>
         </nav>
       </div>
 
@@ -1253,7 +1302,74 @@ export default function InvoicesPage() {
         </div>
       )}
 
+      {/* Billing Reminders Tab Content */}
+      {invoiceTab === 'billing-reminders' && (
+        <div className="card">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4">
+            <div>
+              <h2 className="text-lg font-bold text-gray-900">📄 開單提示</h2>
+              <p className="text-xs text-gray-500 mt-1">此月有工作記錄但未開發票的客戶</p>
+            </div>
+            <label className="flex items-center gap-2 text-sm text-gray-600">
+              月份
+              <input
+                type="month"
+                value={billingMonth}
+                onChange={(e) => setBillingMonth(e.target.value || (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; })())}
+                className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+              />
+            </label>
+          </div>
+
+          {billingRemindersLoading ? (
+            <div className="flex justify-center py-8"><div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary-600"></div></div>
+          ) : billingReminders.length === 0 ? (
+            <p className="text-center py-6 text-green-600 bg-green-50 rounded-lg">本月暫無需要開單的客戶</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50 border-b">
+                  <tr className="text-left text-gray-600">
+                    <th className="px-3 py-2 font-medium">客戶</th>
+                    <th className="px-3 py-2 font-medium text-right">工作記錄數</th>
+                    <th className="px-3 py-2 font-medium text-center">已開發票</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {billingReminders.map((reminder: any) => (
+                    <tr key={reminder.client_id} className={reminder.has_invoice ? 'bg-green-50' : 'bg-white hover:bg-gray-50'}>
+                      <td className="px-3 py-3 font-medium text-gray-900">{reminder.client_name}</td>
+                      <td className="px-3 py-3 text-right text-gray-700">{reminder.work_record_count} 筆</td>
+                      <td className="px-3 py-3 text-center">
+                        {reminder.has_invoice ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-green-100 text-green-700 text-xs font-medium">
+                            ✓ 已開
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-orange-100 text-orange-700 text-xs font-medium">
+                            ⚠ 待開
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {(() => {
+                const pendingCount = billingReminders.filter((r) => !r.has_invoice).length;
+                return pendingCount > 0 ? (
+                  <div className="mt-3 p-3 bg-orange-50 border border-orange-200 rounded-lg">
+                    <p className="text-sm text-orange-700">⚠ 有 {pendingCount} 位客戶需要開單</p>
+                  </div>
+                ) : null;
+              })()}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Filters */}
+      {invoiceTab !== 'billing-reminders' && (
       <div className="card mb-4">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
           <div>
@@ -1355,9 +1471,11 @@ export default function InvoicesPage() {
           </div>
         </div>
       </div>
+      )}
 
 
       {/* Table */}
+      {invoiceTab !== 'billing-reminders' && (
       <div className="card">
         <DataTable
           exportFilename="發票列表"
@@ -1389,6 +1507,7 @@ export default function InvoicesPage() {
           }}
         />
       </div>
+      )}
 
       {/* Create Statement Modal */}
       {showStatementCreate && (
