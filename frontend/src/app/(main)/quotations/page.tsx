@@ -20,6 +20,7 @@ const statusLabels: Record<string, string> = {
   accepted: '已接受',
   confirmed: '已確認',
   rejected: '已拒絕',
+  invoiced: '已開發票',
 };
 const statusColors: Record<string, string> = {
   draft: 'badge-gray',
@@ -27,6 +28,7 @@ const statusColors: Record<string, string> = {
   accepted: 'badge-green',
   confirmed: 'badge-green',
   rejected: 'badge-red',
+  invoiced: 'badge-orange',
 };
 const typeLabels: Record<string, string> = {
   project: '工程報價',

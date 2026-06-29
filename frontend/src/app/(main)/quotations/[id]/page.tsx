@@ -13,8 +13,8 @@ import SearchableSelect from '@/components/SearchableSelect';
 import Combobox from '@/components/Combobox';
 import { useMultiFieldOptions } from '@/hooks/useFieldOptions';
 
-const statusLabels: Record<string, string> = { draft: '草稿', sent: '已發送', accepted: '已接受', confirmed: '已確認', rejected: '已拒絕', invoiced: '已轉發票' };
-const statusColors: Record<string, string> = { draft: 'badge-gray', sent: 'badge-blue', accepted: 'badge-green', confirmed: 'badge-green', rejected: 'badge-red', invoiced: 'badge-purple' };
+const statusLabels: Record<string, string> = { draft: '草稿', sent: '已發送', accepted: '已接受', confirmed: '已確認', rejected: '已拒絕', invoiced: '已開發票' };
+const statusColors: Record<string, string> = { draft: 'badge-gray', sent: 'badge-blue', accepted: 'badge-green', confirmed: 'badge-green', rejected: 'badge-red', invoiced: 'badge-orange' };
 const typeLabels: Record<string, string> = { project: '工程報價', rental: '租賃/運輸報價' };
 
 type QuotationRevisionSummary = {
