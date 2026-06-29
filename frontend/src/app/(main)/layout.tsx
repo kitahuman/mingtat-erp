@@ -6,6 +6,83 @@ import Sidebar from '@/components/Sidebar';
 import { ChatWidget } from '@/components/ChatWidget';
 import { useAuth } from '@/lib/auth';
 
+// Path to Chinese page name mapping for browser tab title
+const PAGE_TITLES: Record<string, string> = {
+  '/dashboard': '儀表板',
+  '/chat': '對話助手',
+  '/ai-knowledge': 'AI 知識庫',
+  '/work-logs': '工作記錄',
+  '/document-management': '文件管理',
+  '/verification': '核對工作台',
+  '/verification/matching': '六來源比對',
+  '/verification/upload': '上傳資料',
+  '/verification/batches': '匯入紀錄',
+  '/verification/records': '已匯入資料',
+  '/verification/whatsapp': 'WhatsApp Order',
+  '/company-profiles': '公司資料',
+  '/companies': '公司管理',
+  '/employees': '員工管理',
+  '/vehicles': '車輛管理',
+  '/machinery': '機械管理',
+  '/partners': '合作單位',
+  '/subcon-fleet-drivers': '街車車隊管理',
+  '/projects': '工程項目',
+  '/daily-reports': '工程日報',
+  '/acceptance-reports': '工程收貨',
+  '/daily-report-stats': '日報統計',
+  '/salary-config': '員工薪酬',
+  '/payroll': '計糧管理',
+  '/payroll-records': '糧單記錄',
+  '/subcon-payroll': '供應商計糧',
+  '/subcon-payroll/records': '判頭糧單記錄',
+  '/clock-in': '公司打卡',
+  '/attendances': '打卡紀錄',
+  '/leaves': '請假紀錄',
+  '/expenses': '支出管理',
+  '/invoices': '發票管理',
+  '/payment-in': '收款記錄',
+  '/payment-out': '付款記錄',
+  '/bank-reconciliation': '銀行對帳',
+  '/quotations': '報價單',
+  '/project-rate-cards': '工程價目表',
+  '/rental-rate-cards': '客戶價目表',
+  '/fleet-rate-cards': '租賃價目表',
+  '/subcon-rate-cards': '供應商價目表',
+  '/profit-loss': '工程損益總覽',
+  '/company-profit-loss': '公司損益表',
+  '/reports/fixed-expenses': '固定支出統計',
+  '/equipment-profit': '機械收支',
+  '/settings/users': '用戶管理',
+  '/settings/custom-fields': '自定義欄位',
+  '/settings/field-options': '選項管理',
+  '/options/payment-terms': '付款條款',
+  '/settings/expense-categories': '支出類別管理',
+  '/settings/payment-in-source-types': '收款來源類型',
+  '/settings/bank-accounts': '銀行帳戶管理',
+  '/settings/statutory-holidays': '法定假期',
+  '/settings/system': '系統參數',
+  '/audit-logs': '操作歷史',
+  '/recycle-bin': '垃圾桶',
+  '/invoice-statements': '發票清單',
+  '/contracts': '合約管理',
+  '/rate-cards': '價目表',
+  '/reports': '報表',
+  '/settings/profile': '個人設定',
+};
+
+function getPageTitle(pathname: string): string {
+  // Exact match first
+  if (PAGE_TITLES[pathname]) return PAGE_TITLES[pathname];
+  // Try matching without trailing segments (e.g. /invoices/123 → /invoices)
+  const segments = pathname.split('/');
+  while (segments.length > 1) {
+    segments.pop();
+    const parent = segments.join('/') || '/';
+    if (PAGE_TITLES[parent]) return PAGE_TITLES[parent];
+  }
+  return '';
+}
+
 // Keep layout in sync with Sidebar's collapsed state via a shared context-free approach:
 // Sidebar emits a CSS class on <body> so layout can respond without prop drilling.
 // We use a custom event instead to avoid refactoring the entire auth context.
@@ -16,6 +93,12 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
   const { user, loading, canAccessPath } = useAuth();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [accessDenied, setAccessDenied] = useState(false);
+
+  // Dynamic browser tab title
+  useEffect(() => {
+    const pageTitle = getPageTitle(pathname || '');
+    document.title = pageTitle ? `明達 ERP - ${pageTitle}` : '明達 ERP';
+  }, [pathname]);
 
   useEffect(() => {
     if (!loading && !Cookies.get('token')) {
