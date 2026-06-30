@@ -1221,6 +1221,15 @@ export const paymentInApi = {
   updateStatus: (id: number, status: string) =>
     api.patch(`/payment-in/${id}/status`, { payment_in_status: status }),
   delete: (id: number) => api.delete(`/payment-in/${id}`),
+  // Receipt PDF
+  exportReceiptPdf: (id: number, params: any) =>
+    api.get(`/payment-in/${id}/receipt-pdf`, { params, responseType: 'blob' }),
+  getReceiptHtml: (id: number, params: any) =>
+    api.get(`/payment-in/${id}/receipt-html`, { params }),
+  saveReceiptOptions: (id: number, data: any) =>
+    api.post(`/payment-in/${id}/receipt-options`, data),
+  ensureReceiptNo: (id: number) =>
+    api.post(`/payment-in/${id}/ensure-receipt-no`, {}),
 };
 
 export const paymentOutApi = {

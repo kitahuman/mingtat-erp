@@ -2091,6 +2091,10 @@ model PaymentIn {
   payer_partner_id Int?
   payer_name       String?  @db.VarChar(255)
 
+  // 收據 PDF 顯示偏好（語言、顯示/隱藏項目、客戶顯示名稱等）
+  receipt_options Json?   @db.JsonB
+  receipt_no      String? @unique @db.VarChar(20) // 收據編號，格式 RCP-YYYY-NNNN
+
   project       Project?              @relation(fields: [project_id], references: [id], onDelete: SetNull)
   contract      Contract?             @relation(fields: [contract_id], references: [id], onDelete: SetNull)
   bank_account  BankAccount?          @relation(fields: [bank_account_id], references: [id], onDelete: SetNull)

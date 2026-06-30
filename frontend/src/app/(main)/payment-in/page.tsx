@@ -460,6 +460,27 @@ export default function PaymentInPage() {
         </button>
       ),
     },
+    {
+      key: '_receipt',
+      label: '收據',
+      _width: 70,
+      editable: false,
+      filterable: false,
+      render: (_: any, row: any) => (
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            window.open(`/payment-in/${row.id}/receipt-preview`, '_blank');
+          }}
+          className="inline-flex items-center justify-center w-7 h-7 rounded hover:bg-gray-100 text-gray-500 hover:text-blue-600 transition-colors"
+          title="開啟收據預覽"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+          </svg>
+        </button>
+      ),
+    },
   ];
 
   const {
