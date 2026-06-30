@@ -33,7 +33,7 @@ const MODULE_FIELDS: Record<string, FieldDef[]> = {
   vehicles: [
     { key: 'plate_number', label: '車牌號碼', required: true, type: 'string' },
     { key: 'machine_type', label: '車輛類型', type: 'string' },
-    { key: 'tonnage', label: '噸數', type: 'number' },
+    { key: 'tonnage', label: '噸數', type: 'string' },
     { key: 'company_name', label: '所屬公司', required: true, type: 'string', description: '公司名稱（系統自動匹配）', lookupModel: 'company', lookupField: 'name' },
     { key: 'brand', label: '品牌', type: 'string' },
     { key: 'model', label: '型號', type: 'string' },
@@ -59,7 +59,7 @@ const MODULE_FIELDS: Record<string, FieldDef[]> = {
     { key: 'machine_type', label: '機械類型', type: 'string' },
     { key: 'brand', label: '品牌', type: 'string' },
     { key: 'model', label: '型號', type: 'string' },
-    { key: 'tonnage', label: '噸數', type: 'number' },
+    { key: 'tonnage', label: '噸數', type: 'string' },
     { key: 'serial_number', label: '序列號', type: 'string' },
     { key: 'company_name', label: '所屬公司', required: true, type: 'string', description: '公司名稱（系統自動匹配）', lookupModel: 'company', lookupField: 'name' },
     { key: 'inspection_cert_expiry', label: '檢驗證到期日', type: 'date', description: 'DD/MM/YYYY' },

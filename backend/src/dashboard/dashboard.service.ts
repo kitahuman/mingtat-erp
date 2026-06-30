@@ -384,7 +384,7 @@ export class DashboardService {
         const vehicle = log.work_log_vehicle;
         const key = `vehicle:${vehicle.id}`;
         if (!vehicleMap.has(key)) {
-          const type = vehicle.machine_type || log.machine_type || (vehicle.tonnage != null ? `${this.toNum(vehicle.tonnage)}噸` : log.tonnage) || '-';
+          const type = vehicle.machine_type || log.machine_type || vehicle.tonnage || log.tonnage || '-';
           vehicleMap.set(key, this.createWorkLogResourceSummary(vehicle.plate_number || equipmentLabel || `車輛 #${vehicle.id}`, type));
         }
         const agg = vehicleMap.get(key)!;
@@ -406,7 +406,7 @@ export class DashboardService {
         const machinery = log.work_log_machinery;
         const key = `machinery:${machinery.id}`;
         if (!machineryMap.has(key)) {
-          const type = machinery.machine_type || log.machine_type || (machinery.tonnage != null ? `${this.toNum(machinery.tonnage)}噸` : log.tonnage) || '-';
+          const type = machinery.machine_type || log.machine_type || machinery.tonnage || log.tonnage || '-';
           machineryMap.set(key, this.createWorkLogResourceSummary(machinery.machine_code || equipmentLabel || `機械 #${machinery.id}`, type));
         }
         const agg = machineryMap.get(key)!;

@@ -23,7 +23,7 @@ export interface EquipmentProfitSummary {
   equipment_id: number;
   equipment_code: string;
   machine_type: string | null;
-  tonnage: number | null;
+  tonnage: string | null;
   gross_revenue: number;
   commission_percentage: number;
   company_revenue: number;
@@ -36,7 +36,7 @@ export interface EquipmentProfitDetail {
   equipment_id: number;
   equipment_code: string;
   machine_type: string | null;
-  tonnage: number | null;
+  tonnage: string | null;
   brand: string | null;
   model: string | null;
   status: string;

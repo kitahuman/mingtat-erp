@@ -8,7 +8,7 @@ export class CreateMachineryDto {
   @IsOptional() @IsString() machine_type?: string;
   @IsOptional() @IsString() brand?: string;
   @IsOptional() @IsString() model?: string;
-  @IsOptional() @Type(() => Number) @IsNumber() tonnage?: number;
+  @IsOptional() @IsString() tonnage?: string;
   @IsOptional() @IsString() serial_number?: string;
   @IsOptional() @Type(() => Number) @IsNumber() owner_company_id?: number;
   @IsOptional() @IsString() inspection_cert_expiry?: string;

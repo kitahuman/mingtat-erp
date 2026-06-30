@@ -417,7 +417,7 @@ model Vehicle {
   id                             Int                      @id @default(autoincrement())
   plate_number                   String
   machine_type                   String?
-  tonnage                        Decimal?                 @db.Decimal(5, 1)
+  tonnage                        String?
   owner_company_id               Int
   insurance_expiry               DateTime?                @db.Date
   inspection_date                DateTime?                @db.Date
@@ -579,7 +579,7 @@ model Machinery {
   machine_type           String?
   brand                  String?
   model                  String?
-  tonnage                Decimal?  @db.Decimal(5, 1)
+  tonnage                String?
   serial_number          String?
   owner_company_id       Int
   inspection_cert_expiry DateTime? @db.Date

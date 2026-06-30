@@ -15,6 +15,7 @@ import { useRefetchOnFocus } from '@/hooks/useRefetchOnFocus';
 import InlineEditDataTable from '@/components/InlineEditDataTable';
 import DataTable from '@/components/DataTable';
 import Modal from '@/components/Modal';
+import SearchableSelect from '@/components/SearchableSelect';
 import ExpiryBadge from '@/components/ExpiryBadge';
 import { fmtDate } from '@/lib/dateUtils';
 
@@ -55,6 +56,7 @@ export default function VehiclesPage() {
   const [vehicleTypes, setVehicleTypes] = useState<string[]>(
     DEFAULT_VEHICLE_TYPES,
   );
+  const [tonnageOptions, setTonnageOptions] = useState<{ value: string; label: string }[]>([]);
   const [showModal, setShowModal] = useState(false);
   const [showAssignModal, setShowAssignModal] = useState(false);
   const [showCreatePlateModal, setShowCreatePlateModal] = useState(false);
@@ -137,10 +139,23 @@ export default function VehiclesPage() {
       .catch(() => {});
   }, []);
 
+  const loadTonnageOptions = useCallback(() => {
+    fieldOptionsApi
+      .getByCategory('tonnage')
+      .then((res) => {
+        const opts = (res.data || [])
+          .filter((o: any) => o.is_active)
+          .map((o: any) => ({ value: o.label, label: o.label }));
+        setTonnageOptions(opts);
+      })
+      .catch(() => {});
+  }, []);
+
   useEffect(() => {
     loadReferenceData().catch(() => {});
     loadVehicleTypeOptions(true);
-  }, [loadReferenceData, loadVehicleTypeOptions]);
+    loadTonnageOptions();
+  }, [loadReferenceData, loadVehicleTypeOptions, loadTonnageOptions]);
 
   useRefetchOnFocus(() => {
     loadReferenceData().catch(() => {});
@@ -297,7 +312,7 @@ export default function VehiclesPage() {
       const payload: any = {
         ...form,
         owner_company_id: Number(form.owner_company_id),
-        tonnage: form.tonnage ? Number(form.tonnage) : null,
+        tonnage: form.tonnage || null,
       };
       if (payload.plate_mode === 'existing') {
         payload.existing_plate_id = Number(payload.existing_plate_id);
@@ -342,7 +357,7 @@ export default function VehiclesPage() {
     await vehiclesApi.update(id, {
       plate_number: formData.plate_number,
       machine_type: formData.machine_type,
-      tonnage: formData.tonnage ? Number(formData.tonnage) : null,
+      tonnage: formData.tonnage || null,
       brand: formData.brand,
       model: formData.model,
       status: formData.status,
@@ -504,10 +519,19 @@ export default function VehiclesPage() {
       label: '噸數',
       sortable: true,
       editable: true,
-      editType: 'number' as const,
-      render: (v: number) => (v ? `${v}T` : '-'),
-      filterRender: (v: number) => (v ? `${v}T` : '-'),
-      exportRender: (v: number) => (v ? `${v}` : ''),
+      editType: 'text' as const,
+      editRender: (value: any, onChange: (val: any) => void) => (
+        <SearchableSelect
+          value={value || null}
+          onChange={(val) => onChange(val || null)}
+          options={tonnageOptions}
+          placeholder="選擇噸數"
+          clearable
+        />
+      ),
+      render: (v: string) => v || '-',
+      filterRender: (v: string) => v || '-',
+      exportRender: (v: string) => v || '',
     },
     {
       key: 'brand',
@@ -1099,12 +1123,12 @@ export default function VehiclesPage() {
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 噸數
               </label>
-              <input
-                type="number"
-                step="0.1"
-                value={form.tonnage}
-                onChange={(e) => setForm({ ...form, tonnage: e.target.value })}
-                className="input-field"
+              <SearchableSelect
+                value={form.tonnage || null}
+                onChange={(val) => setForm({ ...form, tonnage: val || '' })}
+                options={tonnageOptions}
+                placeholder="選擇噸數"
+                clearable
               />
             </div>
             <div>

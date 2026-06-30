@@ -2,7 +2,8 @@
 import { useState, useEffect } from 'react';
 import DateInput from '@/components/DateInput';
 import { useParams, useRouter } from 'next/navigation';
-import { machineryApi, companiesApi } from '@/lib/api';
+import { machineryApi, companiesApi, fieldOptionsApi } from '@/lib/api';
+import SearchableSelect from '@/components/SearchableSelect';
 import DocumentUpload from '@/components/DocumentUpload';
 import CustomFieldsBlock from '@/components/CustomFieldsBlock';
 import Link from 'next/link';
@@ -33,17 +34,25 @@ export default function MachineryDetailPage() {
   const [loading, setLoading] = useState(true);
   const [showTransferModal, setShowTransferModal] = useState(false);
   const [transferForm, setTransferForm] = useState({ to_company_id: '', transfer_date: '', notes: '' });
+  const [tonnageOptions, setTonnageOptions] = useState<{ value: string; label: string }[]>([]);
 
   const loadData = () => {
     machineryApi.get(Number(params.id)).then(res => { setMachine(res.data); setForm(res.data); setLoading(false); }).catch(() => router.push('/machinery'));
   };
 
-  useEffect(() => { loadData(); companiesApi.simple().then(res => setCompanies(res.data)); }, [params.id]);
+  useEffect(() => {
+    loadData();
+    companiesApi.simple().then(res => setCompanies(res.data));
+    fieldOptionsApi.getByCategory('tonnage').then(res => {
+      const opts = (res.data || []).filter((o: any) => o.is_active).map((o: any) => ({ value: o.label, label: o.label }));
+      setTonnageOptions(opts);
+    }).catch(() => {});
+  }, [params.id]);
 
   const handleSave = async () => {
     try {
       const { owner_company, transfers, created_at, updated_at, ...updateData } = form;
-      const res = await machineryApi.update(machine.id, { ...updateData, tonnage: updateData.tonnage ? Number(updateData.tonnage) : null });
+      const res = await machineryApi.update(machine.id, { ...updateData, tonnage: updateData.tonnage || null });
       setMachine(res.data);
       setEditing(false);
     } catch (err: any) { alert(err.response?.data?.message || '更新失敗'); }
@@ -99,7 +108,7 @@ export default function MachineryDetailPage() {
               <div><label className="block text-sm font-medium text-gray-500 mb-1">類型</label><select value={form.machine_type || ''} onChange={e => setForm({...form, machine_type: e.target.value})} className="input-field">{machineTypes.map(t => <option key={t} value={t}>{t}</option>)}</select></div>
               <div><label className="block text-sm font-medium text-gray-500 mb-1">品牌</label><input value={form.brand || ''} onChange={e => setForm({...form, brand: e.target.value})} className="input-field" /></div>
               <div><label className="block text-sm font-medium text-gray-500 mb-1">型號</label><input value={form.model || ''} onChange={e => setForm({...form, model: e.target.value})} className="input-field" /></div>
-              <div><label className="block text-sm font-medium text-gray-500 mb-1">噸數</label><input type="number" step="0.1" value={form.tonnage || ''} onChange={e => setForm({...form, tonnage: e.target.value})} className="input-field" /></div>
+              <div><label className="block text-sm font-medium text-gray-500 mb-1">噸數</label><SearchableSelect value={form.tonnage || null} onChange={val => setForm({...form, tonnage: val || null})} options={tonnageOptions} placeholder="選擇噸數" clearable /></div>
               <div><label className="block text-sm font-medium text-gray-500 mb-1">序號</label><input value={form.serial_number || ''} onChange={e => setForm({...form, serial_number: e.target.value})} className="input-field" /></div>
               <div><label className="block text-sm font-medium text-gray-500 mb-1">驗機紙到期日</label><DateInput value={form.inspection_cert_expiry || ''} onChange={value => setForm({...form, inspection_cert_expiry: value})} className="input-field" /></div>
               <div><label className="block text-sm font-medium text-gray-500 mb-1">保險到期日</label><DateInput value={form.insurance_expiry || ''} onChange={value => setForm({...form, insurance_expiry: value})} className="input-field" /></div>
@@ -112,7 +121,7 @@ export default function MachineryDetailPage() {
               <div><p className="text-sm text-gray-500">類型</p><p>{machine?.machine_type || '-'}</p></div>
               <div><p className="text-sm text-gray-500">品牌</p><p>{machine?.brand || '-'}</p></div>
               <div><p className="text-sm text-gray-500">型號</p><p>{machine?.model || '-'}</p></div>
-              <div><p className="text-sm text-gray-500">噸數</p><p>{machine?.tonnage ? `${machine.tonnage}T` : '-'}</p></div>
+              <div><p className="text-sm text-gray-500">噸數</p><p>{machine?.tonnage || '-'}</p></div>
               <div><p className="text-sm text-gray-500">序號</p><p>{machine?.serial_number || '-'}</p></div>
               <div><p className="text-sm text-gray-500">所屬公司</p><p className="font-medium">{machine?.owner_company?.internal_prefix} - {machine?.owner_company?.name}</p></div>
               <div><p className="text-sm text-gray-500">驗機紙到期日</p><p className="mt-1">{dateStatusBadge(machine?.inspection_cert_expiry)}</p></div>

@@ -297,7 +297,11 @@ export class DailyReportVerificationService {
             if (!info) return false;
             // 按噸數匹配
             if (tonnage !== null && info.tonnage !== null) {
+              // info.tonnage is now a string like "30噸", daily_report_item_tonnage is Decimal
               if (Number(info.tonnage) === tonnage) return true;
+              // Also try matching by extracting numeric part from string tonnage
+              const numericTonnage = parseFloat(String(info.tonnage));
+              if (!isNaN(numericTonnage) && numericTonnage === tonnage) return true;
             }
             // 按機種匹配
             if (machineType && info.type) {

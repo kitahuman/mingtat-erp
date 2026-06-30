@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 import DateInput from '@/components/DateInput';
 import { useParams, useRouter } from 'next/navigation';
 import { vehiclesApi, companiesApi, fieldOptionsApi } from '@/lib/api';
+import SearchableSelect from '@/components/SearchableSelect';
 import DocumentUpload from '@/components/DocumentUpload';
 import CustomFieldsBlock from '@/components/CustomFieldsBlock';
 import Link from 'next/link';
@@ -33,6 +34,7 @@ export default function VehicleDetailPage() {
   const [companies, setCompanies] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [vehicleTypes, setVehicleTypes] = useState<string[]>(DEFAULT_VEHICLE_TYPES);
+  const [tonnageOptions, setTonnageOptions] = useState<{ value: string; label: string }[]>([]);
   const [showPlateModal, setShowPlateModal] = useState(false);
   const [showRemovePlateModal, setShowRemovePlateModal] = useState(false);
   const [showTransferModal, setShowTransferModal] = useState(false);
@@ -55,12 +57,16 @@ export default function VehicleDetailPage() {
       const opts = (res.data || []).filter((o: any) => o.is_active).map((o: any) => o.label);
       if (opts.length > 0) setVehicleTypes(opts);
     }).catch(() => {});
+    fieldOptionsApi.getByCategory('tonnage').then(res => {
+      const opts = (res.data || []).filter((o: any) => o.is_active).map((o: any) => ({ value: o.label, label: o.label }));
+      setTonnageOptions(opts);
+    }).catch(() => {});
   }, [params.id]);
 
   const handleSave = async () => {
     try {
       const { owner_company, plate_history, plate_assignments, transfers, history_events, current_plate, created_at, updated_at, ...updateData } = form;
-      const res = await vehiclesApi.update(vehicle.id, { ...updateData, tonnage: updateData.tonnage ? Number(updateData.tonnage) : null });
+      const res = await vehiclesApi.update(vehicle.id, { ...updateData, tonnage: updateData.tonnage || null });
       setVehicle(res.data);
       setEditing(false);
     } catch (err: any) { alert(err.response?.data?.message || '更新失敗'); }
@@ -191,7 +197,7 @@ export default function VehicleDetailPage() {
             <>
               <div><label className="block text-sm font-medium text-gray-500 mb-1">車牌</label><input value={form.plate_number || ''} className="input-field bg-gray-50" disabled /><p className="text-xs text-gray-400 mt-1">請使用「更換車牌」功能</p></div>
               <div><label className="block text-sm font-medium text-gray-500 mb-1">車型</label><select value={form.machine_type || ''} onChange={e => setForm({...form, machine_type: e.target.value})} className="input-field">{vehicleTypes.map(t => <option key={t} value={t}>{t}</option>)}</select></div>
-              <div><label className="block text-sm font-medium text-gray-500 mb-1">噸數</label><input type="number" step="0.1" value={form.tonnage || ''} onChange={e => setForm({...form, tonnage: e.target.value})} className="input-field" /></div>
+              <div><label className="block text-sm font-medium text-gray-500 mb-1">噸數</label><SearchableSelect value={form.tonnage || null} onChange={val => setForm({...form, tonnage: val || null})} options={tonnageOptions} placeholder="選擇噸數" clearable /></div>
               <div><label className="block text-sm font-medium text-gray-500 mb-1">品牌</label><input value={form.brand || ''} onChange={e => setForm({...form, brand: e.target.value})} className="input-field" /></div>
               <div><label className="block text-sm font-medium text-gray-500 mb-1">型號</label><input value={form.model || ''} onChange={e => setForm({...form, model: e.target.value})} className="input-field" /></div>
               <div><label className="block text-sm font-medium text-gray-500 mb-1">狀態</label><select value={form.status} onChange={e => setForm({...form, status: e.target.value})} className="input-field"><option value="active">使用中</option><option value="maintenance">維修中</option><option value="inactive">停用</option></select></div>
@@ -222,7 +228,7 @@ export default function VehicleDetailPage() {
             <>
               <div><p className="text-sm text-gray-500">車牌</p><p className="font-mono font-bold text-lg">{vehicle?.plate_number}</p></div>
               <div><p className="text-sm text-gray-500">車型</p><p>{vehicle?.machine_type || '-'}</p></div>
-              <div><p className="text-sm text-gray-500">噸數</p><p>{vehicle?.tonnage ? `${vehicle.tonnage}T` : '-'}</p></div>
+              <div><p className="text-sm text-gray-500">噸數</p><p>{vehicle?.tonnage || '-'}</p></div>
               <div><p className="text-sm text-gray-500">品牌</p><p>{vehicle?.brand || '-'}</p></div>
               <div><p className="text-sm text-gray-500">型號</p><p>{vehicle?.model || '-'}</p></div>
               <div><p className="text-sm text-gray-500">車主</p><p className="font-medium">{vehicle?.owner_company?.internal_prefix ? `${vehicle.owner_company.internal_prefix} - ${vehicle.owner_company.name}` : vehicle?.owner_company?.name || '-'}</p></div>

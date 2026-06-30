@@ -87,14 +87,12 @@ export class MachineryService {
 
   private formatTonnage(value: any): string {
     if (value == null || value === '') return '-';
-    return `${Number(value)}T`;
+    return String(value);
   }
 
-  private parseTonnage(value: string): number | null {
+  private parseTonnage(value: string): string | null {
     if (value === '-') return null;
-    const normalized = value.replace(/T$/i, '').trim();
-    const numberValue = Number(normalized);
-    return Number.isFinite(numberValue) ? numberValue : null;
+    return value;
   }
 
   private buildColumnFilterWhere(filters: ColumnFilters): Prisma.MachineryWhereInput {
@@ -122,10 +120,10 @@ export class MachineryService {
       } else if (field === 'tonnage') {
         const tonnageValues = nonBlankValues
           .map((value) => this.parseTonnage(value))
-          .filter((value): value is number => value !== null);
+          .filter((value): value is string => value !== null);
         const tonnageConditions: Prisma.MachineryWhereInput[] = [];
         if (tonnageValues.length > 0) tonnageConditions.push({ tonnage: { in: tonnageValues } });
-        if (hasBlank) tonnageConditions.push({ tonnage: null });
+        if (hasBlank) tonnageConditions.push({ OR: [{ tonnage: null }, { tonnage: '' }] });
         if (tonnageConditions.length === 1) conditions.push(tonnageConditions[0]);
         if (tonnageConditions.length > 1) conditions.push({ OR: tonnageConditions });
       } else if (field === 'owner_company') {
@@ -327,9 +325,9 @@ export class MachineryService {
         updateData[field] = updateData[field] ? new Date(updateData[field]) : null;
       }
     }
-    // tonnage: 轉數字
+    // tonnage: 字串
     if ('tonnage' in updateData) {
-      updateData.tonnage = updateData.tonnage != null && updateData.tonnage !== '' ? Number(updateData.tonnage) : null;
+      updateData.tonnage = updateData.tonnage != null && updateData.tonnage !== '' ? String(updateData.tonnage) : null;
     }
 
     const updated = await this.prisma.machinery.update({ where: { id }, data: updateData });

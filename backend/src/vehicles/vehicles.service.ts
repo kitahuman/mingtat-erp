@@ -19,7 +19,7 @@ export class VehiclesService {
       label: v.plate_number,
       plate_number: v.plate_number,
       type: v.machine_type,
-      tonnage: v.tonnage ? String(v.tonnage) : null,
+      tonnage: v.tonnage || null,
       category: 'vehicle',
     }));
   }
@@ -401,7 +401,7 @@ export class VehiclesService {
     if ('vehicle_has_gps' in data) {
       data.vehicle_has_gps = data.vehicle_has_gps === true || data.vehicle_has_gps === 'true' ? true : data.vehicle_has_gps === false || data.vehicle_has_gps === 'false' ? false : null;
     }
-    if ('tonnage' in data) data.tonnage = data.tonnage != null && data.tonnage !== '' ? Number(data.tonnage) : null;
+    if ('tonnage' in data) data.tonnage = data.tonnage != null && data.tonnage !== '' ? String(data.tonnage) : null;
     if ('owner_company_id' in data) data.owner_company_id = data.owner_company_id ? Number(data.owner_company_id) : data.owner_company_id;
     const stringFields = ['plate_number', 'machine_type', 'brand', 'model', 'status', 'notes', 'vehicle_chassis_no', 'vehicle_electronic_comm', 'vehicle_autotoll_collected', 'vehicle_autotoll', 'vehicle_inspection_notes', 'vehicle_insurance_agent', 'vehicle_insurance_company', 'vehicle_original_plate', 'vehicle_owner_name'];
     for (const field of stringFields) {

@@ -2,13 +2,14 @@
 import { useState, useEffect, useCallback } from 'react';
 import DateInput from '@/components/DateInput';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { machineryApi, companiesApi } from '@/lib/api';
+import { machineryApi, companiesApi, fieldOptionsApi } from '@/lib/api';
 import CsvImportModal from '@/components/CsvImportModal';
 import { useColumnConfig } from '@/hooks/useColumnConfig';
 import { useAuth } from '@/lib/auth';
 import { useRefetchOnFocus } from '@/hooks/useRefetchOnFocus';
 import InlineEditDataTable from '@/components/InlineEditDataTable';
 import Modal from '@/components/Modal';
+import SearchableSelect from '@/components/SearchableSelect';
 import ExpiryBadge from '@/components/ExpiryBadge';
 import { fmtDate } from '@/lib/dateUtils';
 
@@ -48,6 +49,7 @@ export default function MachineryPage() {
   >({});
   const [loading, setLoading] = useState(true);
   const [companies, setCompanies] = useState<any[]>([]);
+  const [tonnageOptions, setTonnageOptions] = useState<{ value: string; label: string }[]>([]);
   const [showModal, setShowModal] = useState(false);
   const [sortBy, setSortBy] = useState('machine_code');
   const [sortOrder, setSortOrder] = useState('ASC');
@@ -67,9 +69,22 @@ export default function MachineryPage() {
     companiesApi.simple().then((res) => setCompanies(res.data));
   }, []);
 
+  const loadTonnageOptions = useCallback(() => {
+    fieldOptionsApi
+      .getByCategory('tonnage')
+      .then((res) => {
+        const opts = (res.data || [])
+          .filter((o: any) => o.is_active)
+          .map((o: any) => ({ value: o.label, label: o.label }));
+        setTonnageOptions(opts);
+      })
+      .catch(() => {});
+  }, []);
+
   useEffect(() => {
     loadReferenceData();
-  }, [loadReferenceData]);
+    loadTonnageOptions();
+  }, [loadReferenceData, loadTonnageOptions]);
   useRefetchOnFocus(loadReferenceData);
 
   const buildColumnFilterParams = useCallback(
@@ -130,7 +145,7 @@ export default function MachineryPage() {
       await machineryApi.create({
         ...form,
         owner_company_id: Number(form.owner_company_id),
-        tonnage: form.tonnage ? Number(form.tonnage) : null,
+        tonnage: form.tonnage || null,
       });
       setShowModal(false);
       setForm({
@@ -186,7 +201,7 @@ export default function MachineryPage() {
       machine_type: formData.machine_type,
       brand: formData.brand,
       model: formData.model,
-      tonnage: formData.tonnage ? Number(formData.tonnage) : null,
+      tonnage: formData.tonnage || null,
       serial_number: formData.serial_number || null,
       status: formData.status,
       inspection_cert_expiry: formData.inspection_cert_expiry || null,
@@ -260,9 +275,18 @@ export default function MachineryPage() {
       label: '噸數',
       sortable: true,
       editable: true,
-      editType: 'number' as const,
-      render: (v: number) => (v ? `${v}T` : '-'),
-      filterRender: (v: number) => (v ? `${v}T` : '-'),
+      editType: 'text' as const,
+      editRender: (value: any, onChange: (val: any) => void) => (
+        <SearchableSelect
+          value={value || null}
+          onChange={(val) => onChange(val || null)}
+          options={tonnageOptions}
+          placeholder="選擇噸數"
+          clearable
+        />
+      ),
+      render: (v: string) => v || '-',
+      filterRender: (v: string) => v || '-',
     },
     {
       key: 'owner_company',
@@ -470,12 +494,12 @@ export default function MachineryPage() {
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 噸數
               </label>
-              <input
-                type="number"
-                step="0.1"
-                value={form.tonnage}
-                onChange={(e) => setForm({ ...form, tonnage: e.target.value })}
-                className="input-field"
+              <SearchableSelect
+                value={form.tonnage || null}
+                onChange={(val) => setForm({ ...form, tonnage: val || '' })}
+                options={tonnageOptions}
+                placeholder="選擇噸數"
+                clearable
               />
             </div>
             <div>

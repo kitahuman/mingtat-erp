@@ -1013,8 +1013,8 @@ ${refs.contractRef}
 
   private matchEquipment(
     equipmentNo: string,
-    machinery: { id: number; machine_code: string | null; brand: string | null; model: string | null; machine_type: string | null; tonnage: unknown }[],
-    vehicles: { id: number; plate_number: string | null; machine_type: string | null; tonnage: unknown }[],
+    machinery: { id: number; machine_code: string | null; brand: string | null; model: string | null; machine_type: string | null; tonnage: string | null }[],
+    vehicles: { id: number; plate_number: string | null; machine_type: string | null; tonnage: string | null }[],
   ): { type: string; source: 'machinery' | 'vehicle'; tonnage: string | null } | null {
     if (!equipmentNo) return null;
     const eq = equipmentNo.trim().toUpperCase().replace(/\s+/g, '');
@@ -1023,7 +1023,7 @@ ${refs.contractRef}
     for (const m of machinery) {
       const code = (m.machine_code || '').toUpperCase().replace(/\s+/g, '');
       if (code && (code === eq || code.includes(eq) || eq.includes(code))) {
-        return { type: m.machine_type || '機械', source: 'machinery', tonnage: m.tonnage != null ? `${Math.round(Number(m.tonnage))}噸` : null };
+        return { type: m.machine_type || '機械', source: 'machinery', tonnage: m.tonnage || null };
       }
     }
 
@@ -1031,7 +1031,7 @@ ${refs.contractRef}
     for (const v of vehicles) {
       const plate = (v.plate_number || '').toUpperCase().replace(/\s+/g, '');
       if (plate && (plate === eq || plate.includes(eq) || eq.includes(plate))) {
-        return { type: v.machine_type || '車輛', source: 'vehicle', tonnage: v.tonnage != null ? `${Math.round(Number(v.tonnage))}噸` : null };
+        return { type: v.machine_type || '車輛', source: 'vehicle', tonnage: v.tonnage || null };
       }
     }
 

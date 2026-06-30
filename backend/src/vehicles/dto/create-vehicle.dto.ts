@@ -9,7 +9,7 @@ export class CreateVehicleDto {
   @IsOptional() @Type(() => Number) @IsNumber() existing_plate_id?: number;
   @IsOptional() @IsString() assigned_date?: string;
   @IsOptional() @IsString() machine_type?: string;
-  @IsOptional() @Type(() => Number) @IsNumber() tonnage?: number;
+  @IsOptional() @IsString() tonnage?: string;
   @IsOptional() @Type(() => Number) @IsNumber() owner_company_id?: number;
   @IsOptional() @IsString() insurance_expiry?: string;
   @IsOptional() @IsString() inspection_date?: string;
