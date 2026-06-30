@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, BadRequestException, OnModuleInit } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, OnModuleInit, Logger } from '@nestjs/common';
 import { FieldOption, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
@@ -47,6 +47,8 @@ interface LocationUsageCountRow {
 
 @Injectable()
 export class FieldOptionsService implements OnModuleInit {
+  private readonly logger = new Logger(FieldOptionsService.name);
+
   constructor(private readonly prisma: PrismaService) {}
 
   async onModuleInit() {
@@ -123,6 +125,100 @@ export class FieldOptionsService implements OnModuleInit {
   async update(id: number, dto: { label?: string; sort_order?: number; is_active?: boolean }) {
     const existing = await this.prisma.fieldOption.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('選項不存在');
+
+    // If label is changed and it's a location, auto-sync references
+    if (dto.label && dto.label !== existing.label && existing.category === 'location') {
+      const oldLabel = existing.label;
+      const primaryLabel = dto.label;
+
+      const existingAliases: string[] = Array.isArray(existing.aliases)
+        ? (existing.aliases as string[])
+        : [];
+      const newAliases: string[] = [...existingAliases];
+
+      if (!newAliases.includes(oldLabel)) {
+        newAliases.push(oldLabel);
+      }
+
+      return this.prisma.$transaction(async (tx) => {
+        const updatedOption = await tx.fieldOption.update({
+          where: { id },
+          data: { ...dto, aliases: newAliases },
+        });
+
+        let updatedCount = 0;
+
+        // work_logs
+        updatedCount += (await tx.workLog.updateMany({
+          where: { start_location: oldLabel },
+          data: { start_location: primaryLabel },
+        })).count;
+        updatedCount += (await tx.workLog.updateMany({
+          where: { end_location: oldLabel },
+          data: { end_location: primaryLabel },
+        })).count;
+
+        // payroll_work_logs
+        updatedCount += (await tx.payrollWorkLog.updateMany({
+          where: { start_location: oldLabel },
+          data: { start_location: primaryLabel },
+        })).count;
+        updatedCount += (await tx.payrollWorkLog.updateMany({
+          where: { end_location: oldLabel },
+          data: { end_location: primaryLabel },
+        })).count;
+
+        // verification_records
+        updatedCount += (await tx.verificationRecord.updateMany({
+          where: { record_location_from: oldLabel },
+          data: { record_location_from: primaryLabel },
+        })).count;
+        updatedCount += (await tx.verificationRecord.updateMany({
+          where: { record_location_to: oldLabel },
+          data: { record_location_to: primaryLabel },
+        })).count;
+
+        // verification_wa_order_items
+        updatedCount += (await tx.verificationWaOrderItem.updateMany({
+          where: { wa_item_location: oldLabel },
+          data: { wa_item_location: primaryLabel },
+        })).count;
+
+        // rate_cards
+        updatedCount += (await tx.rateCard.updateMany({
+          where: { origin: oldLabel },
+          data: { origin: primaryLabel },
+        })).count;
+        updatedCount += (await tx.rateCard.updateMany({
+          where: { destination: oldLabel },
+          data: { destination: primaryLabel },
+        })).count;
+
+        // fleet_rate_cards
+        updatedCount += (await tx.fleetRateCard.updateMany({
+          where: { origin: oldLabel },
+          data: { origin: primaryLabel },
+        })).count;
+        updatedCount += (await tx.fleetRateCard.updateMany({
+          where: { destination: oldLabel },
+          data: { destination: primaryLabel },
+        })).count;
+
+        // subcon_rate_cards
+        updatedCount += (await tx.subconRateCard.updateMany({
+          where: { origin: oldLabel },
+          data: { origin: primaryLabel },
+        })).count;
+        updatedCount += (await tx.subconRateCard.updateMany({
+          where: { destination: oldLabel },
+          data: { destination: primaryLabel },
+        })).count;
+
+        this.logger.log(`Updated location label from ${oldLabel} to ${primaryLabel}. Synced ${updatedCount} records.`);
+        return { ...updatedOption, updatedCount };
+      });
+    }
+
     return this.prisma.fieldOption.update({ where: { id }, data: dto });
   }
 
@@ -185,6 +281,99 @@ export class FieldOptionsService implements OnModuleInit {
   async updateAliases(id: number, aliases: string[]) {
     const existing = await this.prisma.fieldOption.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('選項不存在');
+
+    if (existing.category === 'location') {
+      const existingAliases: string[] = Array.isArray(existing.aliases)
+        ? (existing.aliases as string[])
+        : [];
+      
+      const newAliases = aliases.filter(a => !existingAliases.includes(a));
+      
+      if (newAliases.length > 0) {
+        const primaryLabel = existing.label;
+        
+        return this.prisma.$transaction(async (tx) => {
+          const updatedOption = await tx.fieldOption.update({
+            where: { id },
+            data: { aliases },
+          });
+
+          let updatedCount = 0;
+
+          for (const alias of newAliases) {
+            // work_logs
+            updatedCount += (await tx.workLog.updateMany({
+              where: { start_location: alias },
+              data: { start_location: primaryLabel },
+            })).count;
+            updatedCount += (await tx.workLog.updateMany({
+              where: { end_location: alias },
+              data: { end_location: primaryLabel },
+            })).count;
+
+            // payroll_work_logs
+            updatedCount += (await tx.payrollWorkLog.updateMany({
+              where: { start_location: alias },
+              data: { start_location: primaryLabel },
+            })).count;
+            updatedCount += (await tx.payrollWorkLog.updateMany({
+              where: { end_location: alias },
+              data: { end_location: primaryLabel },
+            })).count;
+
+            // verification_records
+            updatedCount += (await tx.verificationRecord.updateMany({
+              where: { record_location_from: alias },
+              data: { record_location_from: primaryLabel },
+            })).count;
+            updatedCount += (await tx.verificationRecord.updateMany({
+              where: { record_location_to: alias },
+              data: { record_location_to: primaryLabel },
+            })).count;
+
+            // verification_wa_order_items
+            updatedCount += (await tx.verificationWaOrderItem.updateMany({
+              where: { wa_item_location: alias },
+              data: { wa_item_location: primaryLabel },
+            })).count;
+
+            // rate_cards
+            updatedCount += (await tx.rateCard.updateMany({
+              where: { origin: alias },
+              data: { origin: primaryLabel },
+            })).count;
+            updatedCount += (await tx.rateCard.updateMany({
+              where: { destination: alias },
+              data: { destination: primaryLabel },
+            })).count;
+
+            // fleet_rate_cards
+            updatedCount += (await tx.fleetRateCard.updateMany({
+              where: { origin: alias },
+              data: { origin: primaryLabel },
+            })).count;
+            updatedCount += (await tx.fleetRateCard.updateMany({
+              where: { destination: alias },
+              data: { destination: primaryLabel },
+            })).count;
+
+            // subcon_rate_cards
+            updatedCount += (await tx.subconRateCard.updateMany({
+              where: { origin: alias },
+              data: { origin: primaryLabel },
+            })).count;
+            updatedCount += (await tx.subconRateCard.updateMany({
+              where: { destination: alias },
+              data: { destination: primaryLabel },
+            })).count;
+          }
+
+          this.logger.log(`Added new aliases [${newAliases.join(', ')}] for location ${primaryLabel}. Synced ${updatedCount} records.`);
+          return { ...updatedOption, updatedCount };
+        });
+      }
+    }
+
     return this.prisma.fieldOption.update({
       where: { id },
       data: { aliases },
