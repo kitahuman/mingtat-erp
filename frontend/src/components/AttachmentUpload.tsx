@@ -49,6 +49,7 @@ export default function AttachmentUpload({
   const [showForm, setShowForm] = useState(false);
   const [description, setDescription] = useState('');
   const [dragActive, setDragActive] = useState(false);
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [editingRemarks, setEditingRemarks] = useState<Record<number, string>>({});
   const [savingRemarks, setSavingRemarks] = useState<Record<number, boolean>>({});
   const fileRef = useRef<HTMLInputElement>(null);
@@ -162,6 +163,7 @@ export default function AttachmentUpload({
       }
       setShowForm(false);
       setDescription('');
+      setSelectedFiles([]);
       if (fileRef.current) fileRef.current.value = '';
       await loadAttachments();
     } catch (err: unknown) {
@@ -243,16 +245,31 @@ export default function AttachmentUpload({
                   type="file"
                   multiple
                   onChange={(e) => {
-                    // File input changed, no need to do anything special
+                    const files = Array.from(e.target.files || []);
+                    setSelectedFiles(files);
                   }}
                   className="hidden"
                   id="file-input"
                 />
                 <label htmlFor="file-input" className="cursor-pointer block">
-                  <div className="text-gray-600 text-sm">
-                    <div className="font-medium">點擊選擇文件或拖放到此處</div>
-                    <div className="text-xs text-gray-500 mt-1">單個文件最大 100MB</div>
-                  </div>
+                  {selectedFiles.length > 0 ? (
+                    <div className="text-sm">
+                      <div className="font-medium text-green-700 mb-1">已選擇 {selectedFiles.length} 個文件：</div>
+                      <div className="space-y-0.5">
+                        {selectedFiles.map((file, idx) => (
+                          <div key={idx} className="text-xs text-gray-700 truncate max-w-[300px]" title={file.name}>
+                            {file.name} ({(file.size / 1024).toFixed(0)} KB)
+                          </div>
+                        ))}
+                      </div>
+                      <div className="text-xs text-blue-500 mt-1">點擊重新選擇</div>
+                    </div>
+                  ) : (
+                    <div className="text-gray-600 text-sm">
+                      <div className="font-medium">點擊選擇文件或拖放到此處</div>
+                      <div className="text-xs text-gray-500 mt-1">單個文件最大 100MB</div>
+                    </div>
+                  )}
                 </label>
               </div>
             </div>
