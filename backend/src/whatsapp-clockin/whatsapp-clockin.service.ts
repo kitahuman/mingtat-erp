@@ -200,6 +200,12 @@ export class WhatsappClockinService {
         select: { emp_nickname_employee_id: true, emp_nickname_value: true },
       });
 
+      // 載入地點選項（含 aliases）用於地點標準化
+      const locationOptions = await this.prisma.fieldOption.findMany({
+        where: { category: 'location', is_active: true },
+        select: { label: true, aliases: true },
+      });
+
       // 5. 建立參考資料字串
       const employeeRef = employees.map(e =>
         `ID:${e.id} 花名:${e.nickname || ''} 中文:${e.name_zh || ''}`
@@ -269,8 +275,8 @@ export class WhatsappClockinService {
               client_contract_no: entry.contract_no || null,
               unverified_client_name: entry.company || null,
               day_night: entry.day_night || null,
-              start_location: entry.start_location || null,
-              end_location: entry.end_location || null,
+              start_location: this.normalizeLocation(entry.start_location, locationOptions) || null,
+              end_location: this.normalizeLocation(entry.end_location, locationOptions) || null,
               start_time: entry.start_time || null,
               end_time: entry.end_time || null,
               quantity: entry.quantity || null,
@@ -950,6 +956,49 @@ ${refs.contractRef}
     }
 
     return null;
+  }
+
+  // ────────────────────────────────────────────────────────────
+  // 地點標準化（用 field_options aliases 配對）
+  // ────────────────────────────────────────────────────────────
+
+  private normalizeLocation(
+    location: string,
+    locationOptions: { label: string; aliases: unknown }[],
+  ): string {
+    if (!location) return location;
+    const loc = location.trim();
+    if (!loc) return loc;
+
+    // 1. 精確匹配 label
+    for (const opt of locationOptions) {
+      if (opt.label === loc) return opt.label;
+    }
+
+    // 2. 精確匹配 aliases
+    for (const opt of locationOptions) {
+      const aliases = Array.isArray(opt.aliases) ? opt.aliases as string[] : [];
+      for (const alias of aliases) {
+        if (alias === loc) return opt.label;
+      }
+    }
+
+    // 3. 不區分大小寫匹配 label
+    const locLower = loc.toLowerCase();
+    for (const opt of locationOptions) {
+      if (opt.label.toLowerCase() === locLower) return opt.label;
+    }
+
+    // 4. 不區分大小寫匹配 aliases
+    for (const opt of locationOptions) {
+      const aliases = Array.isArray(opt.aliases) ? opt.aliases as string[] : [];
+      for (const alias of aliases) {
+        if (alias.toLowerCase() === locLower) return opt.label;
+      }
+    }
+
+    // 5. 沒匹配到，保留原文
+    return loc;
   }
 
   // ────────────────────────────────────────────────────────────
