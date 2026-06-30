@@ -358,8 +358,13 @@ export default function QuotationPdfPreviewPage() {
     });
   };
 
+  const [showSavedToast, setShowSavedToast] = useState(false);
   const handleSaveToDocument = async () => {
-    await savePdfPreviewOptions();
+    const success = await savePdfPreviewOptions();
+    if (success) {
+      setShowSavedToast(true);
+      setTimeout(() => setShowSavedToast(false), 2000);
+    }
   };
 
   return (
@@ -388,6 +393,13 @@ export default function QuotationPdfPreviewPage() {
             disabled={printing || loadingPreview || !pdfUrl}
           >
             {printing ? '開啟中...' : '列印'}
+          </button>
+          <button
+            onClick={handleSaveToDocument}
+            className="btn-secondary px-3 py-1.5 text-sm disabled:opacity-50"
+            disabled={savingChanges}
+          >
+            {savingChanges ? '儲存中...' : showSavedToast ? '✅ 已儲存' : '儲存設定'}
           </button>
           <button
             onClick={handleBack}
