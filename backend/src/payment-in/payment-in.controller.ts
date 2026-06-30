@@ -111,6 +111,8 @@ export class PaymentInController {
     @Query('show_company_signature') showCompanySignature: string,
     @Query('show_company_stamp') showCompanyStamp: string,
     @Query('client_name') clientName: string,
+    @Query('description') description: string,
+    @Query('show_invoice_items') showInvoiceItems: string,
     @Res({ passthrough: true }) res: Response,
   ) {
     const options: ReceiptPdfOptions = {
@@ -122,6 +124,8 @@ export class PaymentInController {
       showCompanySignature: this.parseBool(showCompanySignature),
       showCompanyStamp: this.parseBool(showCompanyStamp),
       overrideClientName: clientName,
+      description,
+      showInvoiceItems: this.parseBool(showInvoiceItems),
     };
 
     const { pdf, receiptNo } = await this.receiptPdfService.generateReceiptPdf(
@@ -155,6 +159,8 @@ export class PaymentInController {
     @Query('show_company_signature') showCompanySignature: string,
     @Query('show_company_stamp') showCompanyStamp: string,
     @Query('client_name') clientName: string,
+    @Query('description') description: string,
+    @Query('show_invoice_items') showInvoiceItems: string,
     @Res({ passthrough: true }) res: Response,
   ) {
     const options: ReceiptPdfOptions = {
@@ -166,6 +172,8 @@ export class PaymentInController {
       showCompanySignature: this.parseBool(showCompanySignature),
       showCompanyStamp: this.parseBool(showCompanyStamp),
       overrideClientName: clientName,
+      description,
+      showInvoiceItems: this.parseBool(showInvoiceItems),
     };
 
     const html = await this.receiptPdfService.generateReceiptHtml(+id, options);

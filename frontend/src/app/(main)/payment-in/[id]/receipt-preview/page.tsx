@@ -16,6 +16,8 @@ type ReceiptPreviewOptions = {
   show_company_signature: boolean;
   show_company_stamp: boolean;
   client_name: string;
+  description: string;
+  show_invoice_items: boolean;
 };
 
 const DEFAULT_OPTIONS: ReceiptPreviewOptions = {
@@ -27,6 +29,8 @@ const DEFAULT_OPTIONS: ReceiptPreviewOptions = {
   show_company_signature: true,
   show_company_stamp: false,
   client_name: '',
+  description: '',
+  show_invoice_items: true,
 };
 
 export default function ReceiptPreviewPage() {
@@ -61,6 +65,8 @@ export default function ReceiptPreviewPage() {
     showCompanySignature: current.show_company_signature,
     showCompanyStamp: current.show_company_stamp,
     overrideClientName: current.client_name || null,
+    description: current.description,
+    showInvoiceItems: current.show_invoice_items,
   }), []);
 
   const getOptionsSignature = useCallback(
@@ -79,6 +85,8 @@ export default function ReceiptPreviewPage() {
       show_company_signature: options.show_company_signature,
       show_company_stamp: options.show_company_stamp,
       client_name: options.client_name,
+      description: options.description,
+      show_invoice_items: options.show_invoice_items,
     }),
     [
       options.language,
@@ -89,6 +97,8 @@ export default function ReceiptPreviewPage() {
       options.show_company_signature,
       options.show_company_stamp,
       options.client_name,
+      options.description,
+      options.show_invoice_items,
     ],
   );
 
@@ -110,6 +120,20 @@ export default function ReceiptPreviewPage() {
           (data.allocations?.[0]?.invoice?.client?.name) ||
           '';
 
+        // Resolve default description
+        const SOURCE_TYPE_LABELS: Record<string, string> = {
+          payment_certificate: 'Payment Certificate',
+          IPA: 'Payment Certificate',
+          invoice: '發票',
+          INVOICE: '發票',
+          retention_release: '扣留金釋放',
+          other: '其他收入',
+        };
+        const defaultDescription = [
+          SOURCE_TYPE_LABELS[data.source_type] || data.source_type || '',
+          data.remarks || '',
+        ].filter(Boolean).join(' - ');
+
         // Hydrate options from saved receipt_options
         const saved = data.receipt_options || {};
         setOptions((prev) => {
@@ -123,6 +147,8 @@ export default function ReceiptPreviewPage() {
             show_company_signature: saved.showCompanySignature ?? prev.show_company_signature,
             show_company_stamp: saved.showCompanyStamp ?? prev.show_company_stamp,
             client_name: saved.overrideClientName || defaultClientName,
+            description: saved.description ?? defaultDescription,
+            show_invoice_items: saved.showInvoiceItems ?? prev.show_invoice_items,
           };
           latestOptionsRef.current = loaded;
           lastSavedSignatureRef.current = getOptionsSignature(loaded);
@@ -364,6 +390,28 @@ export default function ReceiptPreviewPage() {
           <span className="text-xs text-gray-500">
             修改後會在離開或儲存時自動更新此收款記錄的客戶顯示名稱。
           </span>
+        </div>
+
+        {/* Receipt details and invoice items */}
+        <div className="mt-3 flex flex-col gap-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-3 text-sm text-gray-700">
+          <div className="flex flex-col gap-1">
+            <label className="font-medium text-gray-800">詳細收款資料</label>
+            <textarea
+              value={options.description}
+              onChange={(e) => updateOption('description', e.target.value)}
+              placeholder="例如：發票 - 工程款項第三期"
+              className="input-field w-full max-w-md text-sm"
+              rows={2}
+            />
+          </div>
+          <label className="flex items-center gap-1.5 mt-1">
+            <input
+              type="checkbox"
+              checked={options.show_invoice_items}
+              onChange={(e) => updateOption('show_invoice_items', e.target.checked)}
+            />
+            顯示發票項目（表格中列出關聯的發票編號）
+          </label>
         </div>
 
         {/* Language & signature options */}

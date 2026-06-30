@@ -15,6 +15,8 @@ export interface ReceiptPdfOptions {
   showCompanySignature?: boolean;
   showCompanyStamp?: boolean;
   overrideClientName?: string;
+  description?: string;
+  showInvoiceItems?: boolean;
 }
 
 export interface ReceiptOptions extends ReceiptPdfOptions {
@@ -227,6 +229,8 @@ export class ReceiptPdfService {
       showCompanySignature: options.showCompanySignature ?? savedOptions.showCompanySignature ?? true,
       showCompanyStamp: options.showCompanyStamp ?? savedOptions.showCompanyStamp ?? false,
       overrideClientName: options.overrideClientName ?? savedOptions.overrideClientName ?? '',
+      description: options.description ?? savedOptions.description ?? '',
+      showInvoiceItems: options.showInvoiceItems ?? savedOptions.showInvoiceItems ?? true,
     };
 
     const language = this.normalizeLanguage(mergedOptions.language);
@@ -273,6 +277,8 @@ export class ReceiptPdfService {
       showClientSignature: mergedOptions.showClientSignature,
       showCompanySignature: mergedOptions.showCompanySignature,
       showCompanyStamp: mergedOptions.showCompanyStamp,
+      description: mergedOptions.description,
+      showInvoiceItems: mergedOptions.showInvoiceItems,
     });
 
     return { html, receiptNo };
@@ -296,6 +302,8 @@ export class ReceiptPdfService {
       showClientSignature: boolean;
       showCompanySignature: boolean;
       showCompanyStamp: boolean;
+      description: string;
+      showInvoiceItems: boolean;
     },
   ): string {
     const {
@@ -313,6 +321,8 @@ export class ReceiptPdfService {
       showClientSignature,
       showCompanySignature,
       showCompanyStamp,
+      description,
+      showInvoiceItems,
     } = ctx;
 
     const labels = this.labels(language);
@@ -363,16 +373,19 @@ export class ReceiptPdfService {
         : '',
     ].join('');
 
-    // Invoice list
-    const invoiceListHtml =
-      invoiceNos.length > 0
-        ? invoiceNos
-            .map(
-              (no) =>
-                `<span class="invoice-tag">${this.escapeHtml(no)}</span>`,
-            )
-            .join(' ')
-        : `<span class="muted">—</span>`;
+    // Build items table rows
+    let itemRowsHtml = '';
+    if (description) {
+      itemRowsHtml += `<tr><td colspan="2" class="item-title">${this.escapeMultiline(description)}</td></tr>`;
+    }
+    if (showInvoiceItems && invoiceNos.length > 0) {
+      invoiceNos.forEach((no) => {
+        itemRowsHtml += `<tr><td colspan="2" class="sub-lines">${labels.invoice} ${this.escapeHtml(no)}</td></tr>`;
+      });
+    }
+    if (!itemRowsHtml) {
+      itemRowsHtml = `<tr><td colspan="2" class="center muted">${labels.noItems || '—'}</td></tr>`;
+    }
 
     // Signature section
     const signatureHtml =
@@ -437,21 +450,30 @@ export class ReceiptPdfService {
     .details-table td { padding: 3px 0; vertical-align: top; }
     .details-table td:first-child { color: #52606d; width: 45%; font-weight: 700; }
     .details-table td:last-child { color: #1f2933; font-weight: 700; text-align: right; }
-    .amount-section { margin: 16px 0; }
-    .amount-box { border: 2px solid ${theme}; border-radius: 4px; padding: 16px 20px; background: ${themeLightBg}; display: flex; justify-content: space-between; align-items: center; }
-    .amount-label { font-size: 14px; font-weight: 800; color: ${theme}; }
-    .amount-value { font-size: 28px; font-weight: 900; color: ${theme}; letter-spacing: 1px; }
-    .payment-info-section { margin: 12px 0; }
-    .payment-info-box { border: 1px solid ${themeLightBorder}; padding: 10px 12px; background: #ffffff; }
-    .payment-info-title { color: ${theme}; font-weight: 800; font-size: 12px; margin-bottom: 8px; border-bottom: 1px solid ${themeLightBorder}; padding-bottom: 5px; }
-    .payment-info-table { width: 100%; border-collapse: collapse; font-size: 11px; }
-    .payment-info-table td { padding: 4px 0; vertical-align: top; border-bottom: none; }
-    .payment-info-table td:first-child { color: #52606d; width: 38%; font-weight: 700; }
-    .payment-info-table td:last-child { color: #1f2933; font-weight: 700; }
-    .invoice-ref-section { margin: 12px 0; }
-    .invoice-ref-label { color: ${theme}; font-weight: 800; font-size: 12px; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.3px; }
-    .invoice-ref-box { border: 1px solid ${themeLightBorder}; padding: 8px 10px; background: ${themeLightBg}; min-height: 36px; }
-    .invoice-tag { display: inline-block; background: ${theme}; color: #ffffff; border-radius: 3px; padding: 2px 7px; font-size: 10.5px; font-weight: 700; margin: 2px 3px 2px 0; }
+    table.items { width: 100%; border-collapse: collapse; table-layout: fixed; margin-top: 6px; font-size: 11.2px; page-break-inside: auto; }
+    .items thead { display: table-header-group; }
+    .items tfoot { display: table-row-group; }
+    .items tr { page-break-inside: avoid; page-break-after: auto; }
+    .items thead th { background: ${theme}; color: #ffffff; padding: 5px 6px 4px; font-weight: 800; text-align: left; border-right: 1px solid rgba(255,255,255,0.18); white-space: nowrap; line-height: 1.12; }
+    .items thead th:last-child { border-right: none; }
+    .items tbody td { padding: 6px 6px; border-bottom: none; vertical-align: top; color: #243b53; overflow-wrap: anywhere; }
+    .items tbody tr:nth-child(even) td { background: ${themeLightBg}; }
+    .items .center { text-align: center; }
+    .item-title { font-weight: 800; color: #1f2933; margin-bottom: 4px; overflow-wrap: anywhere; white-space: pre-wrap; font-size: 11.2px; }
+    .sub-lines { color: #52606d; font-size: 10.8px; line-height: 1.35; margin-top: 2px; overflow-wrap: anywhere; }
+    .totals-row td { border-bottom: none !important; background: #ffffff !important; padding-top: 12px !important; padding-bottom: 12px !important; }
+    .items tbody td.totals-label { text-align: right; font-weight: 800; color: ${theme}; white-space: nowrap; word-break: keep-all; overflow-wrap: normal; font-size: 13px; }
+    .items tbody td.totals-value { white-space: nowrap; word-break: keep-all; overflow-wrap: normal; text-align: right; }
+    .grand-total-text { font-size: 18px; font-weight: 900; color: ${theme}; letter-spacing: 1px; }
+    
+    .after-table { margin-top: 16px; display: flex; flex-direction: column; }
+    .payment-section { width: 100%; }
+    .payment-box { border: 1.2px solid ${theme}; padding: 8px 10px; background: #ffffff; min-height: 88px; }
+    .payment-title { color: ${theme}; font-weight: 900; font-size: 12px; margin-bottom: 7px; border-bottom: 1px solid ${themeLightBorder}; padding-bottom: 5px; }
+    .payment-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+    .payment-table td { padding: 3px 0; vertical-align: top; }
+    .payment-table td:first-child { width: 34%; color: #52606d; font-weight: 800; }
+    .payment-table td:last-child { color: #1f2933; font-weight: 700; overflow-wrap: anywhere; }
     .footer-row { margin-top: 24px; }
     .signature-table { width: 100%; border-collapse: collapse; table-layout: fixed; margin-top: 24px; border: none; }
     .signature-table td { width: 50%; vertical-align: bottom; border: none; padding: 0; }
@@ -501,29 +523,37 @@ export class ReceiptPdfService {
       </div>
     </div>
 
-    <div class="amount-section avoid-break">
-      <div class="amount-box">
-        <div class="amount-label">${labels.amountReceived}</div>
-        <div class="amount-value">HKD ${this.formatMoney(record.amount)}</div>
+            <table class="items">
+      <thead>
+        <tr>
+          <th style="width: 8%;">${labels.no || 'No.'}</th>
+          <th style="width: 92%;">${labels.receiptDetails}</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${itemRowsHtml}
+        <tr class="totals-row">
+          <td class="totals-label">${labels.amountReceived}</td>
+          <td class="totals-value grand-total-text">HKD ${this.formatMoney(record.amount)}</td>
+        </tr>
+      </tbody>
+    </table>
+    
+    <div class="avoid-break">
+      <div class="after-table">
+        <div class="payment-section">
+          <div class="payment-box">
+            <div class="payment-title">${labels.paymentInfo}</div>
+            <table class="payment-table">
+              <tr>
+                <td>${labels.paymentMethod}</td>
+                <td>${this.escapeHtml(paymentMethod || '—')}</td>
+              </tr>
+              ${referenceNo ? `<tr><td>${referenceLabel}</td><td>${this.escapeHtml(referenceNo)}</td></tr>` : ''}
+            </table>
+          </div>
+        </div>
       </div>
-    </div>
-
-    <div class="payment-info-section avoid-break">
-      <div class="payment-info-box">
-        <div class="payment-info-title">${labels.paymentInfo}</div>
-        <table class="payment-info-table">
-          <tr>
-            <td>${labels.paymentMethod}</td>
-            <td>${this.escapeHtml(paymentMethod || '—')}</td>
-          </tr>
-          ${referenceNo ? `<tr><td>${referenceLabel}</td><td>${this.escapeHtml(referenceNo)}</td></tr>` : ''}
-        </table>
-      </div>
-    </div>
-
-    <div class="invoice-ref-section avoid-break">
-      <div class="invoice-ref-label">${labels.relatedInvoices}</div>
-      <div class="invoice-ref-box">${invoiceListHtml}</div>
     </div>
 
     <div class="footer-row avoid-break">
@@ -551,6 +581,9 @@ export class ReceiptPdfService {
       chequeNo: '支票號碼 Cheque No.',
       reference: '參考資料 Reference',
       relatedInvoices: '對應發票 Related Invoices',
+      invoice: '發票 Invoice',
+      noItems: '—',
+      no: 'No.',
     };
     if (language === 'en') {
       return {
@@ -568,6 +601,9 @@ export class ReceiptPdfService {
         chequeNo: 'Cheque No.',
         reference: 'Reference',
         relatedInvoices: 'Related Invoices',
+        invoice: 'Invoice',
+        noItems: '—',
+        no: 'No.',
       };
     }
     if (language === 'zh') {
@@ -586,6 +622,9 @@ export class ReceiptPdfService {
         chequeNo: '支票號碼',
         reference: '參考資料',
         relatedInvoices: '對應發票',
+        invoice: '發票',
+        noItems: '—',
+        no: '項目',
       };
     }
     return bilingual;
@@ -657,5 +696,8 @@ export class ReceiptPdfService {
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;')
       .replace(/'/g, '&#039;');
+  }
+  private escapeMultiline(value: any): string {
+    return this.escapeHtml(value).replace(/\n/g, '<br />');
   }
 }
