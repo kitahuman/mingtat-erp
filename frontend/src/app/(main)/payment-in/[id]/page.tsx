@@ -290,8 +290,8 @@ export default function PaymentInDetailPage() {
       payment_method: r.payment_method || '',
       remarks: r.remarks || '',
       payment_in_status: r.payment_in_status || 'paid',
-      payer_partner_id: r.payer_partner_id ?? '',
-      payer_name: r.payer_name || '',
+      payer_partner_id: r.payer_partner_id ?? (r as any).allocations?.[0]?.invoice?.client?.id ?? '',
+      payer_name: r.payer_name || (r as any).project?.client?.name || (r as any).allocations?.[0]?.invoice?.client?.name || '',
     };
   }
 
