@@ -412,7 +412,7 @@ export class InvoicePdfService {
     .items tr { page-break-inside: avoid; page-break-after: auto; }
     .items thead th { background: ${theme}; color: #ffffff; padding: 5px 6px 4px; font-weight: 800; text-align: left; border-right: 1px solid rgba(255,255,255,0.18); white-space: nowrap; line-height: 1.12; }
     .items thead th:last-child { border-right: none; }
-    .items tbody td { padding: 6px 6px; border-bottom: 1px solid ${themeLightBorder}; vertical-align: top; color: #243b53; overflow-wrap: anywhere; }
+    .items tbody td { padding: 6px 6px; border-bottom: none; vertical-align: top; color: #243b53; overflow-wrap: anywhere; }
     .items tbody tr:nth-child(even) td { background: ${themeLightBg}; }
     .items .center { text-align: center; }
     .items .right { text-align: right; }
