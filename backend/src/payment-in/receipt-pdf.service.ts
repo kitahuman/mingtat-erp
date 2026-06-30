@@ -376,15 +376,15 @@ export class ReceiptPdfService {
     // Build items table rows
     let itemRowsHtml = '';
     if (description) {
-      itemRowsHtml += `<tr><td colspan="2" class="item-title">${this.escapeMultiline(description)}</td></tr>`;
+      itemRowsHtml += `<tr><td class="item-title">${this.escapeMultiline(description)}</td></tr>`;
     }
     if (showInvoiceItems && invoiceNos.length > 0) {
       invoiceNos.forEach((no) => {
-        itemRowsHtml += `<tr><td colspan="2" class="sub-lines">${labels.invoice} ${this.escapeHtml(no)}</td></tr>`;
+        itemRowsHtml += `<tr><td class="sub-lines">${labels.invoice} ${this.escapeHtml(no)}</td></tr>`;
       });
     }
     if (!itemRowsHtml) {
-      itemRowsHtml = `<tr><td colspan="2" class="center muted">${labels.noItems || '—'}</td></tr>`;
+      itemRowsHtml = `<tr><td class="center muted">${labels.noItems || '—'}</td></tr>`;
     }
 
     // Signature section
@@ -451,6 +451,7 @@ export class ReceiptPdfService {
     .details-table td:first-child { color: #52606d; width: 45%; font-weight: 700; }
     .details-table td:last-child { color: #1f2933; font-weight: 700; text-align: right; }
     table.items { width: 100%; border-collapse: collapse; table-layout: fixed; margin-top: 6px; font-size: 11.2px; page-break-inside: auto; }
+    .items-wrapper { min-height: 160px; position: relative; }
     .items thead { display: table-header-group; }
     .items tfoot { display: table-row-group; }
     .items tr { page-break-inside: avoid; page-break-after: auto; }
@@ -523,21 +524,21 @@ export class ReceiptPdfService {
       </div>
     </div>
 
-            <table class="items">
-      <thead>
-        <tr>
-          <th style="width: 8%;">${labels.no || 'No.'}</th>
-          <th style="width: 92%;">${labels.receiptDetails}</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${itemRowsHtml}
-        <tr class="totals-row">
-          <td class="totals-label">${labels.amountReceived}</td>
-          <td class="totals-value grand-total-text">HKD ${this.formatMoney(record.amount)}</td>
-        </tr>
-      </tbody>
-    </table>
+    <div class="items-wrapper">
+      <table class="items">
+        <thead>
+          <tr>
+            <th style="width: 100%;">${labels.receiptDetails}</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${itemRowsHtml}
+          <tr class="totals-row">
+            <td class="totals-label" style="text-align: right;"><span class="totals-label">${labels.amountReceived}</span>&nbsp;&nbsp;&nbsp;<span class="grand-total-text">HKD ${this.formatMoney(record.amount)}</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
     
     <div class="avoid-break">
       <div class="after-table">
