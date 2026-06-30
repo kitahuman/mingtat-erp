@@ -219,6 +219,81 @@ export class FieldOptionsService implements OnModuleInit {
       });
     }
 
+    // If label is changed and it's a client_contract_no, auto-sync references
+    if (dto.label && dto.label !== existing.label && existing.category === 'client_contract_no') {
+      const oldLabel = existing.label;
+      const primaryLabel = dto.label;
+
+      const existingAliases: string[] = Array.isArray(existing.aliases)
+        ? (existing.aliases as string[])
+        : [];
+      const newAliases: string[] = [...existingAliases];
+
+      if (!newAliases.includes(oldLabel)) {
+        newAliases.push(oldLabel);
+      }
+
+      return this.prisma.$transaction(async (tx) => {
+        const updatedOption = await tx.fieldOption.update({
+          where: { id },
+          data: { ...dto, aliases: newAliases },
+        });
+
+        let updatedCount = 0;
+
+        // work_logs
+        updatedCount += (await tx.workLog.updateMany({
+          where: { client_contract_no: oldLabel },
+          data: { client_contract_no: primaryLabel },
+        })).count;
+
+        // payroll_work_logs
+        updatedCount += (await tx.payrollWorkLog.updateMany({
+          where: { client_contract_no: oldLabel },
+          data: { client_contract_no: primaryLabel },
+        })).count;
+
+        // invoices
+        updatedCount += (await tx.invoice.updateMany({
+          where: { client_contract_no: oldLabel },
+          data: { client_contract_no: primaryLabel },
+        })).count;
+
+        // rate_cards
+        updatedCount += (await tx.rateCard.updateMany({
+          where: { client_contract_no: oldLabel },
+          data: { client_contract_no: primaryLabel },
+        })).count;
+
+        // fleet_rate_cards
+        updatedCount += (await tx.fleetRateCard.updateMany({
+          where: { client_contract_no: oldLabel },
+          data: { client_contract_no: primaryLabel },
+        })).count;
+
+        // subcon_rate_cards
+        updatedCount += (await tx.subconRateCard.updateMany({
+          where: { client_contract_no: oldLabel },
+          data: { client_contract_no: primaryLabel },
+        })).count;
+
+        // verification_records
+        updatedCount += (await tx.verificationRecord.updateMany({
+          where: { record_contract_no: oldLabel },
+          data: { record_contract_no: primaryLabel },
+        })).count;
+
+        // verification_wa_order_items
+        updatedCount += (await tx.verificationWaOrderItem.updateMany({
+          where: { wa_item_contract_no: oldLabel },
+          data: { wa_item_contract_no: primaryLabel },
+        })).count;
+
+        this.logger.log(`Updated client_contract_no label from ${oldLabel} to ${primaryLabel}. Synced ${updatedCount} records.`);
+        return { ...updatedOption, updatedCount };
+      });
+    }
+
     return this.prisma.fieldOption.update({ where: { id }, data: dto });
   }
 
@@ -369,6 +444,80 @@ export class FieldOptionsService implements OnModuleInit {
           }
 
           this.logger.log(`Added new aliases [${newAliases.join(', ')}] for location ${primaryLabel}. Synced ${updatedCount} records.`);
+          return { ...updatedOption, updatedCount };
+        });
+      }
+    }
+
+    if (existing.category === 'client_contract_no') {
+      const existingAliases: string[] = Array.isArray(existing.aliases)
+        ? (existing.aliases as string[])
+        : [];
+
+      const newlyAddedAliases = aliases.filter(a => !existingAliases.includes(a));
+
+      if (newlyAddedAliases.length > 0) {
+        const primaryLabel = existing.label;
+
+        return this.prisma.$transaction(async (tx) => {
+          const updatedOption = await tx.fieldOption.update({
+            where: { id },
+            data: { aliases },
+          });
+
+          let updatedCount = 0;
+
+          for (const alias of newlyAddedAliases) {
+            // work_logs
+            updatedCount += (await tx.workLog.updateMany({
+              where: { client_contract_no: alias },
+              data: { client_contract_no: primaryLabel },
+            })).count;
+
+            // payroll_work_logs
+            updatedCount += (await tx.payrollWorkLog.updateMany({
+              where: { client_contract_no: alias },
+              data: { client_contract_no: primaryLabel },
+            })).count;
+
+            // invoices
+            updatedCount += (await tx.invoice.updateMany({
+              where: { client_contract_no: alias },
+              data: { client_contract_no: primaryLabel },
+            })).count;
+
+            // rate_cards
+            updatedCount += (await tx.rateCard.updateMany({
+              where: { client_contract_no: alias },
+              data: { client_contract_no: primaryLabel },
+            })).count;
+
+            // fleet_rate_cards
+            updatedCount += (await tx.fleetRateCard.updateMany({
+              where: { client_contract_no: alias },
+              data: { client_contract_no: primaryLabel },
+            })).count;
+
+            // subcon_rate_cards
+            updatedCount += (await tx.subconRateCard.updateMany({
+              where: { client_contract_no: alias },
+              data: { client_contract_no: primaryLabel },
+            })).count;
+
+            // verification_records
+            updatedCount += (await tx.verificationRecord.updateMany({
+              where: { record_contract_no: alias },
+              data: { record_contract_no: primaryLabel },
+            })).count;
+
+            // verification_wa_order_items
+            updatedCount += (await tx.verificationWaOrderItem.updateMany({
+              where: { wa_item_contract_no: alias },
+              data: { wa_item_contract_no: primaryLabel },
+            })).count;
+          }
+
+          this.logger.log(`Added new aliases [${newlyAddedAliases.join(', ')}] for client_contract_no ${primaryLabel}. Synced ${updatedCount} records.`);
           return { ...updatedOption, updatedCount };
         });
       }

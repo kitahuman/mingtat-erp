@@ -206,6 +206,12 @@ export class WhatsappClockinService {
         select: { label: true, aliases: true },
       });
 
+      // 載入合約選項（含 aliases）用於合約號標準化
+      const contractOptions = await this.prisma.fieldOption.findMany({
+        where: { category: 'client_contract_no', is_active: true },
+        select: { label: true, aliases: true },
+      });
+
       // 5. 建立參考資料字串
       const employeeRef = employees.map(e =>
         `ID:${e.id} 花名:${e.nickname || ''} 中文:${e.name_zh || ''}`
@@ -272,7 +278,7 @@ export class WhatsappClockinService {
               tonnage: equipmentMatch?.tonnage || null,
               client_id: matchedClient?.id || null,
               contract_id: matchedContract?.id || null,
-              client_contract_no: entry.contract_no || null,
+              client_contract_no: this.normalizeContract(entry.contract_no, contractOptions) || null,
               unverified_client_name: entry.company || null,
               day_night: entry.day_night || null,
               start_location: this.normalizeLocation(entry.start_location, locationOptions) || null,
@@ -999,6 +1005,44 @@ ${refs.contractRef}
 
     // 5. 沒匹配到，保留原文
     return loc;
+  }
+
+  // ────────────────────────────────────────────────────────────
+  // 合約號標準化（用 field_options aliases 配對）
+  // ────────────────────────────────────────────────────────────
+
+  private normalizeContract(
+    contractNo: string,
+    contractOptions: { label: string; aliases: unknown }[],
+  ): string {
+    if (!contractNo) return contractNo;
+    const cn = contractNo.trim();
+    if (!cn) return cn;
+    // 1. Exact match label
+    for (const opt of contractOptions) {
+      if (opt.label === cn) return opt.label;
+    }
+    // 2. Exact match aliases
+    for (const opt of contractOptions) {
+      const aliases = Array.isArray(opt.aliases) ? opt.aliases as string[] : [];
+      for (const alias of aliases) {
+        if (alias === cn) return opt.label;
+      }
+    }
+    // 3. Case-insensitive match label
+    const cnLower = cn.toLowerCase();
+    for (const opt of contractOptions) {
+      if (opt.label.toLowerCase() === cnLower) return opt.label;
+    }
+    // 4. Case-insensitive match aliases
+    for (const opt of contractOptions) {
+      const aliases = Array.isArray(opt.aliases) ? opt.aliases as string[] : [];
+      for (const alias of aliases) {
+        if (alias.toLowerCase() === cnLower) return opt.label;
+      }
+    }
+    // 5. No match, return original
+    return cn;
   }
 
   // ────────────────────────────────────────────────────────────
