@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { UpdateAttendanceDto } from './dto/update-attendance.dto';
+import { formatDateInHongKong } from '../common/date.helper';
 
 interface AttendanceListQuery {
   page?: number | string;
@@ -61,9 +62,10 @@ export class AttendancesService {
   }
 
   private formatDisplayDate(date: Date): string {
-    const day = String(date.getUTCDate()).padStart(2, '0');
-    const month = String(date.getUTCMonth() + 1).padStart(2, '0');
-    const year = date.getUTCFullYear();
+    const hkDate = formatDateInHongKong(date);
+    if (!hkDate) return '';
+    // hkDate is YYYY-MM-DD, convert to DD/MM/YYYY
+    const [year, month, day] = hkDate.split('-');
     return `${day}/${month}/${year}`;
   }
 
