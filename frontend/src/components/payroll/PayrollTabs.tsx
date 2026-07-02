@@ -2,7 +2,7 @@
 
 import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import ColumnFilter from "@/components/ColumnFilter";
-import { payrollApi, systemSettingsApi, fleetRateCardsApi } from "@/lib/api";
+import { payrollApi, systemSettingsApi, fleetRateCardsApi, workLogsApi } from "@/lib/api";
 import { fmtDate } from "@/lib/dateUtils";
 
 type TabKey = "detail" | "daily" | "grouped" | "unmatched" | "calculation" | "print";
@@ -480,26 +480,27 @@ type DetailColumn = {
   key: DetailColumnKey;
   label: string;
   editable?: boolean;
-  type?: "text" | "number" | "date" | "select" | "checkbox";
+  type?: "text" | "number" | "date" | "select" | "checkbox" | "combobox";
   options?: readonly string[];
+  optionsKey?: string;
   align?: "left" | "center" | "right";
   minWidth?: string;
 };
 
 const DETAIL_COLUMNS: DetailColumn[] = [
   { key: "scheduled_date", label: "日期", editable: true, type: "date", minWidth: "110px" },
-  { key: "equipment_number", label: "車牌/機號", editable: true, type: "text", minWidth: "110px" },
-  { key: "client_name", label: "客戶", editable: true, type: "text", minWidth: "140px" },
-  { key: "client_contract_no", label: "客戶合約", editable: true, type: "text", minWidth: "120px" },
-  { key: "service_type", label: "服務", editable: true, type: "text", minWidth: "120px" },
+  { key: "equipment_number", label: "車牌/機號", editable: true, type: "combobox", optionsKey: "equipment_number", minWidth: "110px" },
+  { key: "client_name", label: "客戶", editable: true, type: "combobox", optionsKey: "client", minWidth: "140px" },
+  { key: "client_contract_no", label: "客戶合約", editable: true, type: "combobox", optionsKey: "client_contract_no", minWidth: "120px" },
+  { key: "service_type", label: "服務", editable: true, type: "combobox", optionsKey: "service_type", minWidth: "120px" },
   { key: "route", label: "路線", minWidth: "160px" },
-  { key: "tonnage", label: "噸數", editable: true, type: "text", minWidth: "90px" },
-  { key: "machine_type", label: "機種", editable: true, type: "text", minWidth: "100px" },
+  { key: "tonnage", label: "噸數", editable: true, type: "combobox", optionsKey: "tonnage", minWidth: "90px" },
+  { key: "machine_type", label: "機種", editable: true, type: "combobox", optionsKey: "machine_type", minWidth: "100px" },
   { key: "day_night", label: "日/夜", editable: true, type: "select", options: ["日", "夜", "中直"], align: "center", minWidth: "90px" },
   { key: "quantity", label: "數量", editable: true, type: "number", align: "right", minWidth: "90px" },
-  { key: "unit", label: "單位", editable: true, type: "text", minWidth: "80px" },
+  { key: "unit", label: "單位", editable: true, type: "combobox", optionsKey: "unit", minWidth: "80px" },
   { key: "payroll_work_log_product_quantity", label: "商品數量", editable: true, type: "number", align: "right", minWidth: "105px" },
-  { key: "payroll_work_log_product_unit", label: "商品單位", editable: true, type: "text", minWidth: "105px" },
+  { key: "payroll_work_log_product_unit", label: "商品單位", editable: true, type: "combobox", optionsKey: "work_log_product_unit", minWidth: "105px" },
   { key: "ot_quantity", label: "OT", editable: true, type: "number", align: "right", minWidth: "80px" },
   { key: "is_mid_shift", label: "中直", editable: true, type: "checkbox", align: "center", minWidth: "80px" },
   { key: "matched_rate", label: "費率", align: "right", minWidth: "90px" },
@@ -509,16 +510,16 @@ const DETAIL_COLUMNS: DetailColumn[] = [
 ];
 
 const BATCH_FIELDS = [
-  { key: "day_night", label: "日/夜", type: "select", options: ["日", "夜", "中直"] },
-  { key: "start_location", label: "路線起點", type: "text" },
-  { key: "end_location", label: "路線終點", type: "text" },
-  { key: "client_name", label: "客戶", type: "text" },
-  { key: "client_contract_no", label: "客戶合約", type: "text" },
-  { key: "service_type", label: "服務", type: "text" },
-  { key: "machine_type", label: "機種", type: "text" },
-  { key: "tonnage", label: "噸數", type: "text" },
-  { key: "unit", label: "單位", type: "text" },
-  { key: "payroll_work_log_product_unit", label: "商品單位", type: "text" },
+  { key: "day_night", label: "日/夜", type: "select", options: ["日", "夜", "中直"], optionsKey: "" },
+  { key: "start_location", label: "路線起點", type: "combobox", optionsKey: "start_location" },
+  { key: "end_location", label: "路線終點", type: "combobox", optionsKey: "end_location" },
+  { key: "client_name", label: "客戶", type: "combobox", optionsKey: "client" },
+  { key: "client_contract_no", label: "客戶合約", type: "combobox", optionsKey: "client_contract_no" },
+  { key: "service_type", label: "服務", type: "combobox", optionsKey: "service_type" },
+  { key: "machine_type", label: "機種", type: "combobox", optionsKey: "machine_type" },
+  { key: "tonnage", label: "噸數", type: "combobox", optionsKey: "tonnage" },
+  { key: "unit", label: "單位", type: "combobox", optionsKey: "unit" },
+  { key: "payroll_work_log_product_unit", label: "商品單位", type: "combobox", optionsKey: "work_log_product_unit" },
 ] as const;
 
 const currencyFormatter = new Intl.NumberFormat("zh-HK", { style: "currency", currency: "HKD", maximumFractionDigits: 2 });
@@ -629,6 +630,7 @@ function buildFilterRows(rows: WorkLogRecord[]): Array<Record<DetailColumnKey, s
 function toUpdateValue(value: string | boolean, type: DetailColumn["type"]): CellValue {
   if (type === "checkbox") return Boolean(value);
   if (type === "number") return value === "" ? null : Number(value);
+  // combobox, text, select, date all treated as string
   return value === "" ? null : String(value);
 }
 
@@ -1268,6 +1270,129 @@ type EditableCellProps = {
   onCommit: (id: number | string, column: DetailColumn, value: CellValue) => Promise<void> | void;
 };
 
+// ── Combobox options cache (module-level singleton) ──────────────────────────
+const comboboxOptionsCache: Record<string, string[]> = {};
+const comboboxOptionsFetching: Record<string, Promise<string[]> | undefined> = {};
+
+function fetchComboboxOptions(optionsKey: string): Promise<string[]> {
+  if (comboboxOptionsCache[optionsKey]) return Promise.resolve(comboboxOptionsCache[optionsKey]);
+  if (comboboxOptionsFetching[optionsKey]) return comboboxOptionsFetching[optionsKey]!;
+  const promise = workLogsApi.filterOptions(optionsKey)
+    .then((res) => {
+      const data = ((res.data || []) as string[]).filter((v) => v && v !== "(空白)");
+      comboboxOptionsCache[optionsKey] = data;
+      return data;
+    })
+    .catch(() => {
+      return [] as string[];
+    })
+    .finally(() => {
+      delete comboboxOptionsFetching[optionsKey];
+    });
+  comboboxOptionsFetching[optionsKey] = promise;
+  return promise;
+}
+
+// ── ComboboxInput component ──────────────────────────────────────────────────
+function ComboboxInput({ value, optionsKey, onCommit, onCancel, className }: {
+  value: string;
+  optionsKey: string;
+  onCommit: (value: string) => void;
+  onCancel: () => void;
+  className?: string;
+}) {
+  const [localValue, setLocalValue] = useState(value);
+  const [options, setOptions] = useState<string[]>(comboboxOptionsCache[optionsKey] || []);
+  const [showDropdown, setShowDropdown] = useState(true);
+  const [highlightIndex, setHighlightIndex] = useState(-1);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    fetchComboboxOptions(optionsKey).then(setOptions);
+  }, [optionsKey]);
+
+  useEffect(() => {
+    // Focus input on mount with preventScroll
+    const timer = setTimeout(() => inputRef.current?.focus({ preventScroll: true }), 50);
+    return () => clearTimeout(timer);
+  }, []);
+
+  const filtered = useMemo(() => {
+    if (!localValue.trim()) return options.slice(0, 20);
+    const lower = localValue.toLowerCase();
+    return options.filter((opt) => opt.toLowerCase().includes(lower)).slice(0, 20);
+  }, [options, localValue]);
+
+  function handleSelect(selected: string) {
+    setLocalValue(selected);
+    setShowDropdown(false);
+    onCommit(selected);
+  }
+
+  function handleKeyDown(event: React.KeyboardEvent) {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      onCancel();
+      return;
+    }
+    if (event.key === "Enter") {
+      event.preventDefault();
+      if (highlightIndex >= 0 && highlightIndex < filtered.length) {
+        handleSelect(filtered[highlightIndex]);
+      } else {
+        onCommit(localValue);
+      }
+      return;
+    }
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      setHighlightIndex((prev) => (prev < filtered.length - 1 ? prev + 1 : prev));
+      return;
+    }
+    if (event.key === "ArrowUp") {
+      event.preventDefault();
+      setHighlightIndex((prev) => (prev > 0 ? prev - 1 : -1));
+      return;
+    }
+  }
+
+  function handleBlur(event: React.FocusEvent) {
+    // If focus moves within the container (e.g. clicking an option), don't commit
+    if (containerRef.current?.contains(event.relatedTarget as Node)) return;
+    onCommit(localValue);
+  }
+
+  return (
+    <div ref={containerRef} className="relative">
+      <input
+        ref={inputRef}
+        type="text"
+        value={localValue}
+        onChange={(event) => { setLocalValue(event.target.value); setShowDropdown(true); setHighlightIndex(-1); }}
+        onKeyDown={handleKeyDown}
+        onBlur={handleBlur}
+        onFocus={() => setShowDropdown(true)}
+        className={className || "w-full min-w-[88px] rounded border border-blue-400 bg-blue-50 px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"}
+      />
+      {showDropdown && filtered.length > 0 && (
+        <ul className="absolute left-0 top-full z-50 mt-0.5 max-h-48 w-full min-w-[120px] overflow-y-auto rounded border border-gray-300 bg-white shadow-lg text-xs">
+          {filtered.map((opt, idx) => (
+            <li
+              key={opt}
+              tabIndex={-1}
+              onMouseDown={(event) => { event.preventDefault(); handleSelect(opt); }}
+              className={`cursor-pointer px-2 py-1.5 ${idx === highlightIndex ? "bg-blue-100 text-blue-900" : "hover:bg-gray-100"}`}
+            >
+              {opt}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 function EditableDetailCell({ row, column, readOnly, editingKey, setEditingKey, onCommit }: EditableCellProps) {
   const cellKey = `${row.id}:${column.key}`;
   const isEditable = Boolean(column.editable) && !readOnly;
@@ -1325,6 +1450,20 @@ function EditableDetailCell({ row, column, readOnly, editingKey, setEditingKey, 
           <option value="">—</option>
           {(column.options || []).map((option) => <option key={option} value={option}>{option}</option>)}
         </select>
+      </td>
+    );
+  }
+
+  if (column.type === "combobox" && column.optionsKey) {
+    return (
+      <td className="px-2 py-1 align-middle">
+        <ComboboxInput
+          value={localValue}
+          optionsKey={column.optionsKey}
+          onCommit={(v) => void commit(v)}
+          onCancel={() => setEditingKey(null)}
+          className={`w-full min-w-[88px] rounded border border-blue-400 bg-blue-50 px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 ${column.align === "right" ? "text-right" : ""}`}
+        />
       </td>
     );
   }
@@ -1475,6 +1614,14 @@ function DetailTab({ rows, saving, readOnly, onUpdateWorkLog, onBatchUpdateWorkL
                 <option value="">請選擇</option>
                 {activeBatchField.options?.map((option) => <option key={option} value={option}>{option}</option>)}
               </select>
+            ) : activeBatchField?.type === "combobox" && activeBatchField.optionsKey ? (
+              <ComboboxInput
+                value={batchValue}
+                optionsKey={activeBatchField.optionsKey}
+                onCommit={(v) => setBatchValue(v)}
+                onCancel={() => {}}
+                className="rounded border border-blue-200 bg-white px-2 py-1 text-sm min-w-[140px]"
+              />
             ) : (
               <input value={batchValue} onChange={(event) => setBatchValue(event.target.value)} className="rounded border border-blue-200 bg-white px-2 py-1 text-sm" />
             )}
