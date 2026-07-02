@@ -421,7 +421,7 @@ export class InvoicePdfService {
     .totals-row td { border-bottom: none !important; background: #ffffff !important; padding-top: 6px !important; padding-bottom: 6px !important; }
     .items tbody td.totals-label { text-align: right; font-weight: 800; color: #243b53; white-space: nowrap; word-break: keep-all; overflow-wrap: normal; }
     .items tbody td.totals-value { white-space: nowrap; word-break: keep-all; overflow-wrap: normal; }
-    .grand-total td { background: ${themeLightBg} !important; border-top: 1.5px solid ${theme}; border-bottom: 1.5px solid ${theme} !important; font-size: 12px; font-weight: 900; color: ${theme}; }
+    .grand-total td { background: ${themeLightBg} !important; border-top: 1.5px solid ${themeLightBg}; border-bottom: 1.5px solid ${themeLightBg} !important; font-size: 12px; font-weight: 900; color: ${theme}; }
     .avoid-break { page-break-inside: avoid; }
     .after-table { margin-top: 9px; display: flex; flex-direction: column; }
     .terms-section { width: 100%; padding-right: 0; margin-bottom: 10px; }

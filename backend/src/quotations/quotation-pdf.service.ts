@@ -282,7 +282,7 @@ export class QuotationPdfService {
     .totals-row td { border-bottom: none !important; background: #ffffff !important; padding-top: 6px !important; padding-bottom: 6px !important; }
     .items tbody td.totals-label { text-align: right; font-weight: 800; color: #243b53; white-space: nowrap; word-break: keep-all; overflow-wrap: normal; }
     .items tbody td.totals-value { white-space: nowrap; word-break: keep-all; overflow-wrap: normal; }
-    .grand-total td { background: ${themeLightBg} !important; border-top: 1.5px solid ${theme}; border-bottom: 1.5px solid ${theme} !important; font-size: 12px; font-weight: 900; color: ${theme}; }
+    .grand-total td { background: ${themeLightBg} !important; border-top: 1.5px solid ${themeLightBg}; border-bottom: 1.5px solid ${themeLightBg} !important; font-size: 12px; font-weight: 900; color: ${theme}; }
     .after-table { margin-top: 9px; page-break-inside: avoid; display: flex; flex-direction: column; }
     .terms-section { width: 100%; }
     .terms-box { border: 1px solid ${themeLightBorder}; background: ${themeLightBg}; padding: 8px 10px; min-height: 52px; white-space: pre-wrap; overflow-wrap: anywhere; font-size: ${(options as any).fontSizes.paymentTerms}px; }
