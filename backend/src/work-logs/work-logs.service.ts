@@ -782,8 +782,12 @@ export class WorkLogsService {
     }
 
     if (this.dateFilterFields.includes(column)) {
+      // Merge existing where condition for this column (e.g. date_from/date_to gte/lte)
+      // with { not: null } instead of overwriting it
+      const existingCondition = where[column] && typeof where[column] === 'object' ? where[column] : {};
+      const mergedCondition = { ...existingCondition, not: null };
       const rows = await this.prisma.workLog.findMany({
-        where: { ...where, [column]: { not: null } },
+        where: { ...where, [column]: mergedCondition },
         select: { [column]: true } as any,
         orderBy: { [column]: 'desc' } as any,
         take: 2000,
