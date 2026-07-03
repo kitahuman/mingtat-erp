@@ -1124,7 +1124,7 @@ export default function InvoiceDetailPage() {
                         updateItem(idx, 'description', e.target.value)
                       }
                       className="input-field text-sm resize-y"
-                      rows={2}
+                      rows={6}
                       placeholder="項目描述（可多行）"
                     />
                   </div>

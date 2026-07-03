@@ -3965,8 +3965,8 @@ export default function InvoicePricingPage() {
                           onChange={(event) =>
                             updateItem(index, 'description', event.target.value)
                           }
-                          rows={2}
-                          className="w-full rounded-lg border border-gray-300 px-2 py-1.5 text-sm"
+                          rows={6}
+                          className="w-full rounded-lg border border-gray-300 px-2 py-1.5 text-sm resize-y"
                         />
                       </td>
                       <td className="px-2 py-2 align-top">

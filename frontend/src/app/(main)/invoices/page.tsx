@@ -1859,13 +1859,13 @@ export default function InvoicesPage() {
                       />
                     </div>
                     <div>
-                      <input
-                        type="text"
+                      <textarea
                         value={item.description}
                         onChange={(e) =>
                           updateItem(idx, 'description', e.target.value)
                         }
-                        className="input-field text-sm"
+                        className="input-field text-sm resize-y"
+                        rows={6}
                         placeholder="項目描述（選填）"
                       />
                     </div>

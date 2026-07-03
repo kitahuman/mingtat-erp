@@ -574,7 +574,7 @@ export default function QuotationDetailPage() {
                       <>
                         <td className="px-3 py-1">
                           <input value={item.item_name || ''} onChange={e => updateItem(idx, 'item_name', e.target.value)} className="input-field text-sm mb-1" placeholder="項目名稱（短）" />
-                          <textarea value={item.item_description || ''} onChange={e => updateItem(idx, 'item_description', e.target.value)} className="input-field text-sm text-xs" rows={2} placeholder="項目描述（可多行）" />
+                          <textarea value={item.item_description || ''} onChange={e => updateItem(idx, 'item_description', e.target.value)} className="input-field text-sm text-xs resize-y" rows={6} placeholder="項目描述（可多行）" />
                           <div className="flex items-center gap-4 mt-2">
                             <button 
                               type="button" 
