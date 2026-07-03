@@ -463,20 +463,31 @@ export class PayrollService {
   private async loadManualDayQuantityMap(
     payrollId: number,
   ): Promise<
-    Map<string, { id?: number; manual_day_quantity: number | null; is_manual_day_quantity: boolean }>
+    Map<string, { id?: number; manual_day_quantity: number | null; manual_day_shift_quantity: number | null; manual_night_shift_quantity: number | null; is_manual_day_quantity: boolean }>
   > {
     const records = await this.prisma.payrollDailyCalc.findMany({
       where: { payroll_id: payrollId },
     });
     const map = new Map<
       string,
-      { id?: number; manual_day_quantity: number | null; is_manual_day_quantity: boolean }
+      { id?: number; manual_day_quantity: number | null; manual_day_shift_quantity: number | null; manual_night_shift_quantity: number | null; is_manual_day_quantity: boolean }
     >();
     for (const r of records) {
+      // 優先讀 manual_day_shift_quantity/manual_night_shift_quantity
+      // 如果為 null 則 fallback 到 manual_day_quantity（舊資料兼容：全部算日班）
+      const hasNewFields = r.manual_day_shift_quantity != null || r.manual_night_shift_quantity != null;
+      const manualDayShift = hasNewFields
+        ? (r.manual_day_shift_quantity != null ? Number(r.manual_day_shift_quantity) : 0)
+        : (r.manual_day_quantity != null ? Number(r.manual_day_quantity) : null);
+      const manualNightShift = hasNewFields
+        ? (r.manual_night_shift_quantity != null ? Number(r.manual_night_shift_quantity) : 0)
+        : 0;
+      const manualDayQuantity = r.manual_day_quantity != null ? Number(r.manual_day_quantity) : null;
       map.set(toDateStr(r.calc_date), {
         id: r.id,
-        manual_day_quantity:
-          r.manual_day_quantity != null ? Number(r.manual_day_quantity) : null,
+        manual_day_quantity: manualDayQuantity,
+        manual_day_shift_quantity: manualDayShift,
+        manual_night_shift_quantity: manualNightShift,
         is_manual_day_quantity: r.is_manual_day_quantity,
       });
     }
@@ -488,7 +499,7 @@ export class PayrollService {
   async updateDayQuantity(
     payrollId: number,
     dayKey: string,
-    manualDayQuantity: number,
+    values: { dayQuantity: number; nightQuantity: number },
   ) {
     const payroll = await this.prisma.payroll.findUnique({
       where: { id: payrollId },
@@ -498,10 +509,14 @@ export class PayrollService {
       throw new BadRequestException('只能編輯草稿或準備中狀態的糧單');
     }
 
-    const value = Number(manualDayQuantity);
-    if (isNaN(value) || value < 0) {
+    const dayVal = Number(values.dayQuantity);
+    const nightVal = Number(values.nightQuantity);
+    if (isNaN(dayVal) || dayVal < 0 || isNaN(nightVal) || nightVal < 0) {
       throw new BadRequestException('天數必須為大於等於 0 的數值');
     }
+
+    // 向後兼容：manual_day_quantity = min(dayQuantity + nightQuantity, 1)
+    const compatValue = Math.min(dayVal + nightVal, 1);
 
     // 解析 dayKey：純數字且非日期格式 → 視為記錄 id；否則視為日期字串
     let calcDate: string | null = null;
@@ -526,13 +541,17 @@ export class PayrollService {
         },
       },
       update: {
-        manual_day_quantity: value,
+        manual_day_shift_quantity: dayVal,
+        manual_night_shift_quantity: nightVal,
+        manual_day_quantity: compatValue,
         is_manual_day_quantity: true,
       },
       create: {
         payroll_id: payrollId,
         calc_date: new Date(calcDate),
-        manual_day_quantity: value,
+        manual_day_shift_quantity: dayVal,
+        manual_night_shift_quantity: nightVal,
+        manual_day_quantity: compatValue,
         is_manual_day_quantity: true,
       },
     });
@@ -564,7 +583,7 @@ export class PayrollService {
     if (calcDate) {
       await this.prisma.payrollDailyCalc.updateMany({
         where: { payroll_id: payrollId, calc_date: new Date(calcDate) },
-        data: { is_manual_day_quantity: false, manual_day_quantity: null },
+        data: { is_manual_day_quantity: false, manual_day_quantity: null, manual_day_shift_quantity: null, manual_night_shift_quantity: null },
       });
     }
     await this.recalculate(payrollId, false);

@@ -1633,8 +1633,10 @@ model PayrollDailyCalc {
   id                     Int      @id @default(autoincrement())
   payroll_id             Int
   calc_date              DateTime @db.Date
-  manual_day_quantity    Decimal? @db.Decimal(10, 2)
-  is_manual_day_quantity Boolean  @default(false)
+  manual_day_quantity          Decimal? @db.Decimal(10, 2)
+  manual_day_shift_quantity    Decimal? @db.Decimal(10, 2)
+  manual_night_shift_quantity  Decimal? @db.Decimal(10, 2)
+  is_manual_day_quantity       Boolean  @default(false)
   created_at             DateTime @default(now())
   updated_at             DateTime @default(now()) @updatedAt
 

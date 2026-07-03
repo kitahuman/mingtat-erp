@@ -77,7 +77,7 @@ export class PayrollCalculationService {
     adjustmentTotalForMpf = 0,
     manualDayQuantityMap?: Map<
       string,
-      { id?: number; manual_day_quantity: number | null; is_manual_day_quantity: boolean }
+      { id?: number; manual_day_quantity: number | null; manual_day_shift_quantity: number | null; manual_night_shift_quantity: number | null; is_manual_day_quantity: boolean }
     >,
   ) {
     const excluded = excludedBadgeKeys || new Set<string>();
@@ -151,12 +151,20 @@ export class PayrollCalculationService {
         const dayShiftWls = day.work_logs.filter((wl: any) => wl.day_night !== '夜');
         const nightShiftWls = day.work_logs.filter((wl: any) => wl.day_night === '夜');
         if (day.is_manual_day_quantity) {
-          // 手動覆蓋：把 effective 天數歸到有班的一側（日班優先）
-          const eff = Number(day.effective_day_quantity) || 0;
-          if (dayShiftWls.length > 0) {
-            workDays += eff;
-          } else if (nightShiftWls.length > 0) {
-            workNights += eff;
+          // 手動覆蓋：使用日夜分開的手動值
+          const manualDay = day.manual_day_shift_quantity != null ? Number(day.manual_day_shift_quantity) : 0;
+          const manualNight = day.manual_night_shift_quantity != null ? Number(day.manual_night_shift_quantity) : 0;
+          if (manualDay > 0 || manualNight > 0) {
+            workDays += manualDay;
+            workNights += manualNight;
+          } else {
+            // fallback 舊資料：把 effective 天數歸到有班的一側（日班優先）
+            const eff = Number(day.effective_day_quantity) || 0;
+            if (dayShiftWls.length > 0) {
+              workDays += eff;
+            } else if (nightShiftWls.length > 0) {
+              workNights += eff;
+            }
           }
         } else {
           if (dayShiftWls.length > 0) {
@@ -994,7 +1002,7 @@ export class PayrollCalculationService {
       // 手動覆蓋天數 map：calc_date(YYYY-MM-DD) → { id, manual_day_quantity, is_manual_day_quantity }
       manualDayQuantityMap?: Map<
         string,
-        { id?: number; manual_day_quantity: number | null; is_manual_day_quantity: boolean }
+        { id?: number; manual_day_quantity: number | null; manual_day_shift_quantity: number | null; manual_night_shift_quantity: number | null; is_manual_day_quantity: boolean }
       >;
     } = {},
   ): any[] {
@@ -1148,22 +1156,29 @@ export class PayrollCalculationService {
       const isManualDayQuantity =
         !!manualEntry &&
         manualEntry.is_manual_day_quantity === true &&
-        manualEntry.manual_day_quantity != null;
+        (manualEntry.manual_day_shift_quantity != null || manualEntry.manual_night_shift_quantity != null || manualEntry.manual_day_quantity != null);
+      // 日夜分開讀取手動覆蓋值
+      const manualDayShiftQty = isManualDayQuantity
+        ? (manualEntry!.manual_day_shift_quantity != null ? Number(manualEntry!.manual_day_shift_quantity) : 0)
+        : null;
+      const manualNightShiftQty = isManualDayQuantity
+        ? (manualEntry!.manual_night_shift_quantity != null ? Number(manualEntry!.manual_night_shift_quantity) : 0)
+        : null;
+      // 向後兼容：manual_day_quantity
       const manualDayQuantity = isManualDayQuantity
-        ? Number(manualEntry!.manual_day_quantity)
+        ? Math.min((manualDayShiftQty || 0) + (manualNightShiftQty || 0), 1)
         : null;
       // effective_day_quantity：有手動值用手動值，否則用自動計算值
       const effectiveDayQuantity = isManualDayQuantity
         ? (manualDayQuantity as number)
         : autoDayQuantityTotal;
 
-      // 日/夜班補底薪使用 effective day quantity 比例。
-      // 若有手動覆蓋：按日/夜 workIncome 是否存在，分配 effective 天數做補底薪基準。
+      // 日/夜班補底薪使用手動覆蓋的日夜分開值。
       const dayQuantity = isManualDayQuantity
-        ? (dayShiftPwls.length > 0 ? effectiveDayQuantity : 0)
+        ? (manualDayShiftQty || 0)
         : autoDayQuantity;
       const nightQuantity = isManualDayQuantity
-        ? (nightShiftPwls.length > 0 ? (dayShiftPwls.length > 0 ? 0 : effectiveDayQuantity) : 0)
+        ? (manualNightShiftQty || 0)
         : autoNightQuantity;
       const autoDayTopUpAmount =
         !isHolidayDay && dayShiftPwls.length > 0 && baseSalary > 0
@@ -1323,6 +1338,8 @@ export class PayrollCalculationService {
         id: manualEntry?.id ?? null,
         auto_day_quantity: autoDayQuantityTotal,
         manual_day_quantity: manualDayQuantity,
+        manual_day_shift_quantity: isManualDayQuantity ? manualDayShiftQty : null,
+        manual_night_shift_quantity: isManualDayQuantity ? manualNightShiftQty : null,
         is_manual_day_quantity: isManualDayQuantity,
         effective_day_quantity: effectiveDayQuantity,
         is_top_up_overridden: salaryType === 'monthly' ? false : isTopUpOverridden,
@@ -1359,7 +1376,7 @@ export class PayrollCalculationService {
       monthlySalary?: number;
       manualDayQuantityMap?: Map<
         string,
-        { id?: number; manual_day_quantity: number | null; is_manual_day_quantity: boolean }
+        { id?: number; manual_day_quantity: number | null; manual_day_shift_quantity: number | null; manual_night_shift_quantity: number | null; is_manual_day_quantity: boolean }
       >;
     } = {},
   ): any[] {

@@ -701,10 +701,11 @@ export const payrollApi = {
   updateDayQuantity: (
     payrollId: number,
     dailyCalcId: string | number,
-    manualDayQuantity: number,
+    values: { dayQuantity: number; nightQuantity: number },
   ) =>
     api.patch(`/payroll/${payrollId}/daily-calc/${dailyCalcId}/day-quantity`, {
-      manual_day_quantity: manualDayQuantity,
+      manual_day_shift_quantity: values.dayQuantity,
+      manual_night_shift_quantity: values.nightQuantity,
     }),
   // 清除某天的手動覆蓋天數（還原為自動計算）
   resetDayQuantity: (payrollId: number, dailyCalcId: string | number) =>

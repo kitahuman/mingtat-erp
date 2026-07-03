@@ -263,6 +263,8 @@ type DailyCalculationRecord = {
   night_quantity?: number | null;
   auto_day_quantity?: number | null;
   manual_day_quantity?: number | null;
+  manual_day_shift_quantity?: number | null;
+  manual_night_shift_quantity?: number | null;
   is_manual_day_quantity?: boolean | null;
   effective_day_quantity?: number | null;
   daily_allowances?: DailyAllowance[];
@@ -1164,14 +1166,14 @@ function PayrollTabs({
     await mutateAndReload(() => payrollApi.restoreBadge(payrollId, { date, badge_key: badgeKey }), "還原津貼失敗");
   }
 
-  async function saveDayQuantity(date: string, value: number) {
+  async function saveDayQuantity(date: string, values: { dayQuantity: number; nightQuantity: number }) {
     if (!payrollId) return;
-    if (!Number.isFinite(value) || value < 0) {
+    if (!Number.isFinite(values.dayQuantity) || values.dayQuantity < 0 || !Number.isFinite(values.nightQuantity) || values.nightQuantity < 0) {
       alert("請輸入大於等於 0 的天數");
       return;
     }
     await mutateAndReload(
-      () => payrollApi.updateDayQuantity(payrollId, date, value),
+      () => payrollApi.updateDayQuantity(payrollId, date, values),
       "儲存天數失敗",
     );
   }
@@ -1833,7 +1835,7 @@ function isAdjustmentOnDate(adjustment: Adjustment, date: string | null | undefi
   return Boolean(adjustmentDate && date && adjustmentDate === dateOnly(date));
 }
 
-function DailyTab({ days, allowanceOptions, adjustments, expandedDay, readOnly, onToggleExpand, onAddAllowance, onRemoveAllowance, onAddAdjustment, onRemoveAdjustment, onExcludeBadge, onRestoreBadge, onSaveTopUpOverride, onSaveDayQuantity, onResetDayQuantity }: { days: DailyCalculationRecord[]; allowanceOptions: AllowanceOption[]; adjustments: Adjustment[]; expandedDay: string | null; readOnly: boolean; onToggleExpand: (date: string) => void; onAddAllowance: (date: string, option: AllowanceOption) => Promise<void>; onRemoveAllowance: (id: number | string) => Promise<void>; onAddAdjustment: (date: string, item: { item_name: string; amount: number }) => Promise<void>; onRemoveAdjustment: (id: number | string) => Promise<void>; onExcludeBadge: (date: string, badgeKey: string) => Promise<void>; onRestoreBadge: (date: string, badgeKey: string) => Promise<void>; onSaveTopUpOverride: (date: string) => Promise<void>; onSaveDayQuantity: (date: string, value: number) => Promise<void>; onResetDayQuantity: (date: string) => Promise<void> }) {
+function DailyTab({ days, allowanceOptions, adjustments, expandedDay, readOnly, onToggleExpand, onAddAllowance, onRemoveAllowance, onAddAdjustment, onRemoveAdjustment, onExcludeBadge, onRestoreBadge, onSaveTopUpOverride, onSaveDayQuantity, onResetDayQuantity }: { days: DailyCalculationRecord[]; allowanceOptions: AllowanceOption[]; adjustments: Adjustment[]; expandedDay: string | null; readOnly: boolean; onToggleExpand: (date: string) => void; onAddAllowance: (date: string, option: AllowanceOption) => Promise<void>; onRemoveAllowance: (id: number | string) => Promise<void>; onAddAdjustment: (date: string, item: { item_name: string; amount: number }) => Promise<void>; onRemoveAdjustment: (id: number | string) => Promise<void>; onExcludeBadge: (date: string, badgeKey: string) => Promise<void>; onRestoreBadge: (date: string, badgeKey: string) => Promise<void>; onSaveTopUpOverride: (date: string) => Promise<void>; onSaveDayQuantity: (date: string, values: { dayQuantity: number; nightQuantity: number }) => Promise<void>; onResetDayQuantity: (date: string) => Promise<void> }) {
   const [addingDate, setAddingDate] = useState<string | null>(null);
   const [selectedAllowance, setSelectedAllowance] = useState("");
   const [customAllowanceName, setCustomAllowanceName] = useState("");
@@ -1966,7 +1968,7 @@ function DailyTab({ days, allowanceOptions, adjustments, expandedDay, readOnly, 
                           <DayQuantityCell
                             day={day}
                             readOnly={readOnly}
-                            onSave={(value) => day.date && onSaveDayQuantity(day.date, value)}
+                            onSave={(values) => day.date && onSaveDayQuantity(day.date, values)}
                             onReset={() => day.date && onResetDayQuantity(day.date)}
                           />
                         )}
@@ -2304,7 +2306,7 @@ function DailyWorkLogDetails({ workLogs }: { workLogs: WorkLogRecord[] }) {
   );
 }
 
-// 逐日天數顯示 + inline edit 元件
+// 逐日天數顯示 + inline edit 元件（日夜分開）
 function DayQuantityCell({
   day,
   readOnly,
@@ -2313,26 +2315,22 @@ function DayQuantityCell({
 }: {
   day: DailyCalculationRecord;
   readOnly: boolean;
-  onSave: (value: number) => void;
+  onSave: (values: { dayQuantity: number; nightQuantity: number }) => void;
   onReset: () => void;
 }) {
   const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState("");
-  const inputRef = useRef<HTMLInputElement | null>(null);
+  const [draftDay, setDraftDay] = useState("");
+  const [draftNight, setDraftNight] = useState("");
+  const dayInputRef = useRef<HTMLInputElement | null>(null);
 
-  // effective_day_quantity 為主要來源，向後相容 day_quantity
-  const effective =
-    day.effective_day_quantity != null
-      ? Number(day.effective_day_quantity)
-      : day.day_quantity != null
-        ? Number(day.day_quantity)
-        : null;
+  // 日夜分開的顯示值
+  const displayDayQty = day.day_quantity != null ? Number(day.day_quantity) : 0;
+  const displayNightQty = day.night_quantity != null ? Number(day.night_quantity) : 0;
   const isManual = day.is_manual_day_quantity === true;
 
   useEffect(() => {
-    if (editing && inputRef.current) {
-      // 避免 React Portal/滾動跳動
-      const el = inputRef.current;
+    if (editing && dayInputRef.current) {
+      const el = dayInputRef.current;
       setTimeout(() => el.focus({ preventScroll: true }), 50);
       el.select?.();
     }
@@ -2340,42 +2338,62 @@ function DayQuantityCell({
 
   function startEdit() {
     if (readOnly) return;
-    setDraft(effective != null ? formatPlainNumber(effective) : "");
+    // 編輯時用手動覆蓋值（如有），否則用顯示值
+    const initDay = isManual && day.manual_day_shift_quantity != null
+      ? Number(day.manual_day_shift_quantity)
+      : displayDayQty;
+    const initNight = isManual && day.manual_night_shift_quantity != null
+      ? Number(day.manual_night_shift_quantity)
+      : displayNightQty;
+    setDraftDay(formatPlainNumber(initDay));
+    setDraftNight(formatPlainNumber(initNight));
     setEditing(true);
   }
 
   function commit() {
     setEditing(false);
-    const value = Number(draft);
-    if (!Number.isFinite(value) || value < 0) return;
-    if (effective != null && Math.abs(value - effective) < 1e-9 && isManual) return;
-    onSave(value);
+    const dayVal = Number(draftDay);
+    const nightVal = Number(draftNight);
+    if (!Number.isFinite(dayVal) || dayVal < 0 || !Number.isFinite(nightVal) || nightVal < 0) return;
+    onSave({ dayQuantity: dayVal, nightQuantity: nightVal });
   }
 
   if (editing) {
     return (
-      <input
-        ref={inputRef}
-        type="number"
-        min="0"
-        step="0.5"
-        value={draft}
-        onChange={(e) => setDraft(e.target.value)}
-        onBlur={commit}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") {
-            e.preventDefault();
-            commit();
-          } else if (e.key === "Escape") {
-            setEditing(false);
-          }
-        }}
-        className="h-5 w-16 rounded border border-amber-300 px-1 text-xs font-bold text-amber-700"
-      />
+      <span className="inline-flex items-center gap-0.5">
+        <span className="text-[10px] text-gray-500">日:</span>
+        <input
+          ref={dayInputRef}
+          type="number"
+          min="0"
+          step="0.5"
+          value={draftDay}
+          onChange={(e) => setDraftDay(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") { e.preventDefault(); commit(); }
+            else if (e.key === "Escape") { setEditing(false); }
+          }}
+          className="h-5 w-12 rounded border border-amber-300 px-1 text-xs font-bold text-amber-700"
+        />
+        <span className="text-[10px] text-gray-500">夜:</span>
+        <input
+          type="number"
+          min="0"
+          step="0.5"
+          value={draftNight}
+          onChange={(e) => setDraftNight(e.target.value)}
+          onBlur={commit}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") { e.preventDefault(); commit(); }
+            else if (e.key === "Escape") { setEditing(false); }
+          }}
+          className="h-5 w-12 rounded border border-amber-300 px-1 text-xs font-bold text-amber-700"
+        />
+      </span>
     );
   }
 
-  const label = effective != null ? `(${formatPlainNumber(effective)}天)` : "(—天)";
+  const label = `(日:${formatPlainNumber(displayDayQty)}, 夜:${formatPlainNumber(displayNightQty)})`;
 
   return (
     <span className="inline-flex items-center gap-0.5">

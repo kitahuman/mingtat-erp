@@ -184,7 +184,7 @@ export class PayrollController {
     return this.payrollService.updateDayQuantity(
       +payrollId,
       dailyCalcId,
-      body.manual_day_quantity,
+      { dayQuantity: body.manual_day_shift_quantity, nightQuantity: body.manual_night_shift_quantity },
     );
   }
 

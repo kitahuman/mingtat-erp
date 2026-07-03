@@ -59,7 +59,8 @@ export class UpdatePayrollItemDto {
 }
 
 export class UpdateDayQuantityDto {
-  @Type(() => Number) @IsNumber() manual_day_quantity: number;
+  @Type(() => Number) @IsNumber() manual_day_shift_quantity: number;
+  @Type(() => Number) @IsNumber() manual_night_shift_quantity: number;
 }
 
 export class ExcludeBadgeDto {
