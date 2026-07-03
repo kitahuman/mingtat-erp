@@ -1841,6 +1841,16 @@ function DailyTab({ days, allowanceOptions, adjustments, expandedDay, readOnly, 
   const [customAllowanceName, setCustomAllowanceName] = useState("");
   const [customAllowanceAmount, setCustomAllowanceAmount] = useState("");
 
+  // ── Batch allowance mode ──
+  const [batchMode, setBatchMode] = useState(false);
+  const [batchSelectedDates, setBatchSelectedDates] = useState<Set<string>>(new Set());
+  const [showBatchAllowanceDialog, setShowBatchAllowanceDialog] = useState(false);
+  const [batchAllowanceSelection, setBatchAllowanceSelection] = useState("");
+  const [batchCustomName, setBatchCustomName] = useState("");
+  const [batchCustomAmount, setBatchCustomAmount] = useState("");
+  const [batchSubmitting, setBatchSubmitting] = useState(false);
+  const [showMoreMenu, setShowMoreMenu] = useState(false);
+
   if (days.length === 0) return <div className="rounded-lg border border-gray-200 bg-gray-50 py-10 text-center text-gray-500">暫無逐日計算資料。</div>;
 
   const tableColumnCount = 8;
@@ -1897,21 +1907,139 @@ function DailyTab({ days, allowanceOptions, adjustments, expandedDay, readOnly, 
     resetAllowanceForm();
   }
 
+  // ── Batch allowance helpers ──
+  const selectableDates = days.filter((day) => (day.work_logs || day.logs || []).length > 0 && day.date).map((day) => day.date as string);
+  const allSelectableSelected = selectableDates.length > 0 && selectableDates.every((d) => batchSelectedDates.has(d));
+
+  function toggleBatchSelect(date: string) {
+    setBatchSelectedDates((prev) => {
+      const next = new Set(prev);
+      if (next.has(date)) next.delete(date);
+      else next.add(date);
+      return next;
+    });
+  }
+
+  function toggleBatchSelectAll() {
+    setBatchSelectedDates((prev) => {
+      const next = new Set(prev);
+      if (allSelectableSelected) selectableDates.forEach((d) => next.delete(d));
+      else selectableDates.forEach((d) => next.add(d));
+      return next;
+    });
+  }
+
+  function enterBatchMode() {
+    setBatchMode(true);
+    setBatchSelectedDates(new Set());
+    setShowMoreMenu(false);
+    resetAllowanceForm();
+  }
+
+  function exitBatchMode() {
+    setBatchMode(false);
+    setBatchSelectedDates(new Set());
+    setShowBatchAllowanceDialog(false);
+    setBatchAllowanceSelection("");
+    setBatchCustomName("");
+    setBatchCustomAmount("");
+  }
+
+  function confirmBatchSelection() {
+    if (batchSelectedDates.size === 0) {
+      alert("請至少勾選一個日期");
+      return;
+    }
+    setShowBatchAllowanceDialog(true);
+    setBatchAllowanceSelection("");
+    setBatchCustomName("");
+    setBatchCustomAmount("");
+  }
+
+  async function submitBatchAllowance() {
+    if (batchSelectedDates.size === 0) return;
+    if (batchAllowanceSelection === "__custom__") {
+      const name = batchCustomName.trim();
+      const amount = Number(batchCustomAmount);
+      if (!name) { alert("請輸入自定義津貼名稱"); return; }
+      if (!Number.isFinite(amount) || amount <= 0) { alert("請輸入有效自定義津貼金額"); return; }
+      setBatchSubmitting(true);
+      let success = 0;
+      let skipped = 0;
+      const dates = Array.from(batchSelectedDates);
+      for (const date of dates) {
+        try {
+          await onAddAdjustment(date, { item_name: name, amount });
+          success++;
+        } catch {
+          skipped++;
+        }
+      }
+      setBatchSubmitting(false);
+      alert(`批量新增完成：成功 ${success} 天，跳過 ${skipped} 天`);
+      exitBatchMode();
+      return;
+    }
+    const option = allowanceOptions.find((item, index) => optionValue(item, index) === batchAllowanceSelection);
+    if (!option) return;
+    setBatchSubmitting(true);
+    let success = 0;
+    let skipped = 0;
+    const dates = Array.from(batchSelectedDates);
+    for (const date of dates) {
+      try {
+        await onAddAllowance(date, option);
+        success++;
+      } catch {
+        skipped++;
+      }
+    }
+    setBatchSubmitting(false);
+    alert(`批量新增完成：成功 ${success} 天，跳過 ${skipped} 天`);
+    exitBatchMode();
+  }
+
+  const batchTableColumnCount = batchMode ? tableColumnCount + 1 : tableColumnCount;
+
   return (
     <div className="space-y-3">
-      <div className="flex flex-wrap gap-x-6 gap-y-2 rounded-lg border border-gray-200 bg-gray-50 p-3 text-sm">
-        <DailySummaryItem label="工作天數" value={`${formatPlainNumber(workDayCount)}天`} />
-        <DailySummaryItem label="需補底薪天數" value={`${formatPlainNumber(topUpDayCount)}天`} valueClassName="text-orange-600" />
-        <DailySummaryItem label="補底薪合計" value={formatCompactMoney(totalTopUp)} valueClassName="text-orange-600" />
-        <DailySummaryItem label="休假天數" value={`${leaveDayCount}天`} valueClassName="text-gray-600" />
-        <DailySummaryItem label="每日津貼合計" value={formatCompactMoney(totalAllowances)} valueClassName="text-blue-600" />
-        <DailySummaryItem label="逐日合計" value={formatCompactMoney(grandTotal)} valueClassName="text-primary-600" />
+      <div className="flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 p-3 text-sm">
+        <div className="flex flex-1 flex-wrap gap-x-6 gap-y-2">
+          <DailySummaryItem label="工作天數" value={`${formatPlainNumber(workDayCount)}天`} />
+          <DailySummaryItem label="需補底薪天數" value={`${formatPlainNumber(topUpDayCount)}天`} valueClassName="text-orange-600" />
+          <DailySummaryItem label="補底薪合計" value={formatCompactMoney(totalTopUp)} valueClassName="text-orange-600" />
+          <DailySummaryItem label="休假天數" value={`${leaveDayCount}天`} valueClassName="text-gray-600" />
+          <DailySummaryItem label="每日津貼合計" value={formatCompactMoney(totalAllowances)} valueClassName="text-blue-600" />
+          <DailySummaryItem label="逐日合計" value={formatCompactMoney(grandTotal)} valueClassName="text-primary-600" />
+        </div>
+        {!readOnly && !batchMode && (
+          <div className="relative">
+            <button type="button" onClick={() => setShowMoreMenu((prev) => !prev)} className="rounded px-2 py-1 text-lg font-bold text-gray-500 hover:bg-gray-200 hover:text-gray-900" title="更多操作">⋯</button>
+            {showMoreMenu && (
+              <div className="absolute right-0 top-9 z-20 w-32 rounded-md border border-gray-200 bg-white py-1 text-sm shadow-lg">
+                <button type="button" onClick={enterBatchMode} className="block w-full px-3 py-2 text-left text-gray-700 hover:bg-gray-50">批量津貼</button>
+              </div>
+            )}
+          </div>
+        )}
       </div>
+      {batchMode && (
+        <div className="flex items-center gap-3 rounded-lg border border-blue-200 bg-blue-50 px-4 py-2 text-sm">
+          <span className="font-medium text-blue-700">已選 {batchSelectedDates.size} 天</span>
+          <button type="button" disabled={batchSelectedDates.size === 0} onClick={confirmBatchSelection} className="rounded bg-primary-600 px-3 py-1 text-xs font-medium text-white hover:bg-primary-700 disabled:cursor-not-allowed disabled:opacity-50">確認選擇 {batchSelectedDates.size} 天</button>
+          <button type="button" onClick={exitBatchMode} className="rounded border border-gray-300 bg-white px-3 py-1 text-xs font-medium text-gray-600 hover:bg-gray-50">取消</button>
+        </div>
+      )}
 
       <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white">
         <table className="w-full min-w-[1080px] text-sm">
           <thead className="bg-gray-50">
             <tr>
+              {batchMode && (
+                <th className="w-8 px-3 py-2 text-center font-medium text-gray-600">
+                  <input type="checkbox" checked={allSelectableSelected} onChange={toggleBatchSelectAll} className="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
+                </th>
+              )}
               <th className="w-8 px-3 py-2 text-left font-medium text-gray-600"></th>
               <th className="px-3 py-2 text-left font-medium text-gray-600">日期</th>
               <th className="px-3 py-2 text-right font-medium text-gray-600">工作收入</th>
@@ -1953,6 +2081,15 @@ function DailyTab({ days, allowanceOptions, adjustments, expandedDay, readOnly, 
               return (
                 <Fragment key={rowDate}>
                   <tr className={`border-b border-gray-200 ${rowTone} hover:bg-blue-50/40`}>
+                    {batchMode && (
+                      <td className="px-3 py-2 text-center align-middle">
+                        {workLogs.length > 0 && day.date ? (
+                          <input type="checkbox" checked={batchSelectedDates.has(day.date)} onChange={() => toggleBatchSelect(day.date!)} className="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
+                        ) : (
+                          <span className="inline-block h-4 w-4" />
+                        )}
+                      </td>
+                    )}
                     <td className="px-3 py-2 text-center align-middle">
                       <button type="button" onClick={() => onToggleExpand(rowDate)} className="text-gray-400 hover:text-gray-700" aria-label={isExpanded ? "收起詳情" : "展開詳情"}>
                         {isExpanded ? "▼" : "▶"}
@@ -2004,6 +2141,7 @@ function DailyTab({ days, allowanceOptions, adjustments, expandedDay, readOnly, 
                     </td>
                     <td className="px-3 py-2 text-right align-middle font-mono font-bold text-gray-900">{formatCompactMoney(getDailyTotal(day))}</td>
                     <td className="px-3 py-2 text-center align-middle">
+                      {!batchMode && (
                       <div className="relative inline-block text-left">
                         <button type="button" disabled={readOnly || !day.date} onClick={() => { if (isAdding) resetAllowanceForm(); else { setAddingDate(rowDate); setSelectedAllowance(""); setCustomAllowanceName(""); setCustomAllowanceAmount(""); } }} className="rounded border border-primary-200 bg-white px-2.5 py-1 text-xs font-medium text-primary-600 hover:bg-primary-50 disabled:cursor-not-allowed disabled:opacity-50">
                           {isAdding ? "取消" : "+ 津貼"}
@@ -2029,11 +2167,12 @@ function DailyTab({ days, allowanceOptions, adjustments, expandedDay, readOnly, 
                           </div>
                         )}
                       </div>
+                      )}
                     </td>
                   </tr>
                   {isExpanded && (
                     <tr className="border-b border-gray-200 bg-blue-50">
-                      <td colSpan={tableColumnCount} className="px-6 py-3">
+                      <td colSpan={batchTableColumnCount} className="px-6 py-3">
                         <DailyWorkLogDetails workLogs={workLogs} />
                       </td>
                     </tr>
@@ -2044,6 +2183,7 @@ function DailyTab({ days, allowanceOptions, adjustments, expandedDay, readOnly, 
           </tbody>
           <tfoot className="border-t-2 border-gray-900">
             <tr className="bg-gray-50">
+              {batchMode && <td className="px-3 py-2"></td>}
               <td className="px-3 py-2"></td>
               <td className="px-3 py-2 text-left font-bold">小計</td>
               <td className="px-3 py-2 text-right font-mono font-bold text-gray-900">{formatCompactMoney(days.reduce((sum, day) => sum + getDailyBaseWorkIncome(day), 0))}</td>
@@ -2056,6 +2196,35 @@ function DailyTab({ days, allowanceOptions, adjustments, expandedDay, readOnly, 
           </tfoot>
         </table>
       </div>
+
+      {/* Batch allowance dialog */}
+      {showBatchAllowanceDialog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="fixed inset-0 bg-black/50" onClick={() => setShowBatchAllowanceDialog(false)} />
+          <div className="relative w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
+            <div className="mb-4 flex items-center justify-between">
+              <h3 className="text-lg font-bold text-gray-900">批量新增津貼（{batchSelectedDates.size} 天）</h3>
+              <button type="button" onClick={() => setShowBatchAllowanceDialog(false)} className="text-gray-400 hover:text-gray-600">×</button>
+            </div>
+            <label className="mb-1 block text-sm font-medium text-gray-600">選擇津貼類型</label>
+            <select value={batchAllowanceSelection} onChange={(event) => setBatchAllowanceSelection(event.target.value)} className="input h-9 w-full px-2 py-1 text-sm">
+              <option value="">請選擇</option>
+              {allowanceOptions.map((option, optionIndex) => <option key={optionValue(option, optionIndex)} value={optionValue(option, optionIndex)}>{getAllowanceOptionLabel(option)}</option>)}
+              <option value="__custom__">自定義津貼</option>
+            </select>
+            {batchAllowanceSelection === "__custom__" && (
+              <div className="mt-3 grid grid-cols-[1fr_100px] gap-2">
+                <input type="text" value={batchCustomName} onChange={(event) => setBatchCustomName(event.target.value)} placeholder="津貼名稱" className="input h-9 px-2 py-1 text-sm" />
+                <input type="number" min="0" step="0.01" value={batchCustomAmount} onChange={(event) => setBatchCustomAmount(event.target.value)} placeholder="金額" className="input h-9 px-2 py-1 text-right text-sm" />
+              </div>
+            )}
+            <div className="mt-5 flex justify-end gap-2">
+              <button type="button" onClick={() => setShowBatchAllowanceDialog(false)} className="rounded border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50">取消</button>
+              <button type="button" disabled={!batchAllowanceSelection || batchSubmitting} onClick={() => void submitBatchAllowance()} className="rounded bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700 disabled:cursor-not-allowed disabled:opacity-50">{batchSubmitting ? "處理中..." : "新增"}</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
