@@ -235,10 +235,10 @@ export class PayrollPdfService {
     .net { background: #eff6ff; }
     .payable, .adjustment { background: #f0fdf4; }
     .reimbursement { background: #eff6ff; }
-    .signature-section { margin-top: 45px; display: flex; justify-content: space-between; gap: 36px; page-break-inside: avoid; }
-    .signature-box { flex: 1; min-height: 118px; position: relative; }
-    .signature-line { border-top: 1px solid #000; margin-top: 68px; padding-top: 8px; font-size: 13px; }
-    .stamp { max-width: 150px; max-height: 110px; object-fit: contain; position: absolute; right: 30px; bottom: 35px; opacity: 0.95; }
+    .signature-section { margin-top: 20px; display: flex; justify-content: space-between; gap: 36px; page-break-inside: avoid; }
+    .signature-box { flex: 1; min-height: 100px; position: relative; }
+    .signature-line { border-top: 1px solid #000; margin-top: 80px; padding-top: 8px; font-size: 13px; }
+    .stamp { max-width: 130px; max-height: 90px; object-fit: contain; position: absolute; right: 30px; bottom: 30px; opacity: 0.95; }
     .muted { color: #6b7280; }
   </style>
 </head>
