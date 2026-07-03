@@ -245,8 +245,8 @@ export class PayrollPdfService {
 <body>
   <main class="page">
     <section class="header">
-      <h1>${this.escapeHtml(company.name || cp.chinese_name || '公司名稱')}</h1>
-      <h2>${this.escapeHtml(company.name_en || cp.english_name || '')}</h2>
+      <h1>${this.escapeHtml(cp.chinese_name || company.name || '公司名稱')}</h1>
+      <h2>${this.escapeHtml(cp.english_name || company.name_en || '')}</h2>
       <p>${this.escapeHtml(company.invoice_address || cp.office_address || '')}</p>
     </section>
 
