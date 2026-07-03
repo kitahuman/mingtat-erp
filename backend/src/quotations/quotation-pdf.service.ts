@@ -71,7 +71,15 @@ export class QuotationPdfService {
       include: {
         items: { orderBy: { sort_order: 'asc' } },
         client: true,
-        company: true,
+        company: {
+          include: {
+            profiles: {
+              select: { chinese_name: true, english_name: true },
+              take: 1,
+              orderBy: { id: 'asc' as const },
+            },
+          },
+        },
         project: true,
       },
     });
@@ -152,6 +160,7 @@ export class QuotationPdfService {
   private buildHtml(quotation: any, options: Required<QuotationPdfOptions>) {
     const labels = this.labels(options.language);
     const company = quotation.company || {};
+    const cp = (company as any).profiles?.[0] || {};
     const client = quotation.client || {};
     // PDF 顯示用客戶名稱：優先用 override（預覽即時輸入），其次資料庫 display_client_name，最後 fallback client.name
     const clientDisplayName =
@@ -161,7 +170,7 @@ export class QuotationPdfService {
     const themeLightBorder = this.hexToRgba(theme, 0.15);
     const logoDataUri = this.logoDataUri(company.company_logo_url);
     const stampDataUri = options.showCompanyStamp ? this.logoDataUri(company.company_stamp_url) : '';
-    const quotationCompanyNameEn = this.invoiceCompanyNameEn(company);
+    const quotationCompanyNameEn = (cp.english_name || company.invoice_company_name_en || company.name_en || '').trim();
     const quotationAddress = company.invoice_address || company.address || '';
     const quotationPhone = company.invoice_phone || company.phone || '';
     const quotationFax = company.invoice_fax || '';
@@ -369,7 +378,7 @@ export class QuotationPdfService {
             <div class="signature-block">
               <div class="signature-stamp-space${stampDataUri ? '' : ' empty'}">${stampDataUri ? `<img class="stamp-img" src="${stampDataUri}" />` : ''}</div>
               <div class="signature-line"></div>
-              <div class="signature-company-name">${this.escapeHtml(company.name || '')}</div>
+              <div class="signature-company-name">${this.escapeHtml(cp.chinese_name || company.name || '')}</div>
             </div>` : ''}
           </td>
         </tr>

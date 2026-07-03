@@ -51,6 +51,11 @@ export class InvoiceStatementPdfService {
               where: { is_active: true },
               orderBy: { id: 'asc' },
             },
+            profiles: {
+              select: { chinese_name: true, english_name: true },
+              take: 1,
+              orderBy: { id: 'asc' as const },
+            },
           },
         },
         items: {
@@ -69,12 +74,13 @@ export class InvoiceStatementPdfService {
 
   private buildHtml(statement: any) {
     const company = statement.company || {};
+    const cp = (company as any).profiles?.[0] || {};
     const client = statement.client || {};
     const theme = this.sanitizeColor(company.invoice_color_theme || '#1a365d');
     const themeLightBg = this.hexToRgba(theme, 0.08);
     const themeLightBorder = this.hexToRgba(theme, 0.15);
     const logoDataUri = this.logoDataUri(company.company_logo_url);
-    const companyNameEn = company.invoice_company_name_en || company.name_en || '';
+    const companyNameEn = (cp.english_name || company.invoice_company_name_en || company.name_en || '').trim();
     const invoiceAddress = company.invoice_address || company.address || '';
     const invoicePhone = company.invoice_phone || company.phone || '';
     const invoiceFax = company.invoice_fax || '';
@@ -227,7 +233,7 @@ export class InvoiceStatementPdfService {
   <div class="page">
     <header class="header">
       <div class="brand">
-        <div class="company-name">${this.escapeHtml(company.name || '')}</div>
+        <div class="company-name">${this.escapeHtml(cp.chinese_name || company.name || '')}</div>
         ${companyNameEn ? `<div class="company-name-en">${this.escapeHtml(companyNameEn)}</div>` : ''}
         ${companyMetaLines ? `<div class="company-meta">${companyMetaLines}</div>` : ''}
         <div class="client-info">

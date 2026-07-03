@@ -95,6 +95,11 @@ export class InvoicePdfService {
               where: { is_active: true },
               orderBy: { id: 'asc' },
             },
+            profiles: {
+              select: { chinese_name: true, english_name: true },
+              take: 1,
+              orderBy: { id: 'asc' as const },
+            },
           },
         },
         project: true,
@@ -222,6 +227,7 @@ export class InvoicePdfService {
   private buildHtml(invoice: any, options: Required<InvoicePdfOptions>) {
     const labels = this.labels(options.language);
     const company = invoice.company || {};
+    const cp = (company as any).profiles?.[0] || {};
     const client = invoice.client || {};
     // PDF 顯示用客戶名稱：優先用 override（預覽即時輸入），其次資料庫 display_client_name，最後 fallback client.name
     const clientDisplayName =
@@ -231,7 +237,7 @@ export class InvoicePdfService {
     const themeLightBorder = this.hexToRgba(theme, 0.15);
     const logoDataUri = this.logoDataUri(company.company_logo_url);
     const stampDataUri = options.showCompanyStamp ? this.logoDataUri(company.company_stamp_url) : '';
-    const invoiceCompanyNameEn = this.invoiceCompanyNameEn(company);
+    const invoiceCompanyNameEn = (cp.english_name || company.invoice_company_name_en || company.name_en || '').trim();
     const invoiceAddress = company.invoice_address || company.address || '';
     const invoicePhone = company.invoice_phone || company.phone || '';
     const displayClientAddress = options.overrideClientAddress || client.address || '';
@@ -526,7 +532,7 @@ export class InvoicePdfService {
               <div class="signature-block">
                 <div class="signature-stamp-space${stampDataUri ? '' : ' empty'}">${stampDataUri ? `<img class="stamp-img" src="${stampDataUri}" />` : ''}</div>
                 <div class="signature-line"></div>
-                <div class="signature-company-name">${this.escapeHtml(company.name || '')}</div>
+                <div class="signature-company-name">${this.escapeHtml(cp.chinese_name || company.name || '')}</div>
               </div>` : ''}
             </td>
           </tr>
