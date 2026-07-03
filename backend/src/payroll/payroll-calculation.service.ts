@@ -859,6 +859,8 @@ export class PayrollCalculationService {
     salarySetting: any | null,
     dayAllowances: any[],
     effectiveDayQuantity?: number,
+    shiftDayQuantity?: number,
+    shiftNightQuantity?: number,
   ): { key: string; name: string; amount: number }[] {
     if (!salarySetting || dayWorkLogs.length === 0) return [];
 
@@ -950,19 +952,25 @@ export class PayrollCalculationService {
         );
         if (isExcluded) continue;
 
-        // 按當天 effective_day_quantity 比例計算金額（與 day_quantity 同源）
-        const dayQuantity =
-          effectiveDayQuantity != null
-            ? effectiveDayQuantity
-            : Math.min(
-                dayWorkLogs.reduce((sum, wl) => sum + (Number(wl.quantity) || 0), 0),
-                1,
-              );
+        // 按觸發條件對應的班次 quantity 比例計算金額
+        let quantityForAllowance: number;
+        if (triggerType === 'day_shift_only' && shiftDayQuantity != null) {
+          quantityForAllowance = shiftDayQuantity;
+        } else if (triggerType === 'night_shift_only' && shiftNightQuantity != null) {
+          quantityForAllowance = shiftNightQuantity;
+        } else if (effectiveDayQuantity != null) {
+          quantityForAllowance = effectiveDayQuantity;
+        } else {
+          quantityForAllowance = Math.min(
+            dayWorkLogs.reduce((sum, wl) => sum + (Number(wl.quantity) || 0), 0),
+            1,
+          );
+        }
 
         result.push({
           key,
           name: ca.name || '自定義津貼',
-          amount: Number(ca.amount) * dayQuantity,
+          amount: Number(ca.amount) * quantityForAllowance,
         });
       }
     }
@@ -1239,6 +1247,8 @@ export class PayrollCalculationService {
         salarySetting,
         dayAllowances,
         effectiveDayQuantity,
+        dayQuantity,
+        nightQuantity,
       );
       const dailyOtAmount = dayPwls.reduce(
         (sum: number, pwl: any) => sum + getSalaryOtAmount(pwl),
