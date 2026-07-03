@@ -24,12 +24,12 @@ const ALLOWANCE_FIELDS = [
 ];
 
 const OT_FIELDS = [
-  { key: 'ot_1800_1900', label: 'OT 1800-1900' },
-  { key: 'ot_1900_2000', label: 'OT 1900-2000' },
-  { key: 'ot_0600_0700', label: 'OT 0600-0700' },
-  { key: 'ot_0700_0800', label: 'OT 0700-0800' },
-  { key: 'ot_rate_standard', label: '標準OT時薪' },
-  { key: 'ot_mid_shift', label: '中直OT津貼' },
+  { key: 'ot_1800_1900', label: 'OT 1800-1900', hint: '18:00-19:00 OT 自動計算' },
+  { key: 'ot_1900_2000', label: 'OT 1900-2000', hint: '19:00-20:00 OT 自動計算' },
+  { key: 'ot_0600_0700', label: 'OT 0600-0700', hint: '手動添加' },
+  { key: 'ot_0700_0800', label: 'OT 0700-0800', hint: '手動添加' },
+  { key: 'ot_rate_standard', label: '標準OT時薪', hint: '20:00後OT按此計算；如無1800/1900設定則全部OT用此時薪' },
+  { key: 'ot_mid_shift', label: '中直OT津貼', hint: '中直班有OT時自動觸發' },
 ];
 
 export default function SalaryConfigDetailPage() {
@@ -192,6 +192,7 @@ export default function SalaryConfigDetailPage() {
                 <p className={`font-mono font-bold ${Number(record?.[f.key]) > 0 ? 'text-orange-700' : 'text-gray-300'}`}>
                   ${Number(record?.[f.key] || 0).toLocaleString()}
                 </p>
+                {f.hint && <p className="text-xs text-gray-400 mt-1">{f.hint}</p>}
               </div>
             ))}
           </div>
