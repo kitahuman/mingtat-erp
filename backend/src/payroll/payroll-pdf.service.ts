@@ -237,7 +237,7 @@ export class PayrollPdfService {
     .signature-section { margin-top: 45px; display: flex; justify-content: space-between; gap: 36px; page-break-inside: avoid; }
     .signature-box { flex: 1; min-height: 118px; position: relative; }
     .signature-line { border-top: 1px solid #000; margin-top: 68px; padding-top: 8px; font-size: 13px; }
-    .stamp { max-width: 150px; max-height: 110px; object-fit: contain; position: absolute; right: 30px; bottom: 25px; opacity: 0.95; }
+    .stamp { max-width: 150px; max-height: 110px; object-fit: contain; position: absolute; right: 30px; bottom: 35px; opacity: 0.95; }
     .muted { color: #6b7280; }
   </style>
 </head>
@@ -251,13 +251,10 @@ export class PayrollPdfService {
 
     <table class="info-table">
       <tbody>
-        ${this.infoRow('員工姓名(中)：', emp.name_zh || emp.name || payroll.employee_name)}
-        ${this.infoRow('員工姓名(英)：', emp.name_en || emp.employee_name)}
-        ${this.infoRow('身份證號碼：', emp.id_number)}
+        <tr><td class="label">員工姓名(中)：</td><td>${this.escapeHtml(emp.name_zh || emp.name || payroll.employee_name || '-')}</td><td class="label">員工姓名(英)：</td><td>${this.escapeHtml(emp.name_en || emp.employee_name || '-')}</td></tr>
+        <tr><td class="label">身份證號碼：</td><td>${this.escapeHtml(emp.id_number || '-')}</td><td class="label">受僱日期：</td><td>${this.escapeHtml(this.formatEmployeeJoinDate(emp.join_date) || '-')}</td></tr>
+        <tr><td class="label">聯絡電話：</td><td>${this.escapeHtml(emp.phone || '-')}</td><td class="label">出糧戶口：</td><td>${this.escapeHtml(emp.bank_account || '-')}</td></tr>
         ${this.infoRow('地址：', emp.address)}
-        ${this.infoRow('緊急聯絡人：', emp.emergency_contact)}
-        ${this.infoRow('出糧戶口：', emp.bank_account)}
-        ${this.infoRow('受僱日期：', this.formatEmployeeJoinDate(emp.join_date))}
       </tbody>
     </table>
 
