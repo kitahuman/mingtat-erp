@@ -38,6 +38,9 @@ type PayrollRecordRow = {
   commission_total?: number | string | null;
   mpf_deduction?: number | string | null;
   mpf_employer?: number | string | null;
+  mpf_relevant_income?: number | string | null;
+  mpf_plan?: string | null;
+  mpf_days?: number | string | null;
   adjustment_total?: number | string | null;
   net_amount?: number | string | null;
   employee?: {
@@ -93,14 +96,15 @@ const DEFAULT_COLUMN_CONFIGS: ColumnConfig[] = [
   { key: 'base_amount', label: '底薪', visible: true, order: 5 },
   { key: 'allowance_total', label: '津貼', visible: true, order: 6 },
   { key: 'ot_total', label: 'OT', visible: true, order: 7 },
-  { key: 'mpf_deduction', label: '強積金（僱員）', visible: true, order: 8 },
-  { key: 'mpf_employer', label: '強積金（僱主）', visible: true, order: 9 },
-  { key: 'net_amount', label: '淨額', visible: true, order: 10 },
-  { key: 'status', label: '狀態', visible: true, order: 11 },
-  { key: 'publisher', label: '發佈人', visible: true, order: 12 },
-  { key: 'payment_date', label: '付款日期', visible: true, order: 13 },
-  { key: 'cheque_number', label: '支票號碼', visible: true, order: 14 },
-  { key: 'created_at', label: '建立日期', visible: true, order: 15 },
+  { key: 'mpf_relevant_income', label: 'MPF薪金', visible: true, order: 8 },
+  { key: 'mpf_deduction', label: '強積金（僱員）', visible: true, order: 9 },
+  { key: 'mpf_employer', label: '強積金（僱主）', visible: true, order: 10 },
+  { key: 'net_amount', label: '淨額', visible: true, order: 11 },
+  { key: 'status', label: '狀態', visible: true, order: 12 },
+  { key: 'publisher', label: '發佈人', visible: true, order: 13 },
+  { key: 'payment_date', label: '付款日期', visible: true, order: 14 },
+  { key: 'cheque_number', label: '支票號碼', visible: true, order: 15 },
+  { key: 'created_at', label: '建立日期', visible: true, order: 16 },
 ];
 
 const normalizeColumnConfigs = (configs: ColumnConfig[] | null): ColumnConfig[] => {
@@ -411,6 +415,31 @@ export default function PayrollRecordsPage() {
       label: `OT ${displayTotals ? `$${Number(displayTotals.ot_total).toLocaleString()}` : ''}`,
       render: (_v: unknown, row: PayrollRecordRow) =>
         `$${Number(row.ot_total).toLocaleString()}`,
+      className: 'text-right font-mono',
+    },
+    {
+      key: 'mpf_relevant_income',
+      label: 'MPF薪金',
+      render: (_v: unknown, row: PayrollRecordRow) => {
+        const income = row.mpf_relevant_income;
+        if (income === null || income === undefined) return '-';
+        const plan = row.mpf_plan ?? row.employee?.mpf_plan;
+        if (plan === 'industry') {
+          const days = row.mpf_days;
+          return `$${Number(income).toLocaleString()} (${days != null ? days : '-'}天)`;
+        }
+        return `$${Number(income).toLocaleString()}`;
+      },
+      filterRender: (_v: unknown, row: PayrollRecordRow) => {
+        const income = row.mpf_relevant_income;
+        if (income === null || income === undefined) return '-';
+        const plan = row.mpf_plan ?? row.employee?.mpf_plan;
+        if (plan === 'industry') {
+          const days = row.mpf_days;
+          return `$${Number(income).toLocaleString()} (${days != null ? days : '-'}天)`;
+        }
+        return `$${Number(income).toLocaleString()}`;
+      },
       className: 'text-right font-mono',
     },
     {

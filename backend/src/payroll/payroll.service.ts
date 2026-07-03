@@ -96,6 +96,11 @@ export class PayrollService {
           created_by_user: {
             select: { id: true, username: true, displayName: true },
           },
+          items: {
+            where: { item_type: 'mpf_deduction' },
+            select: { quantity: true },
+            take: 1,
+          },
         },
         orderBy,
       }),
@@ -145,6 +150,7 @@ export class PayrollService {
       publisher_name: payroll.payroll_ai_generated
         ? 'AI'
         : this.formatUserDisplayName(payroll.created_by_user),
+      mpf_days: payroll.items?.[0]?.quantity ?? null,
     }));
 
     const aiRows = includeAiDrafts
