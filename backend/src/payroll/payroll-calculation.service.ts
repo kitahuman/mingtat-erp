@@ -874,7 +874,6 @@ export class PayrollCalculationService {
 
     const displayAllowances = [
       { key: 'allowance_rent', name: '租車津貼' },
-      { key: 'allowance_3runway', name: '三跑津貼' },
     ];
 
     const result: { key: string; name: string; amount: number }[] = displayAllowances

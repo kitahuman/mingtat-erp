@@ -11,16 +11,16 @@ import DateInput from '@/components/DateInput';
 const SALARY_TYPE_LABELS: Record<string, string> = { daily: '日薪制', monthly: '月薪制' };
 
 const ALLOWANCE_FIELDS = [
-  { key: 'allowance_night', label: '晚間津貼' },
-  { key: 'allowance_3runway', label: '3跑津貼' },
-  { key: 'allowance_rent', label: '租車津貼' },
-  { key: 'allowance_well', label: '落井津貼' },
-  { key: 'allowance_machine', label: '揸機津貼' },
-  { key: 'allowance_roller', label: '火轆津貼' },
-  { key: 'allowance_crane', label: '吊/挾車津貼' },
-  { key: 'allowance_move_machine', label: '搬機津貼' },
-  { key: 'allowance_kwh_night', label: '嘉華-夜間津貼' },
-  { key: 'allowance_mid_shift', label: '中直津貼' },
+  { key: 'allowance_night', label: '晚間津貼', hint: '夜班自動觸發 × 夜班天數' },
+  { key: 'allowance_3runway', label: '3跑津貼', hint: '手動添加' },
+  { key: 'allowance_rent', label: '租車津貼', hint: '單位=天 自動觸發' },
+  { key: 'allowance_well', label: '落井津貼', hint: '手動添加' },
+  { key: 'allowance_machine', label: '揸機津貼', hint: '手動添加' },
+  { key: 'allowance_roller', label: '火轆津貼', hint: '自動觸發 × 總天數' },
+  { key: 'allowance_crane', label: '吊/挾車津貼', hint: '自動觸發 × 總天數' },
+  { key: 'allowance_move_machine', label: '搬機津貼', hint: '手動添加' },
+  { key: 'allowance_kwh_night', label: '嘉華-夜間津貼', hint: '夜班自動觸發 × 夜班天數' },
+  { key: 'allowance_mid_shift', label: '中直津貼', hint: '中直班自動觸發 × 總天數' },
 ];
 
 const OT_FIELDS = [
@@ -165,6 +165,7 @@ export default function SalaryConfigDetailPage() {
                 <p className={`font-mono font-bold ${Number(record?.[f.key]) > 0 ? 'text-green-700' : 'text-gray-300'}`}>
                   ${Number(record?.[f.key] || 0).toLocaleString()}
                 </p>
+                {f.hint && <p className="text-xs text-gray-400 mt-1">{f.hint}</p>}
               </div>
             ))}
           </div>
