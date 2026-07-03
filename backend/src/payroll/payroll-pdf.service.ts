@@ -98,12 +98,13 @@ export class PayrollPdfService {
     const itemRow = (item: any, prefix = '') => {
       const amount = this.toNumber(item.amount);
       const isMpfPercent = item.item_type === 'mpf_deduction' && payroll.mpf_plan !== 'industry';
+      const isMpfItem = item.item_type === 'mpf_deduction';
       return `<tr>
         <td>${this.escapeHtml(prefix)}${this.escapeHtml(item.item_name || '—')}</td>
         <td class="money">${isMpfPercent ? `${(this.toNumber(item.quantity) * 100).toFixed(0)}%` : this.formatMoney(item.unit_price)}</td>
         <td class="money">${isMpfPercent ? '—' : this.formatPlainNumber(item.quantity)}</td>
         <td class="money bold">${amount < 0 ? '-' : ''}${this.formatMoney(Math.abs(amount))}</td>
-        <td>${this.escapeHtml(item.remarks || '—')}</td>
+        <td>${isMpfItem ? '—' : this.escapeHtml(item.remarks || '—')}</td>
       </tr>`;
     };
 
