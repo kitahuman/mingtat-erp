@@ -7,7 +7,6 @@ import { TranslationKey } from '@/lib/i18n/translations';
 import { getDynamicTranslation } from '@/lib/i18n/dynamic-translations';
 import { employeePortalApi, portalSharedApi, WorkLogHistoryItem } from '@/lib/employee-portal-api';
 import { VEHICLE_MACHINE_TYPES, MACHINERY_MACHINE_TYPES } from '@/app/(main)/work-logs/constants';
-import DateInput from '@/components/DateInput';
 
 // Field options categories
 const FIELD_OPTION_CATEGORIES = ['tonnage', 'machine_type', 'service_type', 'wage_unit', 'location', 'client_contract_no'];
@@ -1063,8 +1062,10 @@ export default function WorkReportPage() {
 
           <div>
             <label className={labelClass}>{t('scheduledDate')}</label>
-            <DateInput value={form.scheduled_date}
-              onChange={val => set('scheduled_date', val || '')}
+            <input
+              type="date"
+              value={form.scheduled_date}
+              onChange={e => set('scheduled_date', e.target.value)}
               className={inputClass}
               required
             />
