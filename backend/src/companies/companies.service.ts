@@ -35,6 +35,13 @@ export class CompaniesService {
         orderBy,
         skip: (page - 1) * limit,
         take: limit,
+        include: {
+          profiles: {
+            select: { english_name: true },
+            take: 1,
+            orderBy: { id: 'asc' as const }
+          }
+        }
       }),
       this.prisma.company.count({ where }),
     ]);
@@ -45,7 +52,7 @@ export class CompaniesService {
   async findOne(id: number) {
     const company = await this.prisma.company.findUnique({
       where: { id },
-      include: { employees: true, vehicles: true, machinery: true },
+      include: { employees: true, vehicles: true, machinery: true, profiles: { select: { english_name: true }, take: 1, orderBy: { id: 'asc' as const } } },
     });
     if (!company) throw new NotFoundException('公司不存在');
     return company;

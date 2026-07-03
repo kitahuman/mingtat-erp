@@ -52,7 +52,7 @@ export default function CompaniesPage() {
     { key: 'name', label: '公司名稱', sortable: true, render: (_: any, row: any) => (
       <div>
         <div className="font-medium text-gray-900">{row.name}</div>
-        {row.name_en && <div className="text-xs text-gray-500">{row.name_en}</div>}
+        {(row.profiles?.[0]?.english_name || row.name_en) && <div className="text-xs text-gray-500">{row.profiles?.[0]?.english_name || row.name_en}</div>}
       </div>
     )},
     { key: 'company_type', label: '類型', sortable: true, render: (v: string) => (

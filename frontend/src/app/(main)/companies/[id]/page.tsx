@@ -208,7 +208,7 @@ export default function CompanyDetailPage() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">{company?.name}</h1>
-          <p className="text-gray-500">{company?.name_en}</p>
+          <p className="text-gray-500">{company?.profiles?.[0]?.english_name || company?.name_en}</p>
         </div>
         <div className="flex gap-2">
           {editing ? (
