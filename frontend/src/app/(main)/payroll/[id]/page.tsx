@@ -1154,7 +1154,7 @@ export default function PayrollDetailPage() {
         payroll_payment_method: newPaymentMethod || undefined,
         payroll_payment_bank_account: newPaymentBank || undefined,
         payroll_payment_remarks: newPaymentRemarks || undefined,
-        company_id: newPaymentCompanyId || undefined,
+        company_id: payroll?.company_id || undefined,
       });
 
       // Handle file uploads if any files are selected
@@ -1936,27 +1936,16 @@ export default function PayrollDetailPage() {
               </select>
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">銀行賬戶</label>
-              <select value={newPaymentBank} onChange={e => setNewPaymentBank(e.target.value)} className="input-field">
-                <option value="">請選擇銀行賬戶</option>
-                {bankAccounts.map((ba) => (
-                  <option key={ba.id} value={ba.id}>
-                    {ba.bank_name} - {ba.account_name} ({ba.account_no})
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">公司</label>
-              <select value={newPaymentCompanyId || ''} onChange={e => setNewPaymentCompanyId(e.target.value ? Number(e.target.value) : null)} className="input-field">
-                <option value="">請選擇公司</option>
-                {companies.map((co) => (
-                  <option key={co.id} value={co.id}>{co.company_name}</option>
-                ))}
-              </select>
-            </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">銀行賬戶</label>
+            <select value={newPaymentBank} onChange={e => setNewPaymentBank(e.target.value)} className="input-field">
+              <option value="">請選擇銀行賬戶</option>
+              {bankAccounts.map((ba) => (
+                <option key={ba.id} value={ba.id}>
+                  {ba.bank_name} - {ba.account_name} ({ba.account_no})
+                </option>
+              ))}
+            </select>
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">備註</label>

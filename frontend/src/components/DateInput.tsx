@@ -51,7 +51,7 @@ const DateInput = forwardRef<HTMLInputElement, DateInputProps>(({ value, onChang
       value={displayValue}
       onChange={handleChange}
       onBlur={handleBlur}
-      placeholder="dd/MM/yyyy"
+      placeholder="DD/MM/YYYY"
       {...props}
     />
   );
