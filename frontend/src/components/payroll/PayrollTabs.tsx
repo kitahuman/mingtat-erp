@@ -1861,6 +1861,16 @@ function DailyTab({ days, allowanceOptions, adjustments, expandedDay, readOnly, 
     const nightQ = day.night_quantity != null ? day.night_quantity : 0;
     return sum + Math.min(dayQ + nightQ, 1);
   }, 0);
+  const totalDayShift = days.reduce((sum, day) => {
+    const logs = day.work_logs || day.logs || [];
+    if (logs.length === 0) return sum;
+    return sum + Number(day.day_quantity != null ? day.day_quantity : 0);
+  }, 0);
+  const totalNightShift = days.reduce((sum, day) => {
+    const logs = day.work_logs || day.logs || [];
+    if (logs.length === 0) return sum;
+    return sum + Number(day.night_quantity != null ? day.night_quantity : 0);
+  }, 0);
   const topUpDayCount = days.reduce((sum, day) => {
     if (getDailyTopUpAmount(day) <= 0) return sum;
     const dayQ = day.day_quantity != null ? day.day_quantity : 1;
@@ -2005,7 +2015,7 @@ function DailyTab({ days, allowanceOptions, adjustments, expandedDay, readOnly, 
     <div className="space-y-3">
       <div className="flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 p-3 text-sm">
         <div className="flex flex-1 flex-wrap gap-x-6 gap-y-2">
-          <DailySummaryItem label="工作天數" value={`${formatPlainNumber(workDayCount)}天`} />
+          <DailySummaryItem label="工作天數" value={`${formatPlainNumber(workDayCount)}天（日:${formatPlainNumber(totalDayShift)}，夜:${formatPlainNumber(totalNightShift)}）`} />
           <DailySummaryItem label="需補底薪天數" value={`${formatPlainNumber(topUpDayCount)}天`} valueClassName="text-orange-600" />
           <DailySummaryItem label="補底薪合計" value={formatCompactMoney(totalTopUp)} valueClassName="text-orange-600" />
           <DailySummaryItem label="休假天數" value={`${leaveDayCount}天`} valueClassName="text-gray-600" />
@@ -2652,7 +2662,7 @@ function CalculationTab({ calculation, snapshot, salarySetting, workLogs = [], d
       <section>
         <h3 className="mb-2 font-bold text-gray-900">工作摘要</h3>
         <div className="grid gap-3 md:grid-cols-4">
-          <SummaryPill label="工作天數" value={`${workSummary.workDays}天`} tone="blue" />
+          <SummaryPill label="工作天數" value={`${workSummary.workDays}天（日:${formatPlainNumber(workSummary.dayShiftDays)}，夜:${formatPlainNumber(workSummary.nightShiftDays)}）`} tone="blue" />
           <SummaryPill label="休假天數" value={`${workSummary.leaveDays}天`} tone="gray" />
           <SummaryPill label="OT小時" value={`${workSummary.otCount}小時${workSummary.totalOtQuantity > 0 ? ` / ${formatPlainNumber(workSummary.totalOtQuantity)}` : ""}`} tone="amber" />
           <SummaryPill label="中直小時" value={`${workSummary.midShiftCount}小時`} tone="green" />
@@ -2758,11 +2768,23 @@ function buildCalculationWorkSummary(workLogs: WorkLogRecord[], dailyCalculation
     const nightQ = day.night_quantity != null ? day.night_quantity : 0;
     return sum + Math.min(dayQ + nightQ, 1);
   }, 0);
+  const dayShiftDays = dailyCalculation.reduce((sum, day) => {
+    const logs = day.work_logs || day.logs || [];
+    if (logs.length === 0) return sum;
+    return sum + Number(day.day_quantity != null ? day.day_quantity : 0);
+  }, 0);
+  const nightShiftDays = dailyCalculation.reduce((sum, day) => {
+    const logs = day.work_logs || day.logs || [];
+    if (logs.length === 0) return sum;
+    return sum + Number(day.night_quantity != null ? day.night_quantity : 0);
+  }, 0);
   const otRows = activeRows.filter((row) => toNumber(row.ot_quantity) > 0);
   const midShiftRows = activeRows.filter((row) => Boolean(row.is_mid_shift) || normalizeSettingText(row.day_night).includes("中直"));
 
   return {
     workDays: dailyWorkDays || workDates.size,
+    dayShiftDays,
+    nightShiftDays,
     leaveDays: dailyCalculation.filter((day) => isLeaveDay(day)).length,
     otCount: otRows.length,
     totalOtQuantity: otRows.reduce((sum, row) => sum + toNumber(row.ot_quantity), 0),
