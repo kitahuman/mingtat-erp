@@ -1759,7 +1759,14 @@ function GroupedTab({ groups, readOnly, onBillingTypeChange, onSetGroupRate, onS
             </tr>
           </thead>
           <tbody>
-            {groups.map((group) => {
+            {[...groups].sort((a, b) => {
+              const cmp = (x: string, y: string) => x.localeCompare(y, 'zh-Hant');
+              return cmp(a.client_name || a.company_name || '', b.client_name || b.company_name || '')
+                || cmp(a.client_contract_no || a.contract_no || '', b.client_contract_no || b.contract_no || '')
+                || cmp(a.service_type || '', b.service_type || '')
+                || cmp(a.day_night || '', b.day_night || '')
+                || cmp(routeOf(a), routeOf(b));
+            }).map((group) => {
               const billingType = (group.billing_quantity_type || "days") as BillingQuantityType;
               const source = buildRateCardSourceFromGroup(group);
               return (
