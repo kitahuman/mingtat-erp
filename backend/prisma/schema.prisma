@@ -1717,6 +1717,7 @@ model EmployeeAttendance {
   remarks                        String?   @db.Text
   is_mid_shift                   Boolean   @default(false)
   work_notes                     String?   @db.Text
+  service_type                   String?
   mid_shift_approved             Boolean   @default(false)
   mid_shift_approved_by          Int?
   mid_shift_approved_at          DateTime?

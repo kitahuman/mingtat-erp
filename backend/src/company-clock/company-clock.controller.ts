@@ -18,9 +18,7 @@ export class CompanyClockController {
 
   // ── Auth ───────────────────────────────────────────────
   @Post('login')
-  async login(
-    @Body() body: { identifier: string; password: string },
-  ) {
+  async login(@Body() body: { identifier: string; password: string }) {
     return this.service.login(body.identifier, body.password);
   }
 
@@ -28,7 +26,8 @@ export class CompanyClockController {
   @UseGuards(AuthGuard('jwt'))
   @Get('employees')
   async getEmployeeList(
-    @Query() query: {
+    @Query()
+    query: {
       search?: string;
       company_id?: number;
       status?: string;
@@ -86,6 +85,7 @@ export class CompanyClockController {
       remarks?: string;
       is_mid_shift?: boolean;
       work_notes?: string;
+      service_type?: string;
     },
   ) {
     return this.service.clockIn({
@@ -113,6 +113,7 @@ export class CompanyClockController {
       latitude?: number;
       longitude?: number;
       address?: string;
+      service_type?: string;
     },
   ) {
     return this.service.createTemporaryEmployee({

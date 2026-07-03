@@ -1,7 +1,10 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { Prisma, EmployeeAttendance } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { ConvertToWorkLogDto, PendingConversionCountQueryDto } from './dto/convert-to-worklog.dto';
+import {
+  ConvertToWorkLogDto,
+  PendingConversionCountQueryDto,
+} from './dto/convert-to-worklog.dto';
 
 interface AttendanceGroup {
   employeeId: number;
@@ -38,20 +41,38 @@ const MAX_CONVERSION_RANGE_DAYS = 366;
 export class AttendanceToWorkLogService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async getPendingConversionCount(query: PendingConversionCountQueryDto): Promise<{ pending: number }> {
+  async getPendingConversionCount(
+    query: PendingConversionCountQueryDto,
+  ): Promise<{ pending: number }> {
     const normalized = this.normalizeOptionalDateRange(query);
-    const groups = await this.getAttendanceGroups(normalized.dateFrom, normalized.dateTo, query.employee_id);
+    const groups = await this.getAttendanceGroups(
+      normalized.dateFrom,
+      normalized.dateTo,
+      query.employee_id,
+    );
     const candidates = groups.filter((group) => group.clockIn);
     const existingKeys = await this.getExistingWorkLogKeys(candidates);
-    const pending = candidates.filter((group) => !existingKeys.has(this.groupKey(group.employeeId, group.businessDate))).length;
+    const pending = candidates.filter(
+      (group) =>
+        !existingKeys.has(this.groupKey(group.employeeId, group.businessDate)),
+    ).length;
     return { pending };
   }
 
   async convertToWorkLog(dto: ConvertToWorkLogDto): Promise<ConversionResult> {
-    const { dateFrom, dateTo } = this.normalizeRequiredDateRange(dto.date_from, dto.date_to);
-    const groups = await this.getAttendanceGroups(dateFrom, dateTo, dto.employee_id);
+    const { dateFrom, dateTo } = this.normalizeRequiredDateRange(
+      dto.date_from,
+      dto.date_to,
+    );
+    const groups = await this.getAttendanceGroups(
+      dateFrom,
+      dateTo,
+      dto.employee_id,
+    );
     const dryRun = dto.dryRun === true;
-    const employeeNames = await this.getEmployeeNameMap(groups.map((group) => group.employeeId));
+    const employeeNames = await this.getEmployeeNameMap(
+      groups.map((group) => group.employeeId),
+    );
 
     let created = 0;
     let skipped = 0;
@@ -120,7 +141,10 @@ export class AttendanceToWorkLogService {
     };
   }
 
-  private normalizeOptionalDateRange(query: PendingConversionCountQueryDto): { dateFrom?: string; dateTo?: string } {
+  private normalizeOptionalDateRange(query: PendingConversionCountQueryDto): {
+    dateFrom?: string;
+    dateTo?: string;
+  } {
     if (query.date_from || query.date_to) {
       return this.normalizeRequiredDateRange(
         query.date_from ?? query.date_to ?? '',
@@ -131,15 +155,27 @@ export class AttendanceToWorkLogService {
     return {};
   }
 
-  private normalizeRequiredDateRange(dateFromInput: string, dateToInput: string): { dateFrom: string; dateTo: string } {
+  private normalizeRequiredDateRange(
+    dateFromInput: string,
+    dateToInput: string,
+  ): { dateFrom: string; dateTo: string } {
     const dateFrom = this.normalizeDateString(dateFromInput);
     const dateTo = this.normalizeDateString(dateToInput);
-    if (!dateFrom || !dateTo) throw new BadRequestException('請提供有效日期範圍');
-    if (dateFrom > dateTo) throw new BadRequestException('開始日期不可晚於結束日期');
+    if (!dateFrom || !dateTo)
+      throw new BadRequestException('請提供有效日期範圍');
+    if (dateFrom > dateTo)
+      throw new BadRequestException('開始日期不可晚於結束日期');
 
-    const days = Math.floor((this.businessDateToDbDate(dateTo).getTime() - this.businessDateToDbDate(dateFrom).getTime()) / 86_400_000) + 1;
+    const days =
+      Math.floor(
+        (this.businessDateToDbDate(dateTo).getTime() -
+          this.businessDateToDbDate(dateFrom).getTime()) /
+          86_400_000,
+      ) + 1;
     if (days > MAX_CONVERSION_RANGE_DAYS) {
-      throw new BadRequestException(`日期範圍不可超過 ${MAX_CONVERSION_RANGE_DAYS} 天`);
+      throw new BadRequestException(
+        `日期範圍不可超過 ${MAX_CONVERSION_RANGE_DAYS} 天`,
+      );
     }
 
     return { dateFrom, dateTo };
@@ -154,7 +190,9 @@ export class AttendanceToWorkLogService {
     return normalized;
   }
 
-  private async getEmployeeNameMap(employeeIds: number[]): Promise<Map<number, string>> {
+  private async getEmployeeNameMap(
+    employeeIds: number[],
+  ): Promise<Map<number, string>> {
     const uniqueEmployeeIds = Array.from(new Set(employeeIds));
     if (uniqueEmployeeIds.length === 0) return new Map<number, string>();
 
@@ -166,20 +204,28 @@ export class AttendanceToWorkLogService {
     return new Map(
       employees.map((employee) => [
         employee.id,
-        employee.name_zh || employee.name_en || employee.emp_code || `員工 #${employee.id}`,
+        employee.name_zh ||
+          employee.name_en ||
+          employee.emp_code ||
+          `員工 #${employee.id}`,
       ]),
     );
   }
 
-  private async getAttendanceGroups(dateFrom?: string, dateTo?: string, employeeId?: number): Promise<AttendanceGroup[]> {
-    const timestampFilter = dateFrom && dateTo
-      ? {
-          timestamp: {
-            gte: this.hongKongDateStartToUtc(dateFrom),
-            lt: this.hongKongDateAfterEndToUtc(dateTo),
-          },
-        }
-      : {};
+  private async getAttendanceGroups(
+    dateFrom?: string,
+    dateTo?: string,
+    employeeId?: number,
+  ): Promise<AttendanceGroup[]> {
+    const timestampFilter =
+      dateFrom && dateTo
+        ? {
+            timestamp: {
+              gte: this.hongKongDateStartToUtc(dateFrom),
+              lt: this.hongKongDateAfterEndToUtc(dateTo),
+            },
+          }
+        : {};
     const records = await this.prisma.employeeAttendance.findMany({
       where: {
         ...timestampFilter,
@@ -190,25 +236,41 @@ export class AttendanceToWorkLogService {
 
     const groupMap = new Map<string, AttendanceGroup>();
     for (const record of records) {
-      const businessDate = this.timestampToHongKongBusinessDate(record.timestamp);
+      const businessDate = this.timestampToHongKongBusinessDate(
+        record.timestamp,
+      );
       const key = this.groupKey(record.employee_id, businessDate);
-      const group = groupMap.get(key) ?? { employeeId: record.employee_id, businessDate, records: [] };
+      const group = groupMap.get(key) ?? {
+        employeeId: record.employee_id,
+        businessDate,
+        records: [],
+      };
       group.records.push(record);
-      if (record.type === 'clock_in' && (!group.clockIn || record.timestamp < group.clockIn.timestamp)) {
+      if (
+        record.type === 'clock_in' &&
+        (!group.clockIn || record.timestamp < group.clockIn.timestamp)
+      ) {
         group.clockIn = record;
       }
-      if (record.type === 'clock_out' && (!group.clockOut || record.timestamp > group.clockOut.timestamp)) {
+      if (
+        record.type === 'clock_out' &&
+        (!group.clockOut || record.timestamp > group.clockOut.timestamp)
+      ) {
         group.clockOut = record;
       }
       groupMap.set(key, group);
     }
 
-    return Array.from(groupMap.values()).sort((a, b) =>
-      a.businessDate.localeCompare(b.businessDate) || a.employeeId - b.employeeId,
+    return Array.from(groupMap.values()).sort(
+      (a, b) =>
+        a.businessDate.localeCompare(b.businessDate) ||
+        a.employeeId - b.employeeId,
     );
   }
 
-  private async getExistingWorkLogKeys(groups: AttendanceGroup[]): Promise<Set<string>> {
+  private async getExistingWorkLogKeys(
+    groups: AttendanceGroup[],
+  ): Promise<Set<string>> {
     if (groups.length === 0) return new Set<string>();
     const orConditions = groups.map((group) => ({
       employee_id: group.employeeId,
@@ -224,8 +286,16 @@ export class AttendanceToWorkLogService {
 
     return new Set(
       workLogs
-        .filter((workLog) => workLog.employee_id !== null && workLog.scheduled_date !== null)
-        .map((workLog) => this.groupKey(workLog.employee_id as number, this.dbDateToBusinessDate(workLog.scheduled_date as Date))),
+        .filter(
+          (workLog) =>
+            workLog.employee_id !== null && workLog.scheduled_date !== null,
+        )
+        .map((workLog) =>
+          this.groupKey(
+            workLog.employee_id as number,
+            this.dbDateToBusinessDate(workLog.scheduled_date as Date),
+          ),
+        ),
     );
   }
 
@@ -247,28 +317,42 @@ export class AttendanceToWorkLogService {
     }
   }
 
-  private buildConversionItemDetails(group: AttendanceGroup, employeeNames: Map<number, string>): Omit<ConversionItemResult, 'status' | 'reason' | 'work_log_id'> {
+  private buildConversionItemDetails(
+    group: AttendanceGroup,
+    employeeNames: Map<number, string>,
+  ): Omit<ConversionItemResult, 'status' | 'reason' | 'work_log_id'> {
     return {
       employee_id: group.employeeId,
-      employee_name: employeeNames.get(group.employeeId) ?? `員工 #${group.employeeId}`,
+      employee_name:
+        employeeNames.get(group.employeeId) ?? `員工 #${group.employeeId}`,
       scheduled_date: group.businessDate,
-      start_time: group.clockIn ? this.formatHongKongTime(group.clockIn.timestamp) : null,
-      end_time: group.clockOut ? this.formatHongKongTime(group.clockOut.timestamp) : null,
+      start_time: group.clockIn
+        ? this.formatHongKongTime(group.clockIn.timestamp)
+        : null,
+      end_time: group.clockOut
+        ? this.formatHongKongTime(group.clockOut.timestamp)
+        : null,
       gps_location: group.clockIn?.address ?? null,
     };
   }
 
-  private buildWorkLogCreateInput(group: AttendanceGroup): Prisma.WorkLogUncheckedCreateInput {
+  private buildWorkLogCreateInput(
+    group: AttendanceGroup,
+  ): Prisma.WorkLogUncheckedCreateInput {
     const clockIn = group.clockIn;
-    if (!clockIn) throw new BadRequestException('沒有上班打卡，不能建立工作日誌');
+    if (!clockIn)
+      throw new BadRequestException('沒有上班打卡，不能建立工作日誌');
 
     return {
       employee_id: group.employeeId,
       scheduled_date: this.businessDateToDbDate(group.businessDate),
       start_time: this.formatHongKongTime(clockIn.timestamp),
-      end_time: group.clockOut ? this.formatHongKongTime(group.clockOut.timestamp) : null,
+      end_time: group.clockOut
+        ? this.formatHongKongTime(group.clockOut.timestamp)
+        : null,
       start_location: clockIn.address ?? null,
       remarks: this.buildRemarks(group),
+      service_type: clockIn.service_type ?? null,
       is_mid_shift: group.records.some((record) => record.is_mid_shift),
       source: 'attendance',
       status: 'editing',
@@ -290,7 +374,9 @@ export class AttendanceToWorkLogService {
   }
 
   private timestampToHongKongBusinessDate(timestamp: Date): string {
-    return this.formatUtcDateParts(new Date(timestamp.getTime() + HONG_KONG_OFFSET_MS));
+    return this.formatUtcDateParts(
+      new Date(timestamp.getTime() + HONG_KONG_OFFSET_MS),
+    );
   }
 
   private dbDateToBusinessDate(value: Date): string {
@@ -302,11 +388,17 @@ export class AttendanceToWorkLogService {
   }
 
   private hongKongDateStartToUtc(date: string): Date {
-    return new Date(this.businessDateToDbDate(date).getTime() - HONG_KONG_OFFSET_MS);
+    return new Date(
+      this.businessDateToDbDate(date).getTime() - HONG_KONG_OFFSET_MS,
+    );
   }
 
   private hongKongDateAfterEndToUtc(date: string): Date {
-    return new Date(this.businessDateToDbDate(date).getTime() + 86_400_000 - HONG_KONG_OFFSET_MS);
+    return new Date(
+      this.businessDateToDbDate(date).getTime() +
+        86_400_000 -
+        HONG_KONG_OFFSET_MS,
+    );
   }
 
   private formatHongKongTime(timestamp: Date): string {

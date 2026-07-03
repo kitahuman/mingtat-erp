@@ -53,7 +53,9 @@ export class CompanyClockService {
 
     // Check company clock permission (admin always allowed)
     if (user.role !== 'admin' && !user.user_can_company_clock) {
-      throw new UnauthorizedException('此帳號沒有公司打卡權限，請聯繫管理員開通');
+      throw new UnauthorizedException(
+        '此帳號沒有公司打卡權限，請聯繫管理員開通',
+      );
     }
 
     // Update last login
@@ -171,7 +173,10 @@ export class CompanyClockService {
       }
     }
     // Sort recent employees by their recency order
-    recentEmps.sort((a, b) => recentEmployeeIds.indexOf(a.id) - recentEmployeeIds.indexOf(b.id));
+    recentEmps.sort(
+      (a, b) =>
+        recentEmployeeIds.indexOf(a.id) - recentEmployeeIds.indexOf(b.id),
+    );
     const sorted = [...recentEmps, ...otherEmps];
 
     // Paginate
@@ -200,7 +205,12 @@ export class CompanyClockService {
   async getEmployeePhoto(employeeId: number) {
     const employee = await this.prisma.employee.findUnique({
       where: { id: employeeId },
-      select: { id: true, name_zh: true, name_en: true, employee_photo_base64: true },
+      select: {
+        id: true,
+        name_zh: true,
+        name_en: true,
+        employee_photo_base64: true,
+      },
     });
     if (!employee) throw new NotFoundException('找不到員工');
     return {
@@ -239,6 +249,7 @@ export class CompanyClockService {
     remarks?: string;
     is_mid_shift?: boolean;
     work_notes?: string;
+    service_type?: string;
   }) {
     const employee = await this.prisma.employee.findUnique({
       where: { id: data.employee_id },
@@ -296,7 +307,8 @@ export class CompanyClockService {
     --- */
 
     // is_mid_shift only applies to clock_out
-    const isMidShift = data.type === 'clock_out' ? (data.is_mid_shift ?? false) : false;
+    const isMidShift =
+      data.type === 'clock_out' ? (data.is_mid_shift ?? false) : false;
 
     // Create attendance record
     const attendance = await this.prisma.employeeAttendance.create({
@@ -314,6 +326,7 @@ export class CompanyClockService {
         remarks: data.remarks,
         is_mid_shift: isMidShift,
         work_notes: data.work_notes,
+        service_type: data.service_type,
       },
     });
 
@@ -334,7 +347,9 @@ export class CompanyClockService {
   }
 
   // ── Check if temporary employee name already exists ─────────────
-  async checkTemporaryEmployeeName(name_zh: string): Promise<{ exists: boolean }> {
+  async checkTemporaryEmployeeName(
+    name_zh: string,
+  ): Promise<{ exists: boolean }> {
     const existing = await this.prisma.employee.findFirst({
       where: {
         name_zh: { equals: name_zh, mode: 'insensitive' },
@@ -360,6 +375,7 @@ export class CompanyClockService {
     latitude?: number;
     longitude?: number;
     address?: string;
+    service_type?: string;
   }) {
     // Check for duplicate name (case-insensitive and trimmed)
     const trimmedName = data.name_zh.trim();
@@ -371,7 +387,9 @@ export class CompanyClockService {
       },
     });
     if (existing) {
-      throw new BadRequestException(`已有同名活躍臨時員工「${trimmedName}」，請更改名稱或從列表選擇`);
+      throw new BadRequestException(
+        `已有同名活躍臨時員工「${trimmedName}」，請更改名稱或從列表選擇`,
+      );
     }
 
     // Create the temporary employee
@@ -389,7 +407,8 @@ export class CompanyClockService {
     });
 
     const clockType = data.type || 'clock_in';
-    const isMidShift = clockType === 'clock_out' ? (data.is_mid_shift ?? false) : false;
+    const isMidShift =
+      clockType === 'clock_out' ? (data.is_mid_shift ?? false) : false;
 
     // Auto clock-in/out for the new temporary employee
     const attendance = await this.prisma.employeeAttendance.create({
@@ -405,6 +424,7 @@ export class CompanyClockService {
         address: data.address,
         is_mid_shift: isMidShift,
         work_notes: data.work_notes || null,
+        service_type: data.service_type,
       },
     });
 
@@ -418,7 +438,10 @@ export class CompanyClockService {
         },
       });
     } catch (e) {
-      console.error('Auto salary setting creation error for temporary employee:', e);
+      console.error(
+        'Auto salary setting creation error for temporary employee:',
+        e,
+      );
     }
 
     return {

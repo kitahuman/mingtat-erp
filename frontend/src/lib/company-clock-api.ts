@@ -23,7 +23,10 @@ companyClockAxios.interceptors.response.use(
     if (error.response?.status === 401) {
       Cookies.remove('cc_token');
       Cookies.remove('cc_user');
-      if (typeof window !== 'undefined' && !window.location.pathname.includes('/company-clock/login')) {
+      if (
+        typeof window !== 'undefined' &&
+        !window.location.pathname.includes('/company-clock/login')
+      ) {
         window.location.href = '/company-clock/login';
       }
     }
@@ -54,11 +57,15 @@ export const companyClockApi = {
 
   // Update employee standard photo
   updateEmployeePhoto: (id: number, photoBase64: string) =>
-    companyClockAxios.put(`/company-clock/employees/${id}/photo`, { photo_base64: photoBase64 }),
+    companyClockAxios.put(`/company-clock/employees/${id}/photo`, {
+      photo_base64: photoBase64,
+    }),
 
   // Check if temporary employee name already exists
   checkTemporaryEmployeeName: (name_zh: string) =>
-    companyClockAxios.get('/company-clock/temporary-employee/check-name', { params: { name_zh } }),
+    companyClockAxios.get('/company-clock/temporary-employee/check-name', {
+      params: { name_zh },
+    }),
 
   // Clock in/out with face recognition
   clock: (data: {
@@ -71,6 +78,7 @@ export const companyClockApi = {
     remarks?: string;
     is_mid_shift?: boolean;
     work_notes?: string;
+    service_type?: string;
   }) => companyClockAxios.post('/company-clock/clock', data),
 
   // Create temporary employee
@@ -87,6 +95,7 @@ export const companyClockApi = {
     latitude?: number;
     longitude?: number;
     address?: string;
+    service_type?: string;
   }) => companyClockAxios.post('/company-clock/temporary-employee', data),
 
   // Today's attendance records
