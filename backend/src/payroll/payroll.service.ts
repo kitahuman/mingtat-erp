@@ -624,7 +624,10 @@ export class PayrollService {
           gte: new Date(payroll.date_from),
           lte: new Date(payroll.date_to),
         },
-        service_type: { not: '請假/休息' },
+        OR: [
+        { service_type: { not: '請假/休息' } },
+        { service_type: null },
+      ],
         deleted_at: null,
       };
       if (payroll.company_id) {
@@ -756,7 +759,10 @@ export class PayrollService {
     const wlWhere: any = {
       employee_id: emp.id,
       scheduled_date: { gte: new Date(date_from), lte: new Date(date_to) },
-      service_type: { not: '請假/休息' },
+      OR: [
+        { service_type: { not: '請假/休息' } },
+        { service_type: null },
+      ],
       deleted_at: null,
     };
 
@@ -922,7 +928,10 @@ export class PayrollService {
     const wlWhere: Prisma.WorkLogWhereInput = {
       employee_id: emp.id,
       scheduled_date: { gte: new Date(date_from), lte: new Date(date_to) },
-      service_type: { not: '請假/休息' },
+      OR: [
+        { service_type: { not: '請假/休息' } },
+        { service_type: null },
+      ],
       deleted_at: null,
     };
     // Do not filter work logs by requested company_id here. The requestedCompanyId
@@ -1316,7 +1325,10 @@ export class PayrollService {
     const wlWhere: any = {
       employee_id: emp.id,
       scheduled_date: { gte: new Date(date_from), lte: new Date(date_to) },
-      service_type: { not: '請假/休息' },
+      OR: [
+        { service_type: { not: '請假/休息' } },
+        { service_type: null },
+      ],
       deleted_at: null,
     };
 
@@ -1910,7 +1922,10 @@ export class PayrollService {
     const wlWhere: any = {
       employee_id: emp.id,
       scheduled_date: { gte: new Date(dateFrom), lte: new Date(dateTo) },
-      service_type: { not: '請假/休息' },
+      OR: [
+        { service_type: { not: '請假/休息' } },
+        { service_type: null },
+      ],
       deleted_at: null,
     };
 
