@@ -1320,6 +1320,7 @@ export default function ContractManagementTabs({
               <th className="px-2 py-1.5 text-left w-24">項目編號</th>
               <th className="px-2 py-1.5 text-left">項目名稱</th>
               <th className="px-2 py-1.5 text-left">描述</th>
+              <th className="px-2 py-1.5 text-left w-32">所屬分部</th>
               <th className="px-2 py-1.5 text-right w-24">數量</th>
               <th className="px-2 py-1.5 text-center w-16">單位</th>
               <th className="px-2 py-1.5 text-right w-28">單價</th>
@@ -1340,6 +1341,16 @@ export default function ContractManagementTabs({
                   </td>
                   <td className="px-2 py-1">
                     {isEditing ? <input value={editBqForm.description || ''} onChange={e => setEditBqForm({ ...editBqForm, description: e.target.value })} className="w-full px-1 py-0.5 text-sm border rounded" /> : item.description}
+                  </td>
+                  <td className="px-2 py-1">
+                    {isEditing ? (
+                      <select value={editBqForm.section_id || ''} onChange={e => setEditBqForm({ ...editBqForm, section_id: e.target.value ? Number(e.target.value) : null })} className="w-full px-1 py-0.5 text-sm border rounded">
+                        <option value="">未分類</option>
+                        {sections.map((s: any) => <option key={s.id} value={s.id}>{s.section_code} - {s.section_name}</option>)}
+                      </select>
+                    ) : (
+                      sections.find((s: any) => s.id === item.section_id)?.section_name || '未分類'
+                    )}
                   </td>
                   <td className="px-2 py-1 text-right">
                     {isEditing ? <input type="number" step="0.0001" value={editBqForm.quantity ?? ''} onChange={e => setEditBqForm({ ...editBqForm, quantity: e.target.value })} className="w-full px-1 py-0.5 text-sm border rounded text-right" /> : <span className="font-mono">{Number(item.quantity).toLocaleString()}</span>}
