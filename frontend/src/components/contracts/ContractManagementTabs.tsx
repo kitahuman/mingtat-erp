@@ -539,7 +539,19 @@ export default function ContractManagementTabs({
       {activeTab === 'contract-info' && (
         <>
           <div className="card mb-6">
-            <h2 className="text-lg font-bold text-gray-900 mb-4">合約資料</h2>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-bold text-gray-900">合約資料</h2>
+              <div className="flex gap-2">
+                {editing ? (
+                  <>
+                    <button onClick={() => { setForm({ ...contract }); setEditing(false); }} className="btn-secondary text-sm">取消</button>
+                    <button onClick={handleSave} className="btn-primary text-sm">儲存</button>
+                  </>
+                ) : (
+                  <button onClick={() => setEditing(true)} className="btn-primary text-sm">編輯</button>
+                )}
+              </div>
+            </div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {editing ? (
                 <>
@@ -883,8 +895,20 @@ export default function ContractManagementTabs({
         <>
           <div className="card mb-6">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-bold text-gray-900">按金管理</h2>
-              <span className="text-xs text-gray-500">按金金額可由合約金額 × 按金比例自動計算，亦可手動覆寫</span>
+              <div>
+                <h2 className="text-lg font-bold text-gray-900">按金管理</h2>
+                <span className="text-xs text-gray-500">按金金額可由合約金額 × 按金比例自動計算，亦可手動覆寫</span>
+              </div>
+              <div className="flex gap-2">
+                {editing ? (
+                  <>
+                    <button onClick={() => { setForm({ ...contract }); setEditing(false); }} className="btn-secondary text-sm">取消</button>
+                    <button onClick={handleSave} className="btn-primary text-sm">儲存</button>
+                  </>
+                ) : (
+                  <button onClick={() => setEditing(true)} className="btn-primary text-sm">編輯</button>
+                )}
+              </div>
             </div>
             {editing ? (
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
