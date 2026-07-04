@@ -416,18 +416,18 @@ export default function IpaDetailPage() {
     subtotal?: boolean;
   };
   const summaryRows: SummaryRow[] = [
-    { no: '1.1)', label: 'VALUE OF MEASURED WORKDONE', app: bqWorkDone, prev: prevBqWorkDone },
-    { no: '1.2)', label: 'VALUE OF VARIATION', app: voWorkDone, prev: prevVoWorkDone },
-    { no: '1.3)', label: 'Daily', app: null, prev: null },
-    { no: '', label: 'TOTAL VALUE OF WORKDONE  (1.1 to 1.3):', app: totalWorkDone, prev: prevTotalWorkDone, subtotal: true },
-    { no: '2.1)', label: `Advance payment (${pct(advancePaymentRate)} of Contract Sum)`, app: hasAdvance ? appAdvance : null, prev: hasAdvance ? prevAdvancePayment : null },
-    { no: '2.2)', label: `Release of Advance payment (${pct(advancePaymentRate)} of Workdone)`, app: hasAdvance ? appRelease : null, prev: hasAdvance ? prevRelease : null },
-    { no: '', label: 'SUBTOTAL  (2.1 to 2.2):', app: hasAdvance ? appAdvance + appRelease : null, prev: hasAdvance ? prevAdvancePayment + prevRelease : null, subtotal: true },
-    { no: '3.1)', label: 'Retention', app: retention > 0 ? -retention : null, prev: prevRetention > 0 ? -prevRetention : null },
-    { no: '3.2)', label: 'LESS RETENTION', app: null, prev: null },
-    { no: '', label: 'SUBTOTAL  (3.1 to 3.2):', app: retention > 0 ? -retention : null, prev: prevRetention > 0 ? -prevRetention : null, subtotal: true },
-    { no: '4)', label: 'Less Contra Charges', app: contraCharges > 0 ? -contraCharges : null, prev: prevContraCharges > 0 ? -prevContraCharges : null },
-    { no: '', label: 'SUBTOTAL  (4):', app: contraCharges > 0 ? -contraCharges : null, prev: prevContraCharges > 0 ? -prevContraCharges : null, subtotal: true },
+    { no: '1.1)', label: '已完成工程價値 Value of Measured Workdone', app: bqWorkDone, prev: prevBqWorkDone },
+    { no: '1.2)', label: '更改工程價値 Value of Variation', app: voWorkDone, prev: prevVoWorkDone },
+    { no: '1.3)', label: '日工 Daily', app: null, prev: null },
+    { no: '', label: '工程總値 Total Value of Workdone  (1.1 to 1.3):', app: totalWorkDone, prev: prevTotalWorkDone, subtotal: true },
+    { no: '2.1)', label: `預付款（合約金額${pct(advancePaymentRate)}）Advance Payment (${pct(advancePaymentRate)} of Contract Sum)`, app: hasAdvance ? appAdvance : null, prev: hasAdvance ? prevAdvancePayment : null },
+    { no: '2.2)', label: `扣回預付款（已完工程${pct(advancePaymentRate)}）Release of Advance Payment (${pct(advancePaymentRate)} of Workdone)`, app: hasAdvance ? appRelease : null, prev: hasAdvance ? prevRelease : null },
+    { no: '', label: '小計 Subtotal  (2.1 to 2.2):', app: hasAdvance ? appAdvance + appRelease : null, prev: hasAdvance ? prevAdvancePayment + prevRelease : null, subtotal: true },
+    { no: '3.1)', label: '保留金 Retention', app: retention > 0 ? -retention : null, prev: prevRetention > 0 ? -prevRetention : null },
+    { no: '3.2)', label: '扣減保留金 Less Retention', app: null, prev: null },
+    { no: '', label: '小計 Subtotal  (3.1 to 3.2):', app: retention > 0 ? -retention : null, prev: prevRetention > 0 ? -prevRetention : null, subtotal: true },
+    { no: '4)', label: '扣減對沖費用 Less Contra Charges', app: contraCharges > 0 ? -contraCharges : null, prev: prevContraCharges > 0 ? -prevContraCharges : null },
+    { no: '', label: '小計 Subtotal  (4):', app: contraCharges > 0 ? -contraCharges : null, prev: prevContraCharges > 0 ? -prevContraCharges : null, subtotal: true },
   ];
 
   // AMOUNT DUE = outstanding total: (workdone + advance section - retention - contra) app-minus-prev
@@ -769,10 +769,10 @@ export default function IpaDetailPage() {
           {/* ─── Section 1: Payment Summary ─── */}
           <div className="card">
             <div className="flex flex-wrap items-start justify-between gap-4 mb-4">
-              <h2 className="text-lg font-bold text-gray-900">Payment Summary 付款匯總</h2>
+              <h2 className="text-lg font-bold text-gray-900">付款匯總 Payment Summary</h2>
               <div className="text-sm text-gray-500 text-right">
-                <div>Payment No. <span className="font-semibold text-gray-900">{ipa.pa_no}</span> ・ Interim</div>
-                <div>As at {fmtDate(ipa.period_to)} ・ Subcontract Sum <span className="font-semibold text-gray-900 font-mono">{fmtNum(contractSum)}</span></div>
+                <div>付款期數 Payment No. <span className="font-semibold text-gray-900">{ipa.pa_no}</span> ・ 中期 Interim</div>
+                <div>截止日期 As at {fmtDate(ipa.period_to)} ・ 分判合約金額 Subcontract Sum <span className="font-semibold text-gray-900 font-mono">{fmtNum(contractSum)}</span></div>
               </div>
             </div>
             <div className="overflow-x-auto">
@@ -781,9 +781,9 @@ export default function IpaDetailPage() {
                   <tr className="bg-gray-100 text-gray-600">
                     <th className="px-3 py-2 text-left font-medium w-12"></th>
                     <th className="px-3 py-2 text-left font-medium"></th>
-                    <th className="px-3 py-2 text-right font-medium w-40">Payment Application</th>
-                    <th className="px-3 py-2 text-right font-medium w-40">Previously Certified</th>
-                    <th className="px-3 py-2 text-right font-medium w-44">Outstanding Amount</th>
+                    <th className="px-3 py-2 text-right font-medium w-40">付款申請<br/><span className="font-normal text-xs">Payment Application</span></th>
+                    <th className="px-3 py-2 text-right font-medium w-40">已認證<br/><span className="font-normal text-xs">Previously Certified</span></th>
+                    <th className="px-3 py-2 text-right font-medium w-44">未付金額<br/><span className="font-normal text-xs">Outstanding Amount</span></th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
@@ -813,7 +813,7 @@ export default function IpaDetailPage() {
                   {/* Amount due */}
                   <tr className="font-bold text-gray-900">
                     <td className="px-3 pt-5 pb-2" colSpan={3}></td>
-                    <td className="px-3 pt-5 pb-2 text-right whitespace-nowrap">AMOUNT DUE :</td>
+                    <td className="px-3 pt-5 pb-2 text-right whitespace-nowrap">應付金額 Amount Due :</td>
                     <td className="px-3 pt-5 pb-2 text-right font-mono bg-blue-50 border-t-2 border-b-4 border-double border-blue-300 text-blue-900">{fmtNum(amountDue)}</td>
                   </tr>
                 </tbody>
@@ -832,19 +832,19 @@ export default function IpaDetailPage() {
                   <thead>
                     <tr className="bg-gray-100 text-gray-600">
                       <th colSpan={6} className="px-3 py-1.5 border-b border-r border-gray-300"></th>
-                      <th colSpan={4} className="px-3 py-1.5 text-center font-semibold border-b border-gray-300 bg-blue-50 text-blue-800">Applied Workdone</th>
+                      <th colSpan={4} className="px-3 py-1.5 text-center font-semibold border-b border-gray-300 bg-blue-50 text-blue-800">已申請工程量 Applied Workdone</th>
                     </tr>
                     <tr className="bg-gray-100 text-gray-600">
-                      <th className="px-3 py-2 text-center font-medium w-14">Item</th>
-                      <th className="px-3 py-2 text-left font-medium">Description</th>
-                      <th className="px-3 py-2 text-right font-medium w-20">Qty</th>
-                      <th className="px-3 py-2 text-center font-medium w-14">Unit</th>
-                      <th className="px-3 py-2 text-right font-medium w-24">Rate</th>
-                      <th className="px-3 py-2 text-right font-medium w-28 border-r border-gray-300">Amount</th>
-                      <th className="px-3 py-2 text-right font-medium w-24 bg-blue-50/60">Previous</th>
-                      <th className="px-3 py-2 text-right font-medium w-24 bg-blue-50/60">Current</th>
-                      <th className="px-3 py-2 text-right font-medium w-28 bg-blue-50/60">Accumulated</th>
-                      <th className="px-3 py-2 text-right font-medium w-32 bg-blue-50/60">Amount (HK$)</th>
+                      <th className="px-3 py-2 text-center font-medium w-14">項目<br/><span className="font-normal text-xs">Item</span></th>
+                      <th className="px-3 py-2 text-left font-medium">描述<br/><span className="font-normal text-xs">Description</span></th>
+                      <th className="px-3 py-2 text-right font-medium w-20">數量<br/><span className="font-normal text-xs">Qty</span></th>
+                      <th className="px-3 py-2 text-center font-medium w-14">單位<br/><span className="font-normal text-xs">Unit</span></th>
+                      <th className="px-3 py-2 text-right font-medium w-24">單價<br/><span className="font-normal text-xs">Rate</span></th>
+                      <th className="px-3 py-2 text-right font-medium w-28 border-r border-gray-300">金額<br/><span className="font-normal text-xs">Amount</span></th>
+                      <th className="px-3 py-2 text-right font-medium w-24 bg-blue-50/60">上期<br/><span className="font-normal text-xs">Previous</span></th>
+                      <th className="px-3 py-2 text-right font-medium w-24 bg-blue-50/60">本期<br/><span className="font-normal text-xs">Current</span></th>
+                      <th className="px-3 py-2 text-right font-medium w-28 bg-blue-50/60">累計<br/><span className="font-normal text-xs">Accumulated</span></th>
+                      <th className="px-3 py-2 text-right font-medium w-32 bg-blue-50/60">金額<br/><span className="font-normal text-xs">Amount (HK$)</span></th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
