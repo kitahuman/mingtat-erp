@@ -203,6 +203,9 @@ export default function ProjectDetailPage() {
               <button onClick={() => handleStatusChange('cancelled')} className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 text-sm">取消</button>
             </>
           )}
+          {(project?.status === 'cancelled' || project?.status === 'completed') && (
+            <button onClick={() => handleStatusChange('active')} className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 text-sm">恢復進行中</button>
+          )}
           {editing ? (
             <>
               <button onClick={() => { setForm({ ...project }); setEditing(false); }} className="btn-secondary">取消</button>
