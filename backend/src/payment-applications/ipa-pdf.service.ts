@@ -150,8 +150,9 @@ export class IpaPdfService {
     const prevTotalWorkDone = prevBqWorkDone + prevVoWorkDone;
     const prevRetention = toNum(lastPrior?.retention_amount);
     const prevContraCharges = toNum(lastPrior?.other_deductions);
-    const prevAdvancePayment =
-      advancePaymentAmount > 0 && lastPrior ? advancePaymentAmount : 0;
+    // Advance Payment is a one-off full payment at contract start;
+    // Previously Certified is always the full advance amount (not dependent on lastPrior)
+    const prevAdvancePayment = advancePaymentAmount > 0 ? advancePaymentAmount : 0;
 
     const bqWorkDone = toNum(ipa.bq_work_done);
     const voWorkDone = toNum(ipa.vo_work_done);

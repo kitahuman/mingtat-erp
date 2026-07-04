@@ -91,7 +91,9 @@ export default function IpaPrintPage() {
   const prevRetention = Number(lastPrior?.retention_amount || 0);
   const prevContraCharges = Number(lastPrior?.other_deductions || 0);
   // Advance payment principal is certified in full once granted (before/at first IPA)
-  const prevAdvancePayment = advancePaymentAmount > 0 && lastPrior ? advancePaymentAmount : 0;
+  // Advance Payment is a one-off full payment at contract start;
+  // Previously Certified is always the full advance amount (not dependent on lastPrior)
+  const prevAdvancePayment = advancePaymentAmount > 0 ? advancePaymentAmount : 0;
 
   // ═══════════════════════════════════════════════════════════
   // Payment Application (cumulative, current IPA) values
