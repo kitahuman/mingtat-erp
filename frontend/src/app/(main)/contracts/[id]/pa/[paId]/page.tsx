@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import DateInput from '@/components/DateInput';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -11,6 +11,23 @@ import { useAuth } from '@/lib/auth';
 
 const fmt$ = (v: any) => `$${Number(v || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const fmtQty = (v: any) => { const n = Number(v); return n % 1 === 0 ? n.toFixed(0) : n.toFixed(4).replace(/0+$/, ''); };
+
+// Accounting style: 1,234,567.89 / (1,234.56) for negative / "-" for zero
+const fmtNum = (v: any): string => {
+  const n = Number(v || 0);
+  if (Math.abs(n) < 0.005) return '-';
+  const abs = Math.abs(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return n < 0 ? `(${abs})` : abs;
+};
+const fmtQty2 = (v: any): string => {
+  const n = Number(v || 0);
+  if (Math.abs(n) < 0.00005) return '-';
+  return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+};
+const pct = (rate: number): string => {
+  const p = rate * 100;
+  return p % 1 === 0 ? `${p.toFixed(0)}%` : `${p.toFixed(1)}%`;
+};
 
 const IPA_STATUS_LABELS: Record<string, string> = {
   draft: '草稿', submitted: '已提交', certified: '已認證', partially_paid: '部分收款', paid: '已收款', void: '已作廢',
@@ -353,30 +370,92 @@ export default function IpaDetailPage() {
     });
   }
 
-  const advancePaymentBalance = Math.max(0, advancePaymentAmount - cumulativeAdvanceRelease);
   const currentDueBeforeAdvanceRelease = Number(ipa.client_current_due ?? ipa.current_due);
   const currentDueAfterAdvanceRelease = Math.max(0, currentDueBeforeAdvanceRelease - currentAdvanceRelease);
 
-  // ── Summary rows (A~K + advance payment rows) ──
-  const summaryRows = [
-    { code: 'A', label: 'BQ 項目完工金額（累計）', value: Number(ipa.bq_work_done), bold: false, negative: false },
-    { code: 'B', label: '變更指令完工金額（累計）', value: Number(ipa.vo_work_done), bold: false, negative: false },
-    { code: 'C', label: '累計完工總額 (A + B)', value: Number(ipa.cumulative_work_done), bold: true, negative: false },
-    { code: 'D', label: '工地物料', value: Number(ipa.materials_on_site), bold: false, negative: false },
-    { code: 'E', label: '累計總額 (C + D)', value: Number(ipa.gross_amount), bold: true, negative: false },
-    { code: 'F', label: '保留金', value: Number(ipa.retention_amount), bold: false, negative: true },
-    { code: 'G', label: '扣除保留金後 (E - F)', value: Number(ipa.after_retention), bold: true, negative: false },
-    { code: 'H', label: '其他扣款', value: Number(ipa.other_deductions), bold: false, negative: true },
-    { code: 'I', label: '認證金額 (G - H)', value: Number(ipa.certified_amount), bold: true, negative: false, highlight: true },
-    { code: 'J', label: '上期認證金額', value: Number(ipa.prev_certified_amount), bold: false, negative: true },
-    { code: 'K', label: '當期應付金額 (I - J)', value: Number(ipa.current_due), bold: true, negative: false, highlight: true },
-    ...(advancePaymentAmount > 0 ? [
-      { code: 'L', label: 'Advance Payment（按金金額）', value: advancePaymentAmount, bold: false, negative: false },
-      { code: 'M', label: 'Release of Advance Payment（本期按金扣回）', value: currentAdvanceRelease, bold: false, negative: true },
-      { code: 'N', label: '按金餘額（按金金額 - 累計已扣回）', value: advancePaymentBalance, bold: true, negative: false },
-      { code: 'O', label: '調整後當期應付金額 (K - M)', value: currentDueAfterAdvanceRelease, bold: true, negative: false, highlight: true },
-    ] : []),
+  // ═══════════════════════════════════════════════════════════
+  // Previously certified breakdowns (from the latest prior certified/paid IPA;
+  // amounts on IPAs are cumulative, so the last prior IPA carries the totals)
+  // ═══════════════════════════════════════════════════════════
+  const priorIpas = (ipaList || [])
+    .filter((row: any) =>
+      row.status !== 'void' &&
+      Number(row.pa_no || 0) < Number(ipa.pa_no || 0) &&
+      ['certified', 'paid'].includes(row.status))
+    .sort((a: any, b: any) => Number(a.pa_no || 0) - Number(b.pa_no || 0));
+  const lastPrior = priorIpas.length > 0 ? priorIpas[priorIpas.length - 1] : null;
+  const prevAdvanceRelease = cumulativeAdvanceRelease - currentAdvanceRelease;
+
+  const prevBqWorkDone = Number(lastPrior?.bq_work_done || 0);
+  const prevVoWorkDone = Number(lastPrior?.vo_work_done || 0);
+  const prevTotalWorkDone = prevBqWorkDone + prevVoWorkDone;
+  const prevRetention = Number(lastPrior?.retention_amount || 0);
+  const prevContraCharges = Number(lastPrior?.other_deductions || 0);
+  // Advance payment principal is certified in full once granted (before/at first IPA)
+  const prevAdvancePayment = advancePaymentAmount > 0 && lastPrior ? advancePaymentAmount : 0;
+
+  // Payment Application (cumulative, current IPA) values
+  const bqWorkDone = Number(ipa.bq_work_done || 0);
+  const voWorkDone = Number(ipa.vo_work_done || 0);
+  const totalWorkDone = bqWorkDone + voWorkDone;
+  const retention = Number(ipa.retention_amount || 0);
+  const contraCharges = Number(ipa.other_deductions || 0);
+
+  const contractSum = Number(ipa.contract?.original_amount || 0);
+  const hasAdvance = advancePaymentAmount > 0;
+
+  // Section 2 values (signed): 2.1 positive principal, 2.2 negative release
+  const appAdvance = hasAdvance ? advancePaymentAmount : 0;
+  const appRelease = hasAdvance ? -cumulativeAdvanceRelease : 0;
+  const prevRelease = hasAdvance ? -prevAdvanceRelease : 0;
+
+  // Rows: { no, label, app, prev } — outstanding = app - prev; null = show "-"
+  type SummaryRow = {
+    no: string; label: string;
+    app: number | null; prev: number | null;
+    subtotal?: boolean;
+  };
+  const summaryRows: SummaryRow[] = [
+    { no: '1.1)', label: 'VALUE OF MEASURED WORKDONE', app: bqWorkDone, prev: prevBqWorkDone },
+    { no: '1.2)', label: 'VALUE OF VARIATION', app: voWorkDone, prev: prevVoWorkDone },
+    { no: '1.3)', label: 'Daily', app: null, prev: null },
+    { no: '', label: 'TOTAL VALUE OF WORKDONE  (1.1 to 1.3):', app: totalWorkDone, prev: prevTotalWorkDone, subtotal: true },
+    { no: '2.1)', label: `Advance payment (${pct(advancePaymentRate)} of Contract Sum)`, app: hasAdvance ? appAdvance : null, prev: hasAdvance ? prevAdvancePayment : null },
+    { no: '2.2)', label: `Release of Advance payment (${pct(advancePaymentRate)} of Workdone)`, app: hasAdvance ? appRelease : null, prev: hasAdvance ? prevRelease : null },
+    { no: '', label: 'SUBTOTAL  (2.1 to 2.2):', app: hasAdvance ? appAdvance + appRelease : null, prev: hasAdvance ? prevAdvancePayment + prevRelease : null, subtotal: true },
+    { no: '3.1)', label: 'Retention', app: retention > 0 ? -retention : null, prev: prevRetention > 0 ? -prevRetention : null },
+    { no: '3.2)', label: 'LESS RETENTION', app: null, prev: null },
+    { no: '', label: 'SUBTOTAL  (3.1 to 3.2):', app: retention > 0 ? -retention : null, prev: prevRetention > 0 ? -prevRetention : null, subtotal: true },
+    { no: '4)', label: 'Less Contra Charges', app: contraCharges > 0 ? -contraCharges : null, prev: prevContraCharges > 0 ? -prevContraCharges : null },
+    { no: '', label: 'SUBTOTAL  (4):', app: contraCharges > 0 ? -contraCharges : null, prev: prevContraCharges > 0 ? -prevContraCharges : null, subtotal: true },
   ];
+
+  // AMOUNT DUE = outstanding total: (workdone + advance section - retention - contra) app-minus-prev
+  const appGrand = totalWorkDone + (hasAdvance ? appAdvance + appRelease : 0) - retention - contraCharges;
+  const prevGrand = prevTotalWorkDone + (hasAdvance ? prevAdvancePayment + prevRelease : 0) - prevRetention - prevContraCharges;
+  const amountDue = appGrand - prevGrand;
+
+  const outstanding = (app: number | null, prev: number | null): number | null => {
+    if (app === null && prev === null) return null;
+    return Number(app || 0) - Number(prev || 0);
+  };
+
+  // ═══════════════════════════════════════════════════════════
+  // BQ detail grouped by section (for the summary tab BQ Detail table)
+  // ═══════════════════════════════════════════════════════════
+  const bqDetailGrouped: Record<string, { section: any; items: any[] }> = {};
+  (localBqProgress || []).forEach((item: any) => {
+    const sKey = item.bq_item?.section?.section_code || '_none';
+    if (!bqDetailGrouped[sKey]) {
+      bqDetailGrouped[sKey] = { section: item.bq_item?.section || { section_code: '', section_name: '未分類' }, items: [] };
+    }
+    bqDetailGrouped[sKey].items.push(item);
+  });
+
+  const totalContractAmount = (localBqProgress || []).reduce(
+    (s: number, i: any) => s + Number(i.bq_item?.quantity || 0) * Number(i.unit_rate || 0), 0);
+  const totalAppliedAmount = (localBqProgress || []).reduce(
+    (s: number, i: any) => s + Number(i.current_amount || 0), 0);
 
   return (
     <div>
@@ -686,61 +765,134 @@ export default function IpaDetailPage() {
 
       {/* ═══════════ Tab: Summary ═══════════ */}
       {activeTab === 'summary' && (
-        <div className="card">
-          <h2 className="text-lg font-bold text-gray-900 mb-4">金額匯總</h2>
-          <div className="overflow-x-auto">
-            <table className="min-w-full text-sm">
-              <thead className="bg-gray-100">
-                <tr>
-                  <th className="px-4 py-2 text-left font-medium text-gray-600 w-8"></th>
-                  <th className="px-4 py-2 text-left font-medium text-gray-600">項目</th>
-                  <th className="px-4 py-2 text-right font-medium text-gray-600">申請金額 (HKD)</th>
-                  {ipa.client_certified_amount != null && (
-                    <th className="px-4 py-2 text-right font-medium text-gray-600">認證金額 (HKD)</th>
-                  )}
-                </tr>
-              </thead>
-              <tbody>
-                {summaryRows.map((row: any) => (
-                  <tr
-                    key={row.code}
-                    className={
-                      row.highlight
-                        ? 'bg-blue-50 border-t-2 border-blue-200'
-                        : row.bold
-                        ? 'bg-gray-50'
-                        : ''
-                    }
-                  >
-                    <td className="px-4 py-2 text-gray-400 font-mono">{row.code}</td>
-                    <td className={`px-4 py-2 ${row.bold ? 'font-semibold text-gray-900' : 'text-gray-700'}`}>
-                      {row.label}
-                    </td>
-                    <td className={`px-4 py-2 text-right font-mono ${row.bold ? 'font-semibold text-gray-900' : 'text-gray-700'} ${row.negative ? 'text-red-600' : ''}`}>
-                      {row.negative && row.value > 0 ? '(' : ''}
-                      {fmt$(Math.abs(row.value))}
-                      {row.negative && row.value > 0 ? ')' : ''}
-                    </td>
-                    {ipa.client_certified_amount != null && (
-                      <td className="px-4 py-2 text-right text-gray-500 font-mono">
-                        {row.code === 'I'
-                          ? fmt$(ipa.client_certified_amount)
-                          : row.code === 'K'
-                          ? fmt$(ipa.client_current_due)
-                          : row.code === 'M'
-                          ? `(${fmt$(currentAdvanceRelease)})`
-                          : row.code === 'O'
-                          ? fmt$(currentDueAfterAdvanceRelease)
-                          : '-'}
-                      </td>
-                    )}
+        <div className="space-y-6">
+          {/* ─── Section 1: Payment Summary ─── */}
+          <div className="card">
+            <div className="flex flex-wrap items-start justify-between gap-4 mb-4">
+              <h2 className="text-lg font-bold text-gray-900">Payment Summary 付款匯總</h2>
+              <div className="text-sm text-gray-500 text-right">
+                <div>Payment No. <span className="font-semibold text-gray-900">{ipa.pa_no}</span> ・ Interim</div>
+                <div>As at {fmtDate(ipa.period_to)} ・ Subcontract Sum <span className="font-semibold text-gray-900 font-mono">{fmtNum(contractSum)}</span></div>
+              </div>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-sm">
+                <thead>
+                  <tr className="bg-gray-100 text-gray-600">
+                    <th className="px-3 py-2 text-left font-medium w-12"></th>
+                    <th className="px-3 py-2 text-left font-medium"></th>
+                    <th className="px-3 py-2 text-right font-medium w-40">Payment Application</th>
+                    <th className="px-3 py-2 text-right font-medium w-40">Previously Certified</th>
+                    <th className="px-3 py-2 text-right font-medium w-44">Outstanding Amount</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {summaryRows.map((row, idx) => {
+                    const out = outstanding(row.app, row.prev);
+                    if (row.subtotal) {
+                      return (
+                        <tr key={idx} className="bg-gray-100 font-semibold text-gray-900">
+                          <td className="px-3 py-2"></td>
+                          <td className="px-3 py-2 text-right pr-4">{row.label}</td>
+                          <td className="px-3 py-2 text-right font-mono border-t border-b border-gray-300">{row.app === null ? '-' : fmtNum(row.app)}</td>
+                          <td className="px-3 py-2 text-right font-mono border-t border-b border-gray-300">{row.prev === null ? '-' : fmtNum(row.prev)}</td>
+                          <td className="px-3 py-2 text-right font-mono border-t border-b border-gray-300">{out === null ? '-' : fmtNum(out)}</td>
+                        </tr>
+                      );
+                    }
+                    return (
+                      <tr key={idx}>
+                        <td className="px-3 py-2 align-top text-gray-500">{row.no}</td>
+                        <td className="px-3 py-2 text-gray-700">{row.label}</td>
+                        <td className="px-3 py-2 text-right font-mono text-gray-800">{row.app === null ? '-' : fmtNum(row.app)}</td>
+                        <td className="px-3 py-2 text-right font-mono text-gray-800">{row.prev === null ? '-' : fmtNum(row.prev)}</td>
+                        <td className="px-3 py-2 text-right font-mono text-gray-800">{out === null ? '-' : fmtNum(out)}</td>
+                      </tr>
+                    );
+                  })}
+                  {/* Amount due */}
+                  <tr className="font-bold text-gray-900">
+                    <td className="px-3 pt-5 pb-2" colSpan={3}></td>
+                    <td className="px-3 pt-5 pb-2 text-right whitespace-nowrap">AMOUNT DUE :</td>
+                    <td className="px-3 pt-5 pb-2 text-right font-mono bg-blue-50 border-t-2 border-b-4 border-double border-blue-300 text-blue-900">{fmtNum(amountDue)}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
           </div>
-          {/* Payment Summary & Records */}
-          <div className="mt-6 border-t pt-4">
+
+          {/* ─── Section 2: BQ Detail ─── */}
+          <div className="card">
+            <h2 className="text-lg font-bold text-gray-900 mb-4">BQ Detail 工程量清單明細</h2>
+            {Object.keys(bqDetailGrouped).length === 0 ? (
+              <p className="text-gray-400 text-sm py-4 text-center">暫無 BQ 項目</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-sm border-collapse">
+                  <thead>
+                    <tr className="bg-gray-100 text-gray-600">
+                      <th colSpan={6} className="px-3 py-1.5 border-b border-r border-gray-300"></th>
+                      <th colSpan={4} className="px-3 py-1.5 text-center font-semibold border-b border-gray-300 bg-blue-50 text-blue-800">Applied Workdone</th>
+                    </tr>
+                    <tr className="bg-gray-100 text-gray-600">
+                      <th className="px-3 py-2 text-center font-medium w-14">Item</th>
+                      <th className="px-3 py-2 text-left font-medium">Description</th>
+                      <th className="px-3 py-2 text-right font-medium w-20">Qty</th>
+                      <th className="px-3 py-2 text-center font-medium w-14">Unit</th>
+                      <th className="px-3 py-2 text-right font-medium w-24">Rate</th>
+                      <th className="px-3 py-2 text-right font-medium w-28 border-r border-gray-300">Amount</th>
+                      <th className="px-3 py-2 text-right font-medium w-24 bg-blue-50/60">Previous</th>
+                      <th className="px-3 py-2 text-right font-medium w-24 bg-blue-50/60">Current</th>
+                      <th className="px-3 py-2 text-right font-medium w-28 bg-blue-50/60">Accumulated</th>
+                      <th className="px-3 py-2 text-right font-medium w-32 bg-blue-50/60">Amount (HK$)</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {Object.entries(bqDetailGrouped).map(([sKey, group]) => (
+                      <React.Fragment key={`sd-${sKey}`}>
+                        {/* Section header spanning full width */}
+                        <tr className="bg-gray-50">
+                          <td colSpan={10} className="px-3 py-2 font-semibold text-gray-800 underline">
+                            {[group.section.section_code, group.section.section_name].filter(Boolean).join(' ')}
+                          </td>
+                        </tr>
+                        {group.items.map((item: any) => {
+                          const contractQty = Number(item.bq_item?.quantity || 0);
+                          const rate = Number(item.unit_rate || 0);
+                          const itemAmount = contractQty * rate;
+                          const accumulatedQty = Number(item.current_cumulative_qty || 0);
+                          return (
+                            <tr key={item.id} className="hover:bg-gray-50">
+                              <td className="px-3 py-2 text-center align-top text-gray-700">{item.bq_item?.item_no}</td>
+                              <td className="px-3 py-2 align-top text-gray-700 whitespace-pre-wrap">{item.bq_item?.description}</td>
+                              <td className="px-3 py-2 text-right align-top font-mono text-gray-700">{fmtQty2(contractQty)}</td>
+                              <td className="px-3 py-2 text-center align-top text-gray-700">{item.bq_item?.unit}</td>
+                              <td className="px-3 py-2 text-right align-top font-mono text-gray-700">{fmtNum(rate)}</td>
+                              <td className="px-3 py-2 text-right align-top font-mono text-gray-700 border-r border-gray-200">{fmtNum(itemAmount)}</td>
+                              <td className="px-3 py-2 text-right align-top font-mono text-gray-600 bg-blue-50/40">{fmtQty2(item.prev_cumulative_qty)}</td>
+                              <td className="px-3 py-2 text-right align-top font-mono text-gray-600 bg-blue-50/40">{fmtQty2(item.this_period_qty)}</td>
+                              <td className="px-3 py-2 text-right align-top font-mono text-gray-600 bg-blue-50/40">{fmtQty2(accumulatedQty)}</td>
+                              <td className="px-3 py-2 text-right align-top font-mono font-medium text-gray-900 bg-blue-50/40">{fmtNum(accumulatedQty * rate)}</td>
+                            </tr>
+                          );
+                        })}
+                      </React.Fragment>
+                    ))}
+                    {/* Totals row */}
+                    <tr className="bg-gray-100 font-bold text-gray-900 border-t-2 border-gray-300">
+                      <td className="px-3 py-2" colSpan={5}></td>
+                      <td className="px-3 py-2 text-right font-mono border-r border-gray-300">{fmtNum(totalContractAmount)}</td>
+                      <td className="px-3 py-2" colSpan={3}></td>
+                      <td className="px-3 py-2 text-right font-mono">{fmtNum(totalAppliedAmount)}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          {/* Payment Status & Records */}
+          <div className="card">
             <h3 className="text-md font-bold text-gray-900 mb-3">收款狀況</h3>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
               <div className="bg-blue-50 rounded-lg p-4">
@@ -806,6 +958,7 @@ export default function IpaDetailPage() {
       )}
 
       {/* ═══════════ Modals ═══════════ */}
+
 
       {/* Certify Modal */}
       <Modal isOpen={showCertifyModal} onClose={() => setShowCertifyModal(false)} title="認證 IPA" size="sm">
