@@ -113,7 +113,7 @@ export class PaymentInService {
     const orderBy: any = { [sortBy]: sortOrder };
 
     const where: Prisma.PaymentInWhereInput = {};
-    if (query.source_type) where.source_type = query.source_type;
+    if (query.source_type) where.source_type = query.source_type.toLowerCase();
     if (query.source_ref_id) where.source_ref_id = query.source_ref_id;
     if (query.project_id) where.project_id = query.project_id;
     if (query.contract_id) where.contract_id = query.contract_id;
