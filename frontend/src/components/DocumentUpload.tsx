@@ -7,7 +7,7 @@ import { fmtDate } from '@/lib/dateUtils';
 import DateInput from '@/components/DateInput';
 
 interface DocumentUploadProps {
-  entityType: 'employee' | 'vehicle' | 'machinery' | 'partner' | 'company-profile' | 'subcon-fleet-driver';
+  entityType: 'employee' | 'vehicle' | 'machinery' | 'partner' | 'company-profile' | 'subcon-fleet-driver' | 'payment-application';
   entityId: number;
   docTypes: string[];
 }

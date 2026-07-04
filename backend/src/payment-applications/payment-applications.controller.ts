@@ -7,15 +7,24 @@ import {
   Param,
   Body,
   UseGuards,
+  Res,
+  StreamableFile,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
+import type { Response } from 'express';
 import { PaymentApplicationsService } from './payment-applications.service';
+import { IpaPdfService } from './ipa-pdf.service';
+import { IpaExcelService } from './ipa-excel.service';
 import { CreatePaymentApplicationDto, UpdatePaymentApplicationDto, PaymentMaterialDto, PaymentDeductionDto, CertifyDto, RecordPaymentDto } from './dto/payment-application.dto';
 
 @Controller('contracts/:contractId/payment-applications')
 @UseGuards(AuthGuard('jwt'))
 export class PaymentApplicationsController {
-  constructor(private readonly service: PaymentApplicationsService) {}
+  constructor(
+    private readonly service: PaymentApplicationsService,
+    private readonly ipaPdfService: IpaPdfService,
+    private readonly ipaExcelService: IpaExcelService,
+  ) {}
 
   // ── List all IPAs for a contract ──
   @Get()
@@ -30,6 +39,49 @@ export class PaymentApplicationsController {
     @Param('paId') paId: string,
   ) {
     return this.service.findOne(+contractId, +paId);
+  }
+
+  // ── Export IPA as PDF ──
+  @Get(':paId/pdf')
+  async exportPdf(
+    @Param('contractId') contractId: string,
+    @Param('paId') paId: string,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const { pdf, ipa } = await this.ipaPdfService.generateIpaPdf(
+      +contractId,
+      +paId,
+    );
+    const rawFilename = `${ipa.reference || `IPA-${ipa.pa_no}`}.pdf`;
+    const encodedFilename = encodeURIComponent(rawFilename);
+    res.set({
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `attachment; filename*=UTF-8''${encodedFilename}; filename="${encodedFilename}"`,
+      'Content-Length': pdf.length,
+    });
+    return new StreamableFile(pdf);
+  }
+
+  // ── Export IPA as Excel ──
+  @Get(':paId/excel')
+  async exportExcel(
+    @Param('contractId') contractId: string,
+    @Param('paId') paId: string,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const { buffer, ipa } = await this.ipaExcelService.generateIpaExcel(
+      +contractId,
+      +paId,
+    );
+    const rawFilename = `${ipa.reference || `IPA-${ipa.pa_no}`}.xlsx`;
+    const encodedFilename = encodeURIComponent(rawFilename);
+    res.set({
+      'Content-Type':
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'Content-Disposition': `attachment; filename*=UTF-8''${encodedFilename}; filename="${encodedFilename}"`,
+      'Content-Length': buffer.length,
+    });
+    return new StreamableFile(buffer);
   }
 
   // ── Create new IPA ──

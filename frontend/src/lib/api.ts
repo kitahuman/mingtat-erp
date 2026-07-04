@@ -1210,6 +1210,16 @@ export const paymentApplicationsApi = {
   // Retention settings
   updateRetention: (contractId: number, data: any) =>
     api.put(`/contracts/${contractId}/payment-applications/retention`, data),
+
+  // Export
+  exportPdf: (contractId: number, paId: number) =>
+    api.get(`/contracts/${contractId}/payment-applications/${paId}/pdf`, {
+      responseType: 'blob',
+    }),
+  exportExcel: (contractId: number, paId: number) =>
+    api.get(`/contracts/${contractId}/payment-applications/${paId}/excel`, {
+      responseType: 'blob',
+    }),
 };
 
 // ══════════════════════════════════════════════════════════════

@@ -7,6 +7,7 @@ import Link from 'next/link';
 import { paymentApplicationsApi, paymentInApi, bankAccountsApi } from '@/lib/api';
 import { fmtDate, toInputDate } from '@/lib/dateUtils';
 import Modal from '@/components/Modal';
+import DocumentUpload from '@/components/DocumentUpload';
 import { useAuth } from '@/lib/auth';
 
 const fmt$ = (v: any) => `$${Number(v || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -85,6 +86,13 @@ export default function IpaDetailPage() {
   const [materialForm, setMaterialForm] = useState({ description: '', amount: '', remarks: '' });
   const [deductionForm, setDeductionForm] = useState({ deduction_type: 'other', description: '', amount: '', remarks: '' });
 
+  // Print preview (PDF) state
+  const [pdfUrl, setPdfUrl] = useState('');
+  const [loadingPreview, setLoadingPreview] = useState(false);
+  const [previewError, setPreviewError] = useState('');
+  const [downloadingPdf, setDownloadingPdf] = useState(false);
+  const [downloadingExcel, setDownloadingExcel] = useState(false);
+
   const fetchIpa = useCallback(async () => {
     setLoading(true);
     try {
@@ -116,6 +124,90 @@ export default function IpaDetailPage() {
     loadPayments();
     bankAccountsApi.simple().then(res => setBankAccounts(res.data || [])).catch(() => {});
   }, [fetchIpa, loadPayments]);
+
+  // Load PDF preview when the preview tab is opened
+  useEffect(() => {
+    if (activeTab !== 'preview') return;
+    if (!Number.isFinite(contractId) || !Number.isFinite(paId)) return;
+
+    let active = true;
+    let objectUrl = '';
+
+    setLoadingPreview(true);
+    setPreviewError('');
+
+    paymentApplicationsApi
+      .exportPdf(contractId, paId)
+      .then((res) => {
+        const blob = new Blob([res.data], { type: 'application/pdf' });
+        objectUrl = window.URL.createObjectURL(blob);
+
+        if (!active) {
+          window.URL.revokeObjectURL(objectUrl);
+          return;
+        }
+
+        setPdfUrl((previousUrl) => {
+          if (previousUrl) window.URL.revokeObjectURL(previousUrl);
+          return objectUrl;
+        });
+      })
+      .catch(() => {
+        if (!active) return;
+        setPdfUrl((previousUrl) => {
+          if (previousUrl) window.URL.revokeObjectURL(previousUrl);
+          return '';
+        });
+        setPreviewError('載入 PDF 預覽失敗');
+      })
+      .finally(() => {
+        if (active) setLoadingPreview(false);
+      });
+
+    return () => {
+      active = false;
+      if (objectUrl) window.URL.revokeObjectURL(objectUrl);
+    };
+  }, [activeTab, contractId, paId]);
+
+  const triggerBlobDownload = (blob: Blob, filename: string) => {
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
+  };
+
+  const handleDownloadPdf = async () => {
+    setDownloadingPdf(true);
+    try {
+      const res = await paymentApplicationsApi.exportPdf(contractId, paId);
+      const blob = new Blob([res.data], { type: 'application/pdf' });
+      triggerBlobDownload(blob, `${ipa?.reference || `IPA-${paId}`}.pdf`);
+    } catch {
+      window.alert('下載 PDF 失敗');
+    } finally {
+      setDownloadingPdf(false);
+    }
+  };
+
+  const handleDownloadExcel = async () => {
+    setDownloadingExcel(true);
+    try {
+      const res = await paymentApplicationsApi.exportExcel(contractId, paId);
+      const blob = new Blob([res.data], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      });
+      triggerBlobDownload(blob, `${ipa?.reference || `IPA-${paId}`}.xlsx`);
+    } catch {
+      window.alert('下載 Excel 失敗');
+    } finally {
+      setDownloadingExcel(false);
+    }
+  };
 
   const editable = ipa?.status === 'draft';
 
@@ -346,6 +438,8 @@ export default function IpaDetailPage() {
     { key: 'materials', label: '工地物料' },
     { key: 'deductions', label: '扣款' },
     { key: 'summary', label: '金額匯總' },
+    { key: 'preview', label: '列印預覽' },
+    { key: 'documents', label: '文件' },
   ];
 
   const advancePaymentAmount = Number(ipa.contract?.advance_payment_amount || 0);
@@ -954,6 +1048,57 @@ export default function IpaDetailPage() {
               <p className="text-sm text-gray-400">尚無收款記錄</p>
             )}
           </div>
+        </div>
+      )}
+
+      {/* ═══════════ Tab: 列印預覽 (Print Preview) ═══════════ */}
+      {activeTab === 'preview' && (
+        <div className="card">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-bold text-gray-900">列印預覽</h2>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleDownloadPdf}
+                disabled={downloadingPdf}
+                className="btn-primary text-sm disabled:opacity-50"
+              >
+                {downloadingPdf ? '下載中...' : '下載 PDF'}
+              </button>
+              <button
+                onClick={handleDownloadExcel}
+                disabled={downloadingExcel}
+                className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 text-sm disabled:opacity-50"
+              >
+                {downloadingExcel ? '下載中...' : '下載 Excel'}
+              </button>
+            </div>
+          </div>
+          {loadingPreview ? (
+            <div className="py-16 text-center text-gray-500 text-sm">PDF 預覽載入中...</div>
+          ) : previewError ? (
+            <div className="py-16 text-center text-red-500 text-sm">{previewError}</div>
+          ) : pdfUrl ? (
+            <iframe
+              src={pdfUrl}
+              title="IPA PDF 預覽"
+              className="w-full rounded border border-gray-200"
+              style={{ height: 'calc(100vh - 260px)', minHeight: '600px' }}
+            />
+          ) : (
+            <div className="py-16 text-center text-gray-400 text-sm">暫無預覽</div>
+          )}
+        </div>
+      )}
+
+      {/* ═══════════ Tab: 文件 (Documents) ═══════════ */}
+      {activeTab === 'documents' && (
+        <div className="card">
+          <h2 className="text-lg font-bold text-gray-900 mb-4">文件</h2>
+          <DocumentUpload
+            entityType="payment-application"
+            entityId={ipa.id}
+            docTypes={['IPA文件', '認證書', '收據', '其他']}
+          />
         </div>
       )}
 
