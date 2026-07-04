@@ -283,7 +283,6 @@ export default function PaymentInPage() {
       label: '日期',
       sortable: true,
       editType: 'date',
-      filterable: false,
       render: (v: any) => fmtDate(v),
     },
     {
@@ -426,7 +425,6 @@ export default function PaymentInPage() {
       key: 'deductions_total',
       label: '扣減',
       editable: false,
-      filterable: false,
       render: (_: any, row: any) => {
         const total = (row.deductions || []).reduce(
           (s: number, d: any) => s + Number(d.payment_in_deduction_amount || 0),

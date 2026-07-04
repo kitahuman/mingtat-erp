@@ -41,6 +41,8 @@ interface FindAllQuery {
   filter_payer?: string;
   filter_contract?: string;
   filter_project?: string;
+  filter_date?: string;
+  filter_deductions_total?: string;
 }
 
 @Injectable()
@@ -183,6 +185,25 @@ export class PaymentInService {
       const vals = query.filter_project.split(',').filter(Boolean);
       if (vals.length) {
         where.project = { project_no: { in: vals } };
+      }
+    }
+    if (query.filter_date) {
+      const vals = query.filter_date.split(',').filter(Boolean);
+      if (vals.length) {
+        // Convert DD/MM/YYYY back to Date objects
+        const dates = vals.map(v => {
+          const [day, month, year] = v.split('/');
+          return new Date(`${year}-${month}-${day}`);
+        }).filter(d => !isNaN(d.getTime()));
+        if (dates.length) where.date = { in: dates };
+      }
+    }
+    if (query.filter_deductions_total) {
+      const vals = query.filter_deductions_total.split(',').filter(Boolean);
+      if (vals.includes('有扣減') && !vals.includes('無扣減')) {
+        where.deductions = { some: {} };
+      } else if (vals.includes('無扣減') && !vals.includes('有扣減')) {
+        where.deductions = { none: {} };
       }
     }
     if (query.filter_amount_min || query.filter_amount_max) {
@@ -487,6 +508,25 @@ export class PaymentInService {
         orderBy: { remarks: 'asc' },
       });
       return records.map(r => r.remarks!).filter(Boolean).sort();
+    }
+    if (column === 'date') {
+      const records = await this.prisma.paymentIn.findMany({
+        select: { date: true },
+        distinct: ['date'],
+        orderBy: { date: 'desc' },
+      });
+      return records.map(r => {
+        const d = new Date(r.date);
+        const day = String(d.getDate()).padStart(2, '0');
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const year = d.getFullYear();
+        return `${day}/${month}/${year}`;
+      });
+    }
+    if (column === 'deductions_total') {
+      // Return distinct deduction total values (computed from deductions relation)
+      // Since this is a computed field, return a simple list of "有扣減" / "無扣減"
+      return ['有扣減', '無扣減'];
     }
     if (column === 'payer') {
       // Combine payer_partner names and payer_name values
