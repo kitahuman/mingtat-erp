@@ -1112,6 +1112,16 @@ export const bqItemsApi = {
     api.post(`/contracts/${contractId}/bq-items/batch`, { items }),
   reorder: (contractId: number, orderedIds: number[]) =>
     api.put(`/contracts/${contractId}/bq-items/reorder`, { orderedIds }),
+  importParse: (contractId: number, file: File) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    return api.post(`/contracts/${contractId}/bq-items/import-parse`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 300000, // AI 解析可能需要較長時間
+    });
+  },
+  importConfirm: (contractId: number, items: any[]) =>
+    api.post(`/contracts/${contractId}/bq-items/import-confirm`, { items }),
 };
 
 // Variation Orders (變更指令)

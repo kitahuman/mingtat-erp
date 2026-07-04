@@ -11,6 +11,7 @@ import RetentionTabContent from '@/components/retention/RetentionTabContent';
 import { useAuth } from '@/lib/auth';
 import AttachmentUpload from '@/components/AttachmentUpload';
 import SearchableSelect from '@/components/SearchableSelect';
+import BqFileImportModal from '@/components/contracts/BqFileImportModal';
 
 // ── Status labels ──
 const statusLabels: Record<string, string> = { active: '進行中', completed: '已完成', cancelled: '已取消' };
@@ -123,6 +124,9 @@ export default function ContractManagementTabs({
   const [quotationItems, setQuotationItems] = useState<any[]>([]);
   const [selectedImportItems, setSelectedImportItems] = useState<Set<number>>(new Set());
   const [importLoading, setImportLoading] = useState(false);
+
+  // ── Import from BQ file (PDF/Excel via AI) ──
+  const [bqFileImportModal, setBqFileImportModal] = useState(false);
 
   // ── Load data ──
   const loadContract = useCallback(() => {
@@ -790,6 +794,7 @@ export default function ContractManagementTabs({
             <button onClick={() => setSectionModal({ open: true, data: { section_code: '', section_name: '' } })} className="btn-secondary text-sm">新增分部</button>
             <button onClick={() => setBqItemModal({ open: true, data: { item_no: '', description: '', quantity: 0, unit: '', unit_rate: 0, section_id: '' } })} className="btn-primary text-sm">新增項目</button>
             <button onClick={openImportModal} className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 text-sm">從報價單匯入</button>
+            <button onClick={() => setBqFileImportModal(true)} className="bg-teal-600 text-white px-4 py-2 rounded-lg hover:bg-teal-700 text-sm">從 BQ 匯入</button>
           </div>
 
           {/* Sections with items */}
@@ -845,7 +850,7 @@ export default function ContractManagementTabs({
           {bqItems.length === 0 && sections.length === 0 && (
             <div className="card text-center py-12 text-gray-400">
               <p className="text-lg mb-2">尚未建立工程量清單</p>
-              <p className="text-sm">點擊「新增項目」或「從報價單匯入」開始建立 BQ</p>
+              <p className="text-sm">點擊「新增項目」、「從報價單匯入」或「從 BQ 匯入」開始建立 BQ</p>
             </div>
           )}
         </>
@@ -1265,6 +1270,14 @@ export default function ContractManagementTabs({
           </div>
         </div>
       </Modal>
+
+      {/* Import from BQ file (PDF/Excel via AI) Modal */}
+      <BqFileImportModal
+        isOpen={bqFileImportModal}
+        onClose={() => setBqFileImportModal(false)}
+        contractId={contractId}
+        onImported={() => { loadBqData(); loadContract(); }}
+      />
     </div>
   );
 
