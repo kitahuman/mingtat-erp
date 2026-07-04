@@ -129,32 +129,6 @@ export class IpaPdfService {
 
     const advancePaymentAmount = toNum(ipa.contract?.advance_payment_amount);
     const advancePaymentRate = toNum(ipa.contract?.advance_payment_rate);
-    let cumulativeAdvanceRelease = 0;
-    let currentAdvanceRelease = 0;
-    let prevAdvanceRelease = 0;
-
-    if (advancePaymentAmount > 0 && advancePaymentRate > 0) {
-      const releaseSource = (ipaList.length > 0 ? ipaList : [ipa])
-        .filter((row: any) => {
-          const isCurrent = Number(row.id) === Number(ipa.id);
-          const isPriorCertified =
-            toNum(row.pa_no) < toNum(ipa.pa_no) &&
-            ['certified', 'paid'].includes(row.status);
-          return row.status !== 'void' && (isCurrent || isPriorCertified);
-        })
-        .sort((a: any, b: any) => toNum(a.pa_no) - toNum(b.pa_no));
-
-      releaseSource.forEach((row: any) => {
-        const periodCertifiedAmount = Math.max(0, toNum(row.current_due));
-        const release = Math.min(
-          Math.max(0, advancePaymentAmount - cumulativeAdvanceRelease),
-          periodCertifiedAmount * advancePaymentRate,
-        );
-        cumulativeAdvanceRelease += release;
-        if (Number(row.id) === Number(ipa.id)) currentAdvanceRelease = release;
-      });
-      prevAdvanceRelease = cumulativeAdvanceRelease - currentAdvanceRelease;
-    }
 
     // Previously certified breakdowns（取最後一期已認證/已收款的前期 IPA）
     const priorIpas = (ipaList || [])
@@ -183,11 +157,13 @@ export class IpaPdfService {
     const contraCharges = toNum(ipa.other_deductions);
 
     const contractSum = toNum(ipa.contract?.original_amount);
-    const hasAdvance = advancePaymentAmount > 0;
+    const hasAdvance = advancePaymentAmount > 0 && advancePaymentRate > 0;
 
+    // Release of Advance = 累計 VALUE OF MEASURED WORKDONE × advance rate
+    // 與 Excel 參考公式一致：-bqWorkDone × rate（Previously = -prevBqWorkDone × rate）
     const appAdvance = hasAdvance ? advancePaymentAmount : 0;
-    const appRelease = hasAdvance ? -cumulativeAdvanceRelease : 0;
-    const prevRelease = hasAdvance ? -prevAdvanceRelease : 0;
+    const appRelease = hasAdvance ? -(bqWorkDone * advancePaymentRate) : 0;
+    const prevRelease = hasAdvance ? -(prevBqWorkDone * advancePaymentRate) : 0;
 
     const appGrand =
       totalWorkDone +

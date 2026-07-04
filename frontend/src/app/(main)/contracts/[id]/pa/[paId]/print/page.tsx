@@ -70,33 +70,9 @@ export default function IpaPrintPage() {
   if (loading || !ipa) return <div className="py-8 text-center text-gray-500">載入中...</div>;
 
   // ═══════════════════════════════════════════════════════════
-  // Advance payment release calculation (existing logic - kept)
-  // ═══════════════════════════════════════════════════════════
   const advancePaymentAmount = Number(ipa.contract?.advance_payment_amount || 0);
   const advancePaymentRate = Number(ipa.contract?.advance_payment_rate || 0);
-  let cumulativeAdvanceRelease = 0;
-  let currentAdvanceRelease = 0;
-  let prevAdvanceRelease = 0;
 
-  if (advancePaymentAmount > 0 && advancePaymentRate > 0) {
-    const releaseSource = (ipaList.length > 0 ? ipaList : [ipa])
-      .filter((row: any) => {
-        const isCurrent = Number(row.id) === Number(ipa.id);
-        const isPriorCertified = Number(row.pa_no || 0) < Number(ipa.pa_no || 0) && ['certified', 'paid'].includes(row.status);
-        return row.status !== 'void' && (isCurrent || isPriorCertified);
-      })
-      .sort((a: any, b: any) => Number(a.pa_no || 0) - Number(b.pa_no || 0));
-
-    releaseSource.forEach((row: any) => {
-      const periodCertifiedAmount = Math.max(0, Number(row.current_due || 0));
-      const release = Math.min(Math.max(0, advancePaymentAmount - cumulativeAdvanceRelease), periodCertifiedAmount * advancePaymentRate);
-      cumulativeAdvanceRelease += release;
-      if (Number(row.id) === Number(ipa.id)) currentAdvanceRelease = release;
-    });
-    prevAdvanceRelease = cumulativeAdvanceRelease - currentAdvanceRelease;
-  }
-
-  // ═══════════════════════════════════════════════════════════
   // Previously certified breakdowns (from the latest prior certified/paid IPA;
   // amounts on IPAs are cumulative, so the last prior IPA carries the totals)
   // ═══════════════════════════════════════════════════════════
@@ -126,12 +102,13 @@ export default function IpaPrintPage() {
   const contraCharges = Number(ipa.other_deductions || 0);
 
   const contractSum = Number(ipa.contract?.original_amount || 0);
-  const hasAdvance = advancePaymentAmount > 0;
+  const hasAdvance = advancePaymentAmount > 0 && advancePaymentRate > 0;
 
   // Section 2 values (signed): 2.1 positive principal, 2.2 negative release
+  // Release = -bqWorkDone × rate（累計），與 Excel 公式一致
   const appAdvance = hasAdvance ? advancePaymentAmount : 0;
-  const appRelease = hasAdvance ? -cumulativeAdvanceRelease : 0;
-  const prevRelease = hasAdvance ? -prevAdvanceRelease : 0;
+  const appRelease = hasAdvance ? -(bqWorkDone * advancePaymentRate) : 0;
+  const prevRelease = hasAdvance ? -(prevBqWorkDone * advancePaymentRate) : 0;
 
   // Rows: { no, label, app, prev } — outstanding = app - prev; null = show "-"
   type SummaryRow = {

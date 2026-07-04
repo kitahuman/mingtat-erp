@@ -697,7 +697,7 @@ model Contract {
   deletedBy       User?     @relation("ContractDeletedBy", fields: [deleted_by], references: [id])
 
   // Phase 3: Retention settings
-  retention_rate     Decimal @default(0.10) @db.Decimal(5, 4)
+  retention_rate     Decimal @default(0.05) @db.Decimal(5, 4)
   retention_cap_rate Decimal @default(0.05) @db.Decimal(5, 4)
 
   // Advance payment settings

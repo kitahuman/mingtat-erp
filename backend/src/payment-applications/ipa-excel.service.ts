@@ -423,11 +423,10 @@ export class IpaExcelService {
     ws.getCell('A24').value = '2.2)';
     ws.getCell('B24').value = `Release of Advance payment (${pctText} of Workdone)`;
     if (hasAdvance) {
-      // Release amount is capped by the advance principal, so use the computed
-      // value here rather than a naive -H15*rate formula (which ignores the cap).
-      ws.getCell('H24').value = Number(calc.appRelease || 0);
+      // Release = -VALUE OF MEASURED WORKDONE × rate (Excel 公式：-H15*rate)
+      ws.getCell('H24').value = { formula: `-H15*${Number(calc.advancePaymentRate)}` };
       ws.getCell('H24').numFmt = this.numFmt;
-      ws.getCell('J24').value = Number(calc.prevRelease || 0);
+      ws.getCell('J24').value = { formula: `-J15*${Number(calc.advancePaymentRate)}` };
       ws.getCell('J24').numFmt = this.numFmt;
     } else {
       ws.getCell('H24').value = '-';
@@ -464,24 +463,15 @@ export class IpaExcelService {
     const retentionRate = Number(ipa.contract?.retention_rate || 0);
     ws.getCell('A29').value = '3.1)';
     ws.getCell('B29').value = 'Retention';
-    if (calc.retention > 0) {
-      // Retention = -(total workdone × retention rate); may be capped, so use
-      // formula only when uncapped value matches, otherwise hard value.
-      const uncapped = calc.totalWorkDone * retentionRate;
-      if (retentionRate > 0 && Math.abs(uncapped - calc.retention) < 0.01) {
-        ws.getCell('H29').value = { formula: `-H${totalRowR}*${retentionRate}` };
-      } else {
-        ws.getCell('H29').value = -Number(calc.retention);
-      }
+    // Retention = -TOTAL WORKDONE × retention_rate (Excel 公式：-H21*rate)
+    if (retentionRate > 0) {
+      ws.getCell('H29').value = { formula: `-H${totalRowR}*${retentionRate}` };
       ws.getCell('H29').numFmt = this.numFmt;
+      ws.getCell('J29').value = { formula: `-J${totalRowR}*${retentionRate}` };
+      ws.getCell('J29').numFmt = this.numFmt;
     } else {
       ws.getCell('H29').value = '-';
       ws.getCell('H29').alignment = { horizontal: 'right' };
-    }
-    if (calc.prevRetention > 0) {
-      ws.getCell('J29').value = -Number(calc.prevRetention);
-      ws.getCell('J29').numFmt = this.numFmt;
-    } else {
       ws.getCell('J29').value = '-';
       ws.getCell('J29').alignment = { horizontal: 'right' };
     }

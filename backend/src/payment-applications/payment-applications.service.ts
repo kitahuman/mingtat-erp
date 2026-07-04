@@ -18,21 +18,6 @@ export class PaymentApplicationsService {
   }
 
   /**
-   * Calculate retention amount using cumulative method:
-   * retention = min(grossAmount * retentionRate, revisedContractSum * retentionCapRate)
-   */
-  private calcRetention(
-    grossAmount: number,
-    retentionRate: number,
-    revisedContractSum: number,
-    retentionCapRate: number,
-  ): number {
-    const calculated = grossAmount * retentionRate;
-    const cap = revisedContractSum * retentionCapRate;
-    return Math.min(calculated, cap);
-  }
-
-  /**
    * Recalculate all amount fields (A~K) for a PaymentApplication
    */
   async recalculate(paId: number) {
@@ -68,16 +53,11 @@ export class PaymentApplicationsService {
     // (E) Gross amount = C + D
     const grossAmount = cumulativeWorkDone + materialsOnSite;
 
-    // Revised contract sum for retention cap
-    const bqTotal = pa.contract.bq_items.reduce((s, i) => s + this.toNum(i.amount), 0);
-    const voTotal = pa.contract.variation_orders.reduce((s, v) => s + this.toNum(v.approved_amount), 0);
-    const revisedContractSum = bqTotal + voTotal;
-
     const retentionRate = this.toNum(pa.contract.retention_rate);
-    const retentionCapRate = this.toNum(pa.contract.retention_cap_rate);
 
-    // (F) Retention
-    const retentionAmount = this.calcRetention(grossAmount, retentionRate, revisedContractSum, retentionCapRate);
+    // (F) Retention = cumulative workdone (BQ + VO, 不含 materials) × retention rate
+    // 與 Excel 參考公式一致：Retention = -TOTAL WORKDONE × retention_rate
+    const retentionAmount = cumulativeWorkDone * retentionRate;
 
     // (G) After retention = E - F
     const afterRetention = grossAmount - retentionAmount;

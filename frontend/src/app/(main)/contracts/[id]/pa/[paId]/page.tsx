@@ -444,28 +444,6 @@ export default function IpaDetailPage() {
 
   const advancePaymentAmount = Number(ipa.contract?.advance_payment_amount || 0);
   const advancePaymentRate = Number(ipa.contract?.advance_payment_rate || 0);
-  let cumulativeAdvanceRelease = 0;
-  let currentAdvanceRelease = 0;
-
-  if (advancePaymentAmount > 0 && advancePaymentRate > 0) {
-    const releaseSource = (ipaList.length > 0 ? ipaList : [ipa])
-      .filter((row: any) => {
-        const isCurrent = Number(row.id) === Number(ipa.id);
-        const isPriorCertified = Number(row.pa_no || 0) < Number(ipa.pa_no || 0) && ['certified', 'paid'].includes(row.status);
-        return row.status !== 'void' && (isCurrent || isPriorCertified);
-      })
-      .sort((a: any, b: any) => Number(a.pa_no || 0) - Number(b.pa_no || 0));
-
-    releaseSource.forEach((row: any) => {
-      const periodCertifiedAmount = Math.max(0, Number(row.current_due || 0));
-      const release = Math.min(Math.max(0, advancePaymentAmount - cumulativeAdvanceRelease), periodCertifiedAmount * advancePaymentRate);
-      cumulativeAdvanceRelease += release;
-      if (Number(row.id) === Number(ipa.id)) currentAdvanceRelease = release;
-    });
-  }
-
-  const currentDueBeforeAdvanceRelease = Number(ipa.client_current_due ?? ipa.current_due);
-  const currentDueAfterAdvanceRelease = Math.max(0, currentDueBeforeAdvanceRelease - currentAdvanceRelease);
 
   // ═══════════════════════════════════════════════════════════
   // Previously certified breakdowns (from the latest prior certified/paid IPA;
@@ -478,7 +456,10 @@ export default function IpaDetailPage() {
       ['certified', 'paid'].includes(row.status))
     .sort((a: any, b: any) => Number(a.pa_no || 0) - Number(b.pa_no || 0));
   const lastPrior = priorIpas.length > 0 ? priorIpas[priorIpas.length - 1] : null;
-  const prevAdvanceRelease = cumulativeAdvanceRelease - currentAdvanceRelease;
+
+  // 當期應收（扣回預付款後）— 用於頁面顯示
+  const currentDueBeforeAdvanceRelease = Number((ipa as any).client_current_due ?? ipa.current_due);
+  // 此值在此先計算，待 bqWorkDone 定義後再使用；實際展示用 currentDueAfterAdvanceRelease（後面定義）
 
   const prevBqWorkDone = Number(lastPrior?.bq_work_done || 0);
   const prevVoWorkDone = Number(lastPrior?.vo_work_done || 0);
@@ -496,12 +477,16 @@ export default function IpaDetailPage() {
   const contraCharges = Number(ipa.other_deductions || 0);
 
   const contractSum = Number(ipa.contract?.original_amount || 0);
-  const hasAdvance = advancePaymentAmount > 0;
+  const hasAdvance = advancePaymentAmount > 0 && advancePaymentRate > 0;
 
   // Section 2 values (signed): 2.1 positive principal, 2.2 negative release
+  // Release = -bqWorkDone × rate（累計），與 Excel 公式一致
   const appAdvance = hasAdvance ? advancePaymentAmount : 0;
-  const appRelease = hasAdvance ? -cumulativeAdvanceRelease : 0;
-  const prevRelease = hasAdvance ? -prevAdvanceRelease : 0;
+  const appRelease = hasAdvance ? -(bqWorkDone * advancePaymentRate) : 0;
+  const prevRelease = hasAdvance ? -(prevBqWorkDone * advancePaymentRate) : 0;
+
+  // 當期應收（扣回預付款後）
+  const currentDueAfterAdvanceRelease = Math.max(0, currentDueBeforeAdvanceRelease + appRelease);
 
   // Rows: { no, label, app, prev } — outstanding = app - prev; null = show "-"
   type SummaryRow = {

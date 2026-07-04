@@ -1,6 +1,6 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
-import { retentionApi } from '@/lib/api';
+import { retentionApi, contractsApi } from '@/lib/api';
 import { fmtDate, toInputDate } from '@/lib/dateUtils';
 import Modal from '@/components/Modal';
 import DateInput from '@/components/DateInput';
@@ -36,6 +36,28 @@ export default function RetentionTabContent({ contractId }: Props) {
   const [releases, setReleases] = useState<any[]>([]);
   const [contract, setContract] = useState<any>(null);
   const [syncing, setSyncing] = useState(false);
+
+  // Retention rate inline edit
+  const [editingRate, setEditingRate] = useState(false);
+  const [rateInput, setRateInput] = useState('');
+  const [savingRate, setSavingRate] = useState(false);
+
+  const handleSaveRate = async () => {
+    const newRate = parseFloat(rateInput);
+    if (isNaN(newRate) || newRate < 0 || newRate > 100) {
+      return alert('請輸入有效的比率（0-100）');
+    }
+    setSavingRate(true);
+    try {
+      await contractsApi.update(contractId, { retention_rate: newRate / 100 });
+      setEditingRate(false);
+      await fetchData();
+    } catch (err: any) {
+      alert(err.response?.data?.message || '儲存失敗');
+    } finally {
+      setSavingRate(false);
+    }
+  };
 
   // Release modal
   const [showRelease, setShowRelease] = useState(false);
@@ -154,9 +176,53 @@ export default function RetentionTabContent({ contractId }: Props) {
 
       {/* Retention settings info */}
       {contract && (
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm text-blue-800">
-          扣留金比率：<strong>{(Number(contract.retention_rate) * 100).toFixed(1)}%</strong>，
-          上限比率：<strong>{(Number(contract.retention_cap_rate) * 100).toFixed(1)}%</strong>
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm text-blue-800 flex flex-wrap items-center gap-x-4 gap-y-2">
+          <span>
+            扣留金比率：
+            {editingRate ? (
+              <span className="inline-flex items-center gap-1 ml-1">
+                <input
+                  type="number"
+                  step="0.1"
+                  min="0"
+                  max="100"
+                  value={rateInput}
+                  onChange={e => setRateInput(e.target.value)}
+                  className="w-20 px-2 py-0.5 border border-blue-400 rounded text-sm text-gray-800 font-mono"
+                  autoFocus
+                  onKeyDown={e => { if (e.key === 'Enter') handleSaveRate(); if (e.key === 'Escape') setEditingRate(false); }}
+                />
+                <span className="text-blue-700">%</span>
+                <button
+                  onClick={handleSaveRate}
+                  disabled={savingRate}
+                  className="px-2 py-0.5 bg-blue-600 text-white rounded text-xs hover:bg-blue-700 disabled:opacity-50"
+                >
+                  {savingRate ? '儲存中...' : '儲存'}
+                </button>
+                <button
+                  onClick={() => setEditingRate(false)}
+                  className="px-2 py-0.5 bg-gray-200 text-gray-700 rounded text-xs hover:bg-gray-300"
+                >
+                  取消
+                </button>
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1 ml-1">
+                <strong>{(Number(contract.retention_rate) * 100).toFixed(1)}%</strong>
+                <button
+                  onClick={() => { setRateInput((Number(contract.retention_rate) * 100).toFixed(1)); setEditingRate(true); }}
+                  className="ml-1 px-1.5 py-0.5 text-xs bg-blue-100 text-blue-700 border border-blue-300 rounded hover:bg-blue-200"
+                  title="編輯保留金比率"
+                >
+                  編輯
+                </button>
+              </span>
+            )}
+          </span>
+          <span>
+            上限比率：<strong>{(Number(contract.retention_cap_rate) * 100).toFixed(1)}%</strong>
+          </span>
         </div>
       )}
 
