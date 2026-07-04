@@ -1,12 +1,38 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { paymentApplicationsApi } from '@/lib/api';
+import { paymentApplicationsApi, companyProfilesApi } from '@/lib/api';
 import { fmtDate } from '@/lib/dateUtils';
 
-const fmt$ = (v: any) => `$${Number(v || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-const fmtQty = (v: any) => { const n = Number(v); return n % 1 === 0 ? n.toFixed(0) : n.toFixed(4).replace(/0+$/, ''); };
+// ─── Formatting helpers ───
+// Accounting style: 1,234,567.89 / (1,234.56) for negative / "-" for zero
+const fmtNum = (v: any): string => {
+  const n = Number(v || 0);
+  if (Math.abs(n) < 0.005) return '-';
+  const abs = Math.abs(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return n < 0 ? `(${abs})` : abs;
+};
+const fmtQty = (v: any): string => {
+  const n = Number(v || 0);
+  if (Math.abs(n) < 0.00005) return '-';
+  return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+};
+// As at date: DD-MMM-YY (e.g. 30-May-26)
+const fmtAsAt = (value: any): string => {
+  if (!value) return '-';
+  const d = new Date(value);
+  if (isNaN(d.getTime())) return '-';
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Asia/Hong_Kong', day: '2-digit', month: 'short', year: '2-digit',
+  }).formatToParts(d);
+  const get = (t: string) => parts.find(p => p.type === t)?.value || '';
+  return `${get('day')}-${get('month')}-${get('year')}`;
+};
+const pct = (rate: number): string => {
+  const p = rate * 100;
+  return p % 1 === 0 ? `${p.toFixed(0)}%` : `${p.toFixed(1)}%`;
+};
 
 export default function IpaPrintPage() {
   const params = useParams();
@@ -15,6 +41,7 @@ export default function IpaPrintPage() {
   const paId = Number(params.paId);
   const [ipa, setIpa] = useState<any>(null);
   const [ipaList, setIpaList] = useState<any[]>([]);
+  const [companyName, setCompanyName] = useState<string>('');
   const [loading, setLoading] = useState(true);
 
   const fetchIpa = useCallback(async () => {
@@ -24,6 +51,13 @@ export default function IpaPrintPage() {
       paymentApplicationsApi.list(contractId)
         .then(listRes => setIpaList(listRes.data?.data || []))
         .catch(() => setIpaList([]));
+      companyProfilesApi.simple()
+        .then(cpRes => {
+          const profiles = cpRes.data?.data || cpRes.data || [];
+          const first = Array.isArray(profiles) ? profiles[0] : null;
+          if (first) setCompanyName(first.english_name || first.chinese_name || '');
+        })
+        .catch(() => setCompanyName(''));
     } catch {
       router.push(`/contracts/${contractId}`);
     } finally {
@@ -35,10 +69,14 @@ export default function IpaPrintPage() {
 
   if (loading || !ipa) return <div className="py-8 text-center text-gray-500">載入中...</div>;
 
+  // ═══════════════════════════════════════════════════════════
+  // Advance payment release calculation (existing logic - kept)
+  // ═══════════════════════════════════════════════════════════
   const advancePaymentAmount = Number(ipa.contract?.advance_payment_amount || 0);
   const advancePaymentRate = Number(ipa.contract?.advance_payment_rate || 0);
   let cumulativeAdvanceRelease = 0;
   let currentAdvanceRelease = 0;
+  let prevAdvanceRelease = 0;
 
   if (advancePaymentAmount > 0 && advancePaymentRate > 0) {
     const releaseSource = (ipaList.length > 0 ? ipaList : [ipa])
@@ -55,32 +93,80 @@ export default function IpaPrintPage() {
       cumulativeAdvanceRelease += release;
       if (Number(row.id) === Number(ipa.id)) currentAdvanceRelease = release;
     });
+    prevAdvanceRelease = cumulativeAdvanceRelease - currentAdvanceRelease;
   }
 
-  const advancePaymentBalance = Math.max(0, advancePaymentAmount - cumulativeAdvanceRelease);
-  const currentDueAfterAdvanceRelease = Math.max(0, Number(ipa.current_due || 0) - currentAdvanceRelease);
+  // ═══════════════════════════════════════════════════════════
+  // Previously certified breakdowns (from the latest prior certified/paid IPA;
+  // amounts on IPAs are cumulative, so the last prior IPA carries the totals)
+  // ═══════════════════════════════════════════════════════════
+  const priorIpas = (ipaList || [])
+    .filter((row: any) =>
+      row.status !== 'void' &&
+      Number(row.pa_no || 0) < Number(ipa.pa_no || 0) &&
+      ['certified', 'paid'].includes(row.status))
+    .sort((a: any, b: any) => Number(a.pa_no || 0) - Number(b.pa_no || 0));
+  const lastPrior = priorIpas.length > 0 ? priorIpas[priorIpas.length - 1] : null;
 
-  const summaryRows = [
-    { code: 'A', label: 'BQ 項目完工金額（累計）', value: Number(ipa.bq_work_done) },
-    { code: 'B', label: '變更指令完工金額（累計）', value: Number(ipa.vo_work_done) },
-    { code: 'C', label: '累計完工總額 (A + B)', value: Number(ipa.cumulative_work_done), bold: true },
-    { code: 'D', label: '工地物料', value: Number(ipa.materials_on_site) },
-    { code: 'E', label: '累計總額 (C + D)', value: Number(ipa.gross_amount), bold: true },
-    { code: 'F', label: '保留金', value: Number(ipa.retention_amount), negative: true },
-    { code: 'G', label: '扣除保留金後 (E - F)', value: Number(ipa.after_retention), bold: true },
-    { code: 'H', label: '其他扣款', value: Number(ipa.other_deductions), negative: true },
-    { code: 'I', label: '認證金額 (G - H)', value: Number(ipa.certified_amount), bold: true, highlight: true },
-    { code: 'J', label: '上期認證金額', value: Number(ipa.prev_certified_amount), negative: true },
-    { code: 'K', label: '當期應付金額 (I - J)', value: Number(ipa.current_due), bold: true, highlight: true },
-    ...(advancePaymentAmount > 0 ? [
-      { code: 'L', label: 'Advance Payment（按金金額）', value: advancePaymentAmount },
-      { code: 'M', label: 'Release of Advance Payment（本期按金扣回）', value: currentAdvanceRelease, negative: true },
-      { code: 'N', label: '按金餘額（按金金額 - 累計已扣回）', value: advancePaymentBalance, bold: true },
-      { code: 'O', label: '調整後當期應付金額 (K - M)', value: currentDueAfterAdvanceRelease, bold: true, highlight: true },
-    ] : []),
+  const prevBqWorkDone = Number(lastPrior?.bq_work_done || 0);
+  const prevVoWorkDone = Number(lastPrior?.vo_work_done || 0);
+  const prevTotalWorkDone = prevBqWorkDone + prevVoWorkDone;
+  const prevRetention = Number(lastPrior?.retention_amount || 0);
+  const prevContraCharges = Number(lastPrior?.other_deductions || 0);
+  // Advance payment principal is certified in full once granted (before/at first IPA)
+  const prevAdvancePayment = advancePaymentAmount > 0 && lastPrior ? advancePaymentAmount : 0;
+
+  // ═══════════════════════════════════════════════════════════
+  // Payment Application (cumulative, current IPA) values
+  // ═══════════════════════════════════════════════════════════
+  const bqWorkDone = Number(ipa.bq_work_done || 0);
+  const voWorkDone = Number(ipa.vo_work_done || 0);
+  const totalWorkDone = bqWorkDone + voWorkDone;
+  const retention = Number(ipa.retention_amount || 0);
+  const contraCharges = Number(ipa.other_deductions || 0);
+
+  const contractSum = Number(ipa.contract?.original_amount || 0);
+  const hasAdvance = advancePaymentAmount > 0;
+
+  // Section 2 values (signed): 2.1 positive principal, 2.2 negative release
+  const appAdvance = hasAdvance ? advancePaymentAmount : 0;
+  const appRelease = hasAdvance ? -cumulativeAdvanceRelease : 0;
+  const prevRelease = hasAdvance ? -prevAdvanceRelease : 0;
+
+  // Rows: { no, label, app, prev } — outstanding = app - prev; null = show "-"
+  type SummaryRow = {
+    no: string; label: string;
+    app: number | null; prev: number | null;
+    subtotal?: boolean; indentTotal?: boolean;
+  };
+  const rows: SummaryRow[] = [
+    { no: '1.1)', label: 'VALUE OF MEASURED WORKDONE', app: bqWorkDone, prev: prevBqWorkDone },
+    { no: '1.2)', label: 'VALUE OF VARIATION', app: voWorkDone, prev: prevVoWorkDone },
+    { no: '1.3)', label: 'Daily', app: null, prev: null },
+    { no: '', label: 'TOTAL VALUE OF WORKDONE  (1.1 to 1.3):', app: totalWorkDone, prev: prevTotalWorkDone, subtotal: true },
+    { no: '2.1)', label: `Advance payment (${pct(advancePaymentRate)} of Contract Sum)`, app: hasAdvance ? appAdvance : null, prev: hasAdvance ? prevAdvancePayment : null },
+    { no: '2.2)', label: `Release of Advance payment (${pct(advancePaymentRate)} of Workdone)`, app: hasAdvance ? appRelease : null, prev: hasAdvance ? prevRelease : null },
+    { no: '', label: 'SUBTOTAL  (2.1 to 2.2):', app: hasAdvance ? appAdvance + appRelease : null, prev: hasAdvance ? prevAdvancePayment + prevRelease : null, subtotal: true },
+    { no: '3.1)', label: 'Retention', app: retention > 0 ? -retention : null, prev: prevRetention > 0 ? -prevRetention : null },
+    { no: '3.2)', label: 'LESS RETENTION', app: null, prev: null },
+    { no: '', label: 'SUBTOTAL  (3.1 to 3.2):', app: retention > 0 ? -retention : null, prev: prevRetention > 0 ? -prevRetention : null, subtotal: true },
+    { no: '4)', label: 'Less Contra Charges', app: contraCharges > 0 ? -contraCharges : null, prev: prevContraCharges > 0 ? -prevContraCharges : null },
+    { no: '', label: 'SUBTOTAL  (4):', app: contraCharges > 0 ? -contraCharges : null, prev: prevContraCharges > 0 ? -prevContraCharges : null, subtotal: true },
   ];
 
-  // Group BQ progress by section
+  // AMOUNT DUE = outstanding total: (workdone + advance section - retention - contra) app-minus-prev
+  const appGrand = totalWorkDone + (hasAdvance ? appAdvance + appRelease : 0) - retention - contraCharges;
+  const prevGrand = prevTotalWorkDone + (hasAdvance ? prevAdvancePayment + prevRelease : 0) - prevRetention - prevContraCharges;
+  const amountDue = appGrand - prevGrand;
+
+  const outstanding = (app: number | null, prev: number | null): number | null => {
+    if (app === null && prev === null) return null;
+    return Number(app || 0) - Number(prev || 0);
+  };
+
+  // ═══════════════════════════════════════════════════════════
+  // BQ detail grouped by section
+  // ═══════════════════════════════════════════════════════════
   const bqGrouped: Record<string, { section: any; items: any[] }> = {};
   (ipa.bq_progress || []).forEach((item: any) => {
     const sKey = item.bq_item?.section?.section_code || '_none';
@@ -90,7 +176,12 @@ export default function IpaPrintPage() {
     bqGrouped[sKey].items.push(item);
   });
 
-  // Group VO progress by VO
+  const totalContractAmount = (ipa.bq_progress || []).reduce(
+    (s: number, i: any) => s + Number(i.bq_item?.quantity || 0) * Number(i.unit_rate || 0), 0);
+  const totalAppliedAmount = (ipa.bq_progress || []).reduce(
+    (s: number, i: any) => s + Number(i.current_amount || 0), 0);
+
+  // VO progress grouped by VO (kept as supplementary detail)
   const voGrouped: Record<string, { vo: any; items: any[] }> = {};
   (ipa.vo_progress || []).forEach((item: any) => {
     const voKey = item.vo_item?.variation_order?.vo_no || '_none';
@@ -100,242 +191,261 @@ export default function IpaPrintPage() {
     voGrouped[voKey].items.push(item);
   });
 
+  const projectTitle = ipa.contract?.description || ipa.contract?.contract_name || '';
+  const subcontractWorks = ipa.contract?.contract_name || '';
+  const paLine = `Payment Application No.${ipa.pa_no} (up to ${fmtDate(ipa.period_to)})`;
+
+  const HeaderBlock = () => (
+    <div className="mb-4 text-sm">
+      <p className="font-bold leading-snug">{projectTitle}</p>
+      {subcontractWorks && subcontractWorks !== projectTitle && (
+        <p className="font-bold mt-2">{subcontractWorks}</p>
+      )}
+      <p className="font-bold underline mt-1">{paLine}</p>
+    </div>
+  );
+
   return (
-    <div className="max-w-[1100px] mx-auto bg-white">
+    <div className="max-w-[1100px] mx-auto bg-white text-black">
       {/* Print toolbar */}
       <div className="flex items-center justify-between mb-6 print:hidden">
         <button onClick={() => router.back()} className="btn-secondary text-sm">返回</button>
         <button onClick={() => window.print()} className="btn-primary text-sm">列印</button>
       </div>
 
-      {/* ── Header ── */}
-      <div className="text-center mb-6 border-b-2 border-gray-800 pb-4">
-        <h1 className="text-xl font-bold">明達建築有限公司</h1>
-        <h2 className="text-lg font-bold mt-1">MING TAT CONSTRUCTION LIMITED</h2>
-        <h3 className="text-base font-semibold mt-3">期中付款申請 Interim Payment Application</h3>
-      </div>
+      {/* ═══════════ PAGE 1 : PAYMENT SUMMARY ═══════════ */}
+      <section className="ipa-page">
+        <HeaderBlock />
 
-      {/* ── Info Grid ── */}
-      <div className="grid grid-cols-2 gap-x-8 gap-y-1 text-sm mb-6">
-        <div className="flex"><span className="w-28 font-semibold text-gray-600">IPA 編號：</span><span>{ipa.reference}</span></div>
-        <div className="flex"><span className="w-28 font-semibold text-gray-600">合約編號：</span><span>{ipa.contract?.contract_no}</span></div>
-        <div className="flex"><span className="w-28 font-semibold text-gray-600">期數：</span><span>第 {ipa.pa_no} 期</span></div>
-        <div className="flex"><span className="w-28 font-semibold text-gray-600">合約名稱：</span><span>{ipa.contract?.contract_name}</span></div>
-        <div className="flex"><span className="w-28 font-semibold text-gray-600">計糧截止：</span><span>{fmtDate(ipa.period_to)}</span></div>
-        <div className="flex"><span className="w-28 font-semibold text-gray-600">客戶：</span><span>{ipa.contract?.client?.name || '-'}</span></div>
-      </div>
+        {/* Meta info */}
+        <div className="flex justify-between text-sm mb-4">
+          <table className="border-collapse">
+            <tbody>
+              <tr>
+                <td className="pr-4 py-0.5 align-top whitespace-nowrap">Main-Contractor :</td>
+                <td className="py-0.5 text-blue-800 font-medium">{ipa.contract?.client?.name || '-'}</td>
+              </tr>
+              <tr>
+                <td className="pr-4 py-0.5 align-top whitespace-nowrap">Subcontractor Name :</td>
+                <td className="py-0.5 text-blue-800 font-medium">{companyName || '-'}</td>
+              </tr>
+              <tr>
+                <td className="pr-4 py-0.5 align-top whitespace-nowrap">Subcontract Works :</td>
+                <td className="py-0.5 text-blue-800 font-medium max-w-[380px]">{subcontractWorks}</td>
+              </tr>
+            </tbody>
+          </table>
+          <table className="border-collapse self-start">
+            <tbody>
+              <tr>
+                <td className="pr-4 py-0.5 whitespace-nowrap">Payment No. :</td>
+                <td className="py-0.5 text-blue-800 font-medium text-right">{ipa.pa_no}</td>
+              </tr>
+              <tr>
+                <td className="pr-4 py-0.5 whitespace-nowrap">Payment Type :</td>
+                <td className="py-0.5 text-blue-800 font-medium text-right">Interim</td>
+              </tr>
+              <tr>
+                <td className="pr-4 py-0.5 whitespace-nowrap">As at Date :</td>
+                <td className="py-0.5 text-blue-800 font-medium text-right whitespace-nowrap">{fmtAsAt(ipa.period_to)}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
 
-      {/* ── Summary Table ── */}
-      <div className="mb-6">
-        <h4 className="text-sm font-bold mb-2 border-b border-gray-300 pb-1">金額匯總</h4>
-        <table className="w-full text-sm border border-gray-300">
+        <div className="flex text-sm mb-6">
+          <span className="w-44">Subcontract Sum :</span>
+          <span className="text-blue-800 font-medium">{fmtNum(contractSum)}</span>
+        </div>
+
+        {/* Summary table */}
+        <table className="w-full text-sm border-collapse">
           <thead>
-            <tr className="bg-gray-100">
-              <th className="border px-2 py-1 text-left w-8"></th>
-              <th className="border px-2 py-1 text-left">項目</th>
-              <th className="border px-2 py-1 text-right w-40">金額 (HKD)</th>
+            <tr>
+              <th className="w-10"></th>
+              <th></th>
+              <th className="w-36 text-center font-bold underline pb-2 align-bottom leading-tight">Payment<br />Application</th>
+              <th className="w-36 text-center font-bold underline pb-2 align-bottom leading-tight">Previously<br />Certified</th>
+              <th className="w-40 text-center font-bold underline pb-2 align-bottom leading-tight">Outstanding Amount</th>
             </tr>
           </thead>
           <tbody>
-            {summaryRows.map(row => (
-              <tr key={row.code} className={row.highlight ? 'bg-blue-50' : row.bold ? 'bg-gray-50' : ''}>
-                <td className="border px-2 py-1 text-gray-500 font-mono">{row.code}</td>
-                <td className={`border px-2 py-1 ${row.bold ? 'font-semibold' : ''}`}>{row.label}</td>
-                <td className={`border px-2 py-1 text-right font-mono ${row.bold ? 'font-semibold' : ''} ${row.negative ? 'text-red-600' : ''}`}>
-                  {row.negative && row.value > 0 ? '(' : ''}{fmt$(Math.abs(row.value))}{row.negative && row.value > 0 ? ')' : ''}
-                </td>
-              </tr>
-            ))}
+            {rows.map((row, idx) => {
+              const out = outstanding(row.app, row.prev);
+              if (row.subtotal) {
+                return (
+                  <tr key={idx} className="font-bold">
+                    <td className="py-1"></td>
+                    <td className="py-1 text-right pr-2 bg-gray-200">{row.label}</td>
+                    <td className="py-1 text-right px-2 bg-gray-200 font-mono border-t border-b border-gray-500">{row.app === null ? '-' : fmtNum(row.app)}</td>
+                    <td className="py-1 text-right px-2 bg-gray-200 font-mono border-t border-b border-gray-500">{row.prev === null ? '-' : fmtNum(row.prev)}</td>
+                    <td className="py-1 text-right px-2 bg-gray-200 font-mono border-t border-b border-gray-500">{out === null ? '-' : fmtNum(out)}</td>
+                  </tr>
+                );
+              }
+              return (
+                <tr key={idx}>
+                  <td className="py-1.5 align-top text-gray-800">{row.no}</td>
+                  <td className="py-1.5">{row.label}</td>
+                  <td className="py-1.5 text-right px-2 font-mono">{row.app === null ? '-' : fmtNum(row.app)}</td>
+                  <td className="py-1.5 text-right px-2 font-mono">{row.prev === null ? '-' : fmtNum(row.prev)}</td>
+                  <td className="py-1.5 text-right px-2 font-mono">{out === null ? '-' : fmtNum(out)}</td>
+                </tr>
+              );
+            })}
+            {/* Amount due */}
+            <tr className="font-bold">
+              <td className="pt-6"></td>
+              <td className="pt-6"></td>
+              <td className="pt-6"></td>
+              <td className="pt-6 text-right pr-2 whitespace-nowrap">AMOUNT DUE :</td>
+              <td className="pt-6 text-right px-2 font-mono border-t-2 border-b-4 border-double border-gray-800">{fmtNum(amountDue)}</td>
+            </tr>
           </tbody>
         </table>
-      </div>
+      </section>
 
-      {/* ── BQ Progress ── */}
+      {/* ═══════════ PAGE 2 : BQ DETAIL (Applied Workdone) ═══════════ */}
       {Object.keys(bqGrouped).length > 0 && (
-        <div className="mb-6">
-          <h4 className="text-sm font-bold mb-2 border-b border-gray-300 pb-1">BQ 項目進度</h4>
-          <table className="w-full text-xs border border-gray-300">
+        <section className="ipa-page ipa-page-break">
+          <div className="mb-3 text-xs">
+            <p className="font-bold underline leading-snug">{projectTitle}</p>
+            {subcontractWorks && subcontractWorks !== projectTitle && (
+              <p className="font-bold underline">{subcontractWorks}</p>
+            )}
+            <p className="font-bold underline">{paLine}</p>
+          </div>
+
+          <table className="w-full text-xs border-collapse bq-table">
             <thead>
-              <tr className="bg-gray-100">
-                <th className="border px-1 py-1 text-left">項目</th>
-                <th className="border px-1 py-1 text-left">描述</th>
-                <th className="border px-1 py-1 text-center">單位</th>
-                <th className="border px-1 py-1 text-right">合約數量</th>
-                <th className="border px-1 py-1 text-right">單價</th>
-                <th className="border px-1 py-1 text-right">上期累計</th>
-                <th className="border px-1 py-1 text-right">本期累計</th>
-                <th className="border px-1 py-1 text-right">本期數量</th>
-                <th className="border px-1 py-1 text-right">累計金額</th>
-                <th className="border px-1 py-1 text-right">本期金額</th>
+              <tr>
+                <th colSpan={6} className="border border-gray-800 px-1 py-0.5"></th>
+                <th colSpan={4} className="border border-gray-800 px-1 py-0.5 text-center font-bold">Applied Workdone</th>
+              </tr>
+              <tr>
+                <th className="border border-gray-800 px-1 py-1 text-center w-12">Item</th>
+                <th className="border border-gray-800 px-1 py-1 text-center">Description</th>
+                <th className="border border-gray-800 px-1 py-1 text-center w-20">Qty</th>
+                <th className="border border-gray-800 px-1 py-1 text-center w-12">Unit</th>
+                <th className="border border-gray-800 px-1 py-1 text-center w-20">Rate</th>
+                <th className="border border-gray-800 px-1 py-1 text-center w-28">Amount</th>
+                <th className="border border-gray-800 px-1 py-1 text-center w-20">Previous</th>
+                <th className="border border-gray-800 px-1 py-1 text-center w-20">Current</th>
+                <th className="border border-gray-800 px-1 py-1 text-center w-24">Accumulated</th>
+                <th className="border border-gray-800 px-1 py-1 text-center w-28">Amount (HK$)</th>
               </tr>
             </thead>
             <tbody>
               {Object.entries(bqGrouped).map(([sKey, group]) => (
-                <>
-                  <tr key={`s-${sKey}`} className="bg-blue-50">
-                    <td colSpan={10} className="border px-1 py-1 font-semibold">{group.section.section_code} {group.section.section_name}</td>
+                <React.Fragment key={`s-${sKey}`}>
+                  {/* Section header spanning full width */}
+                  <tr>
+                    <td className="border-x border-gray-800 px-1 py-1"></td>
+                    <td colSpan={9} className="border-x border-gray-800 px-1 py-1 font-bold underline">
+                      {[group.section.section_code, group.section.section_name].filter(Boolean).join(' ')}
+                    </td>
                   </tr>
-                  {group.items.map((item: any) => (
-                    <tr key={item.id}>
-                      <td className="border px-1 py-1">{item.bq_item?.item_no}</td>
-                      <td className="border px-1 py-1 max-w-[200px] truncate">{item.bq_item?.description}</td>
-                      <td className="border px-1 py-1 text-center">{item.bq_item?.unit}</td>
-                      <td className="border px-1 py-1 text-right font-mono">{fmtQty(item.bq_item?.quantity)}</td>
-                      <td className="border px-1 py-1 text-right font-mono">{fmt$(item.unit_rate)}</td>
-                      <td className="border px-1 py-1 text-right font-mono">{fmtQty(item.prev_cumulative_qty)}</td>
-                      <td className="border px-1 py-1 text-right font-mono">{fmtQty(item.current_cumulative_qty)}</td>
-                      <td className="border px-1 py-1 text-right font-mono">{fmtQty(item.this_period_qty)}</td>
-                      <td className="border px-1 py-1 text-right font-mono">{fmt$(item.current_amount)}</td>
-                      <td className="border px-1 py-1 text-right font-mono">{fmt$(item.this_period_amount)}</td>
-                    </tr>
-                  ))}
-                </>
+                  {group.items.map((item: any) => {
+                    const contractQty = Number(item.bq_item?.quantity || 0);
+                    const rate = Number(item.unit_rate || 0);
+                    const itemAmount = contractQty * rate;
+                    return (
+                      <tr key={item.id}>
+                        <td className="border-x border-gray-800 px-1 py-1.5 text-center align-top">{item.bq_item?.item_no}</td>
+                        <td className="border-x border-gray-800 px-1 py-1.5 align-top whitespace-pre-wrap">{item.bq_item?.description}</td>
+                        <td className="border-x border-gray-800 px-1 py-1.5 text-right align-top font-mono">{fmtQty(contractQty)}</td>
+                        <td className="border-x border-gray-800 px-1 py-1.5 text-center align-top">{item.bq_item?.unit}</td>
+                        <td className="border-x border-gray-800 px-1 py-1.5 text-right align-top font-mono">{fmtNum(rate)}</td>
+                        <td className="border-x border-gray-800 px-1 py-1.5 text-right align-top font-mono">{fmtNum(itemAmount)}</td>
+                        <td className="border-x border-gray-800 px-1 py-1.5 text-right align-top font-mono">{fmtQty(item.prev_cumulative_qty)}</td>
+                        <td className="border-x border-gray-800 px-1 py-1.5 text-right align-top font-mono">{fmtQty(item.this_period_qty)}</td>
+                        <td className="border-x border-gray-800 px-1 py-1.5 text-right align-top font-mono">{fmtQty(item.current_cumulative_qty)}</td>
+                        <td className="border-x border-gray-800 px-1 py-1.5 text-right align-top font-mono">{fmtNum(item.current_amount)}</td>
+                      </tr>
+                    );
+                  })}
+                </React.Fragment>
               ))}
-              <tr className="bg-blue-50 font-bold">
-                <td colSpan={8} className="border px-1 py-1 text-right">BQ 合計 (A)</td>
-                <td className="border px-1 py-1 text-right font-mono">{fmt$(ipa.bq_work_done)}</td>
-                <td className="border px-1 py-1 text-right font-mono">
-                  {fmt$((ipa.bq_progress || []).reduce((s: number, i: any) => s + Number(i.this_period_amount), 0))}
-                </td>
+              {/* Filler row to push total to visual bottom feel is skipped for print flow */}
+              <tr className="font-bold">
+                <td className="border border-gray-800 px-1 py-1.5" colSpan={5}></td>
+                <td className="border border-gray-800 px-1 py-1.5 text-right font-mono">{fmtNum(totalContractAmount)}</td>
+                <td className="border border-gray-800 px-1 py-1.5" colSpan={3}></td>
+                <td className="border border-gray-800 px-1 py-1.5 text-right font-mono">{fmtNum(totalAppliedAmount)}</td>
               </tr>
             </tbody>
           </table>
-        </div>
+        </section>
       )}
 
-      {/* ── VO Progress ── */}
+      {/* ═══════════ PAGE 3 : VO DETAIL (if any) ═══════════ */}
       {Object.keys(voGrouped).length > 0 && (
-        <div className="mb-6">
-          <h4 className="text-sm font-bold mb-2 border-b border-gray-300 pb-1">變更指令項目進度</h4>
-          <table className="w-full text-xs border border-gray-300">
+        <section className="ipa-page ipa-page-break">
+          <div className="mb-3 text-xs">
+            <p className="font-bold underline leading-snug">{projectTitle}</p>
+            <p className="font-bold underline">{paLine} — Variation Orders</p>
+          </div>
+
+          <table className="w-full text-xs border-collapse bq-table">
             <thead>
-              <tr className="bg-gray-100">
-                <th className="border px-1 py-1 text-left">VO / 項目</th>
-                <th className="border px-1 py-1 text-left">描述</th>
-                <th className="border px-1 py-1 text-center">單位</th>
-                <th className="border px-1 py-1 text-right">數量</th>
-                <th className="border px-1 py-1 text-right">單價</th>
-                <th className="border px-1 py-1 text-right">上期累計</th>
-                <th className="border px-1 py-1 text-right">本期累計</th>
-                <th className="border px-1 py-1 text-right">本期數量</th>
-                <th className="border px-1 py-1 text-right">累計金額</th>
-                <th className="border px-1 py-1 text-right">本期金額</th>
+              <tr>
+                <th colSpan={6} className="border border-gray-800 px-1 py-0.5"></th>
+                <th colSpan={4} className="border border-gray-800 px-1 py-0.5 text-center font-bold">Applied Workdone</th>
+              </tr>
+              <tr>
+                <th className="border border-gray-800 px-1 py-1 text-center w-12">Item</th>
+                <th className="border border-gray-800 px-1 py-1 text-center">Description</th>
+                <th className="border border-gray-800 px-1 py-1 text-center w-20">Qty</th>
+                <th className="border border-gray-800 px-1 py-1 text-center w-12">Unit</th>
+                <th className="border border-gray-800 px-1 py-1 text-center w-20">Rate</th>
+                <th className="border border-gray-800 px-1 py-1 text-center w-28">Amount</th>
+                <th className="border border-gray-800 px-1 py-1 text-center w-20">Previous</th>
+                <th className="border border-gray-800 px-1 py-1 text-center w-20">Current</th>
+                <th className="border border-gray-800 px-1 py-1 text-center w-24">Accumulated</th>
+                <th className="border border-gray-800 px-1 py-1 text-center w-28">Amount (HK$)</th>
               </tr>
             </thead>
             <tbody>
               {Object.entries(voGrouped).map(([voKey, group]) => (
-                <>
-                  <tr key={`v-${voKey}`} className="bg-green-50">
-                    <td colSpan={10} className="border px-1 py-1 font-semibold">{group.vo.vo_no} - {group.vo.title}</td>
+                <React.Fragment key={`v-${voKey}`}>
+                  <tr>
+                    <td className="border-x border-gray-800 px-1 py-1"></td>
+                    <td colSpan={9} className="border-x border-gray-800 px-1 py-1 font-bold underline">
+                      {[group.vo.vo_no, group.vo.title].filter(Boolean).join(' - ')}
+                    </td>
                   </tr>
-                  {group.items.map((item: any) => (
-                    <tr key={item.id}>
-                      <td className="border px-1 py-1">{item.vo_item?.item_no}</td>
-                      <td className="border px-1 py-1 max-w-[200px] truncate">{item.vo_item?.description}</td>
-                      <td className="border px-1 py-1 text-center">{item.vo_item?.unit}</td>
-                      <td className="border px-1 py-1 text-right font-mono">{fmtQty(item.vo_item?.quantity)}</td>
-                      <td className="border px-1 py-1 text-right font-mono">{fmt$(item.unit_rate)}</td>
-                      <td className="border px-1 py-1 text-right font-mono">{fmtQty(item.prev_cumulative_qty)}</td>
-                      <td className="border px-1 py-1 text-right font-mono">{fmtQty(item.current_cumulative_qty)}</td>
-                      <td className="border px-1 py-1 text-right font-mono">{fmtQty(item.this_period_qty)}</td>
-                      <td className="border px-1 py-1 text-right font-mono">{fmt$(item.current_amount)}</td>
-                      <td className="border px-1 py-1 text-right font-mono">{fmt$(item.this_period_amount)}</td>
-                    </tr>
-                  ))}
-                </>
+                  {group.items.map((item: any) => {
+                    const voQty = Number(item.vo_item?.quantity || 0);
+                    const rate = Number(item.unit_rate || 0);
+                    return (
+                      <tr key={item.id}>
+                        <td className="border-x border-gray-800 px-1 py-1.5 text-center align-top">{item.vo_item?.item_no}</td>
+                        <td className="border-x border-gray-800 px-1 py-1.5 align-top whitespace-pre-wrap">{item.vo_item?.description}</td>
+                        <td className="border-x border-gray-800 px-1 py-1.5 text-right align-top font-mono">{fmtQty(voQty)}</td>
+                        <td className="border-x border-gray-800 px-1 py-1.5 text-center align-top">{item.vo_item?.unit}</td>
+                        <td className="border-x border-gray-800 px-1 py-1.5 text-right align-top font-mono">{fmtNum(rate)}</td>
+                        <td className="border-x border-gray-800 px-1 py-1.5 text-right align-top font-mono">{fmtNum(voQty * rate)}</td>
+                        <td className="border-x border-gray-800 px-1 py-1.5 text-right align-top font-mono">{fmtQty(item.prev_cumulative_qty)}</td>
+                        <td className="border-x border-gray-800 px-1 py-1.5 text-right align-top font-mono">{fmtQty(item.this_period_qty)}</td>
+                        <td className="border-x border-gray-800 px-1 py-1.5 text-right align-top font-mono">{fmtQty(item.current_cumulative_qty)}</td>
+                        <td className="border-x border-gray-800 px-1 py-1.5 text-right align-top font-mono">{fmtNum(item.current_amount)}</td>
+                      </tr>
+                    );
+                  })}
+                </React.Fragment>
               ))}
-              <tr className="bg-green-50 font-bold">
-                <td colSpan={8} className="border px-1 py-1 text-right">VO 合計 (B)</td>
-                <td className="border px-1 py-1 text-right font-mono">{fmt$(ipa.vo_work_done)}</td>
-                <td className="border px-1 py-1 text-right font-mono">
-                  {fmt$((ipa.vo_progress || []).reduce((s: number, i: any) => s + Number(i.this_period_amount), 0))}
+              <tr className="font-bold">
+                <td className="border border-gray-800 px-1 py-1.5" colSpan={5}></td>
+                <td className="border border-gray-800 px-1 py-1.5 text-right font-mono">
+                  {fmtNum((ipa.vo_progress || []).reduce((s: number, i: any) => s + Number(i.vo_item?.quantity || 0) * Number(i.unit_rate || 0), 0))}
                 </td>
+                <td className="border border-gray-800 px-1 py-1.5" colSpan={3}></td>
+                <td className="border border-gray-800 px-1 py-1.5 text-right font-mono">{fmtNum(ipa.vo_work_done)}</td>
               </tr>
             </tbody>
           </table>
-        </div>
+        </section>
       )}
-
-      {/* ── Materials ── */}
-      {(ipa.materials || []).length > 0 && (
-        <div className="mb-6">
-          <h4 className="text-sm font-bold mb-2 border-b border-gray-300 pb-1">工地物料</h4>
-          <table className="w-full text-xs border border-gray-300">
-            <thead>
-              <tr className="bg-gray-100">
-                <th className="border px-1 py-1 text-left">描述</th>
-                <th className="border px-1 py-1 text-right w-32">金額 (HKD)</th>
-                <th className="border px-1 py-1 text-left">備註</th>
-              </tr>
-            </thead>
-            <tbody>
-              {ipa.materials.map((m: any) => (
-                <tr key={m.id}>
-                  <td className="border px-1 py-1">{m.description}</td>
-                  <td className="border px-1 py-1 text-right font-mono">{fmt$(m.amount)}</td>
-                  <td className="border px-1 py-1">{m.remarks || '-'}</td>
-                </tr>
-              ))}
-              <tr className="bg-gray-50 font-bold">
-                <td className="border px-1 py-1 text-right">合計 (D)</td>
-                <td className="border px-1 py-1 text-right font-mono">{fmt$(ipa.materials_on_site)}</td>
-                <td className="border px-1 py-1"></td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {/* ── Deductions ── */}
-      {(ipa.deductions || []).length > 0 && (
-        <div className="mb-6">
-          <h4 className="text-sm font-bold mb-2 border-b border-gray-300 pb-1">其他扣款</h4>
-          <table className="w-full text-xs border border-gray-300">
-            <thead>
-              <tr className="bg-gray-100">
-                <th className="border px-1 py-1 text-left">類型</th>
-                <th className="border px-1 py-1 text-left">描述</th>
-                <th className="border px-1 py-1 text-right w-32">金額 (HKD)</th>
-                <th className="border px-1 py-1 text-left">備註</th>
-              </tr>
-            </thead>
-            <tbody>
-              {ipa.deductions.map((d: any) => (
-                <tr key={d.id}>
-                  <td className="border px-1 py-1">{d.deduction_type}</td>
-                  <td className="border px-1 py-1">{d.description}</td>
-                  <td className="border px-1 py-1 text-right font-mono">{fmt$(d.amount)}</td>
-                  <td className="border px-1 py-1">{d.remarks || '-'}</td>
-                </tr>
-              ))}
-              <tr className="bg-gray-50 font-bold">
-                <td colSpan={2} className="border px-1 py-1 text-right">合計 (H)</td>
-                <td className="border px-1 py-1 text-right font-mono">{fmt$(ipa.other_deductions)}</td>
-                <td className="border px-1 py-1"></td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {/* ── Signature ── */}
-      <div className="grid grid-cols-3 gap-8 mt-12 text-sm">
-        <div className="text-center">
-          <div className="border-b border-gray-400 mb-1 h-12"></div>
-          <p className="text-gray-600">編製</p>
-          <p className="text-xs text-gray-400">Prepared by</p>
-        </div>
-        <div className="text-center">
-          <div className="border-b border-gray-400 mb-1 h-12"></div>
-          <p className="text-gray-600">審核</p>
-          <p className="text-xs text-gray-400">Checked by</p>
-        </div>
-        <div className="text-center">
-          <div className="border-b border-gray-400 mb-1 h-12"></div>
-          <p className="text-gray-600">批准</p>
-          <p className="text-xs text-gray-400">Approved by</p>
-        </div>
-      </div>
 
       {/* Print styles */}
       <style jsx global>{`
@@ -343,7 +453,11 @@ export default function IpaPrintPage() {
           body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
           .print\\:hidden { display: none !important; }
           nav, header, aside { display: none !important; }
-          @page { size: A4 landscape; margin: 10mm; }
+          @page { size: A4 portrait; margin: 12mm; }
+          .ipa-page-break { page-break-before: always; break-before: page; }
+          .bq-table { page-break-inside: auto; }
+          .bq-table tr { page-break-inside: avoid; }
+          .bq-table thead { display: table-header-group; }
         }
       `}</style>
     </div>

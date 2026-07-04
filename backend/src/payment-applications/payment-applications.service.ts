@@ -189,6 +189,7 @@ export class PaymentApplicationsService {
             id: true,
             contract_no: true,
             contract_name: true,
+            description: true,
             original_amount: true,
             retention_rate: true,
             retention_cap_rate: true,
