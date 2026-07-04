@@ -382,6 +382,37 @@ export class ContractsService {
           },
         });
       }
+      // After recalculating draft IPAs, sync RetentionTracking for all non-void IPAs
+      const allNonVoidIpas = await this.prisma.paymentApplication.findMany({
+        where: { contract_id: id, status: { notIn: ['void'] } },
+        orderBy: { pa_no: 'asc' },
+      });
+      let prevCumulativeRetention = 0;
+      for (const ipa of allNonVoidIpas) {
+        const retentionAmount = Number(ipa.retention_amount || 0);
+        const periodRetention = retentionAmount - prevCumulativeRetention;
+        await this.prisma.retentionTracking.upsert({
+          where: {
+            contract_id_payment_application_id: {
+              contract_id: id,
+              payment_application_id: ipa.id,
+            },
+          },
+          create: {
+            contract_id: id,
+            payment_application_id: ipa.id,
+            pa_no: ipa.pa_no,
+            retention_amount: parseFloat(periodRetention.toFixed(2)),
+            cumulative_retention: parseFloat(retentionAmount.toFixed(2)),
+          },
+          update: {
+            pa_no: ipa.pa_no,
+            retention_amount: parseFloat(periodRetention.toFixed(2)),
+            cumulative_retention: parseFloat(retentionAmount.toFixed(2)),
+          },
+        });
+        prevCumulativeRetention = retentionAmount;
+      }
     }
 
     return this.findOne(id);
