@@ -38,6 +38,9 @@ interface FindAllQuery {
   filter_remarks?: string;
   filter_amount_min?: string;
   filter_amount_max?: string;
+  filter_payer?: string;
+  filter_contract?: string;
+  filter_project?: string;
 }
 
 @Injectable()
@@ -160,6 +163,27 @@ export class PaymentInService {
     if (query.filter_remarks) {
       const vals = query.filter_remarks.split(',').filter(Boolean);
       if (vals.length) where.remarks = { in: vals };
+    }
+    if (query.filter_payer) {
+      const vals = query.filter_payer.split(',').filter(Boolean);
+      if (vals.length) {
+        where.OR = [
+          { payer_partner: { name: { in: vals } } },
+          { payer_name: { in: vals } },
+        ];
+      }
+    }
+    if (query.filter_contract) {
+      const vals = query.filter_contract.split(',').filter(Boolean);
+      if (vals.length) {
+        where.contract = { contract_no: { in: vals } };
+      }
+    }
+    if (query.filter_project) {
+      const vals = query.filter_project.split(',').filter(Boolean);
+      if (vals.length) {
+        where.project = { project_no: { in: vals } };
+      }
     }
     if (query.filter_amount_min || query.filter_amount_max) {
       const amtFilter: Prisma.DecimalFilter = {};
@@ -463,6 +487,41 @@ export class PaymentInService {
         orderBy: { remarks: 'asc' },
       });
       return records.map(r => r.remarks!).filter(Boolean).sort();
+    }
+    if (column === 'payer') {
+      // Combine payer_partner names and payer_name values
+      const [partnerRecords, nameRecords] = await Promise.all([
+        this.prisma.paymentIn.findMany({
+          where: { payer_partner_id: { not: null } },
+          select: { payer_partner: { select: { name: true } } },
+          distinct: ['payer_partner_id'],
+        }),
+        this.prisma.paymentIn.findMany({
+          where: { payer_name: { not: null }, payer_partner_id: null },
+          select: { payer_name: true },
+          distinct: ['payer_name'],
+        }),
+      ]);
+      const names = new Set<string>();
+      partnerRecords.forEach(r => { if (r.payer_partner?.name) names.add(r.payer_partner.name); });
+      nameRecords.forEach(r => { if (r.payer_name) names.add(r.payer_name); });
+      return Array.from(names).sort((a, b) => a.localeCompare(b, 'zh-Hant'));
+    }
+    if (column === 'contract') {
+      const records = await this.prisma.paymentIn.findMany({
+        where: { contract_id: { not: null } },
+        select: { contract: { select: { contract_no: true } } },
+        distinct: ['contract_id'],
+      });
+      return records.map(r => r.contract?.contract_no || '').filter(Boolean).sort();
+    }
+    if (column === 'project') {
+      const records = await this.prisma.paymentIn.findMany({
+        where: { project_id: { not: null } },
+        select: { project: { select: { project_no: true } } },
+        distinct: ['project_id'],
+      });
+      return records.map(r => r.project?.project_no || '').filter(Boolean).sort();
     }
     return [];
   }
