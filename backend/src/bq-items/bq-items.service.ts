@@ -152,8 +152,15 @@ export class BqItemsService {
   async remove(contractId: number, id: number) {
     const item = await this.prisma.contractBqItem.findFirst({
       where: { id, contract_id: contractId },
+      include: { payment_progress: { select: { id: true } } },
     });
     if (!item) throw new NotFoundException('BQ 項目不存在');
+
+    if (item.payment_progress && item.payment_progress.length > 0) {
+      throw new BadRequestException(
+        `此 BQ 項目已有 ${item.payment_progress.length} 筆付款進度記錄（IPA），無法刪除。請先到 IPA 頁面刪除相關的付款進度記錄後再試。`
+      );
+    }
 
     await this.prisma.contractBqItem.delete({ where: { id } });
     await this.syncContractAmount(contractId);
