@@ -344,29 +344,41 @@ export class ContractsService {
       });
 
       const currentRetentionRate = Number(updated.retention_rate);
-      // Note: recalculate logic currently doesn't persist advance_release_rate in the IPA table itself, 
-      // but it affects certified_amount and current_due calculations.
-      
+      const currentAdvanceReleaseRate = Number(updated.advance_release_rate) || 0;
+      const advancePaymentAmount =
+        Number(updated.advance_payment_amount || 0) ||
+        (Number(updated.original_amount || 0) * Number(updated.advance_payment_rate || 0));
+      const hasAdvance = advancePaymentAmount > 0;
+
       for (const ipa of ipas) {
         const bqWorkDone = ipa.bq_progress.reduce((s, p) => s + Number(p.current_amount || 0), 0);
         const voWorkDone = ipa.vo_progress.reduce((s, p) => s + Number(p.current_amount || 0), 0);
         const cumulativeWorkDone = bqWorkDone + voWorkDone;
         const materialsOnSite = ipa.materials.reduce((s, m) => s + Number(m.amount || 0), 0);
         const grossAmount = cumulativeWorkDone + materialsOnSite;
-        
-        // Retention = cumulativeWorkDone * retentionRate (matches latest business logic)
+
+        // Retention (stored positive)
         const retentionAmount = cumulativeWorkDone * currentRetentionRate;
         const afterRetention = grossAmount - retentionAmount;
         const otherDeductions = ipa.deductions.reduce((s, d) => s + Number(d.amount || 0), 0);
-        const certifiedAmount = afterRetention - otherDeductions;
-        
-        // Get previous IPA certified amount (could be draft or not, we need the latest value)
-        const prevIpa = await this.prisma.paymentApplication.findFirst({
-          where: { contract_id: id, pa_no: ipa.pa_no - 1, status: { not: 'void' } },
-          select: { certified_amount: true },
-        });
-        const prevCertifiedAmount = prevIpa ? Number(prevIpa.certified_amount) : 0;
-        const currentDue = certifiedAmount - prevCertifiedAmount;
+
+        // Advance section
+        const advanceRelease = hasAdvance ? -(cumulativeWorkDone * currentAdvanceReleaseRate) : 0;
+        const advanceSubtotal = hasAdvance ? advancePaymentAmount + advanceRelease : 0;
+
+        // Cumulative Amount Due
+        const amountDueCumulative = cumulativeWorkDone + advanceSubtotal - retentionAmount - otherDeductions;
+
+        // Previously certified
+        let previouslyCertified = advancePaymentAmount;
+        if (ipa.pa_no > 1) {
+          const prevIpa = await this.prisma.paymentApplication.findFirst({
+            where: { contract_id: id, pa_no: ipa.pa_no - 1, status: { not: 'void' } },
+            select: { amount_due_cumulative: true },
+          });
+          if (prevIpa) previouslyCertified = Number(prevIpa.amount_due_cumulative);
+        }
+        const currentDue = amountDueCumulative - previouslyCertified;
 
         await this.prisma.paymentApplication.update({
           where: { id: ipa.id },
@@ -377,8 +389,11 @@ export class ContractsService {
             gross_amount: parseFloat(grossAmount.toFixed(2)),
             retention_amount: parseFloat(retentionAmount.toFixed(2)),
             after_retention: parseFloat(afterRetention.toFixed(2)),
-            certified_amount: parseFloat(certifiedAmount.toFixed(2)),
+            other_deductions: parseFloat(otherDeductions.toFixed(2)),
+            amount_due_cumulative: parseFloat(amountDueCumulative.toFixed(2)),
+            prev_certified_amount: parseFloat(previouslyCertified.toFixed(2)),
             current_due: parseFloat(currentDue.toFixed(2)),
+            // certified_amount intentionally NOT updated here
           },
         });
       }

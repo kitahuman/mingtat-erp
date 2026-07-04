@@ -1991,7 +1991,8 @@ model PaymentApplication {
   other_deductions      Decimal @default(0) @db.Decimal(14, 2) // (H)
   certified_amount      Decimal @default(0) @db.Decimal(14, 2) // (I) = G - H
   prev_certified_amount Decimal @default(0) @db.Decimal(14, 2) // (J)
-  current_due           Decimal @default(0) @db.Decimal(14, 2) // (K) = I - J
+  current_due           Decimal @default(0) @db.Decimal(14, 2) // (K) = Amount Due - Previously Certified
+  amount_due_cumulative Decimal @default(0) @db.Decimal(14, 2) // Cumulative Amount Due (for next period's Previously Certified)
 
   // 客戶認證金額（可能與申請金額不同）
   client_certified_amount Decimal? @db.Decimal(14, 2)

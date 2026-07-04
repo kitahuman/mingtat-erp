@@ -29,47 +29,53 @@ export class PaymentApplicationsService {
         materials: true,
         deductions: true,
         contract: {
-          include: {
-            bq_items: { where: { status: 'active' } },
-            variation_orders: { where: { status: 'approved' } },
+          select: {
+            id: true,
+            original_amount: true,
+            advance_payment_rate: true,
+            advance_payment_amount: true,
+            advance_release_rate: true,
+            retention_rate: true,
           },
         },
       },
     });
     if (!pa) throw new NotFoundException('IPA 不存在');
 
-    // (A) BQ work done = sum of bq_progress.current_amount
+    // ── Work done ──────────────────────────────────────────────
     const bqWorkDone = pa.bq_progress.reduce((s, p) => s + this.toNum(p.current_amount), 0);
-
-    // (B) VO work done = sum of vo_progress.current_amount
     const voWorkDone = pa.vo_progress.reduce((s, p) => s + this.toNum(p.current_amount), 0);
-
-    // (C) Cumulative work done = A + B
-    const cumulativeWorkDone = bqWorkDone + voWorkDone;
-
-    // (D) Materials on site
+    const cumulativeWorkDone = bqWorkDone + voWorkDone; // excludes materials
     const materialsOnSite = pa.materials.reduce((s, m) => s + this.toNum(m.amount), 0);
-
-    // (E) Gross amount = C + D
     const grossAmount = cumulativeWorkDone + materialsOnSite;
 
+    // ── Retention (stored positive; shown negative in UI) ──────────────
     const retentionRate = this.toNum(pa.contract.retention_rate);
-
-    // (F) Retention = cumulative workdone (BQ + VO, 不含 materials) × retention rate
-    // 與 Excel 參考公式一致：Retention = -TOTAL WORKDONE × retention_rate
     const retentionAmount = cumulativeWorkDone * retentionRate;
-
-    // (G) After retention = E - F
     const afterRetention = grossAmount - retentionAmount;
 
-    // (H) Other deductions
+    // ── Deductions (contra charges) ─────────────────────────────
     const otherDeductions = pa.deductions.reduce((s, d) => s + this.toNum(d.amount), 0);
 
-    // (I) Certified amount = G - H
-    const certifiedAmount = afterRetention - otherDeductions;
+    // ── Advance Payment section ────────────────────────────────
+    // advance_payment_amount: one-off lump sum paid at contract start
+    const advancePaymentAmount =
+      this.toNum(pa.contract.advance_payment_amount) ||
+      (this.toNum(pa.contract.original_amount) * this.toNum(pa.contract.advance_payment_rate));
+    const advanceReleaseRate = this.toNum((pa.contract as any).advance_release_rate) || 0;
+    const hasAdvance = advancePaymentAmount > 0;
+    const advanceRelease = hasAdvance ? -(cumulativeWorkDone * advanceReleaseRate) : 0;
+    const advanceSubtotal = hasAdvance ? advancePaymentAmount + advanceRelease : 0;
 
-    // (J) Previous certified amount = certified_amount of the previous IPA (by pa_no)
-    let prevCertifiedAmount = 0;
+    // ── Cumulative Amount Due ───────────────────────────────────
+    // = totalWorkDone + advanceSubtotal - retentionAmount - contraCharges
+    const amountDueCumulative =
+      cumulativeWorkDone + advanceSubtotal - retentionAmount - otherDeductions;
+
+    // ── Previously Certified & Current Due ────────────────────
+    // pa_no=1: previously certified = advance payment already paid out
+    // pa_no>1: previously certified = previous IPA's amount_due_cumulative
+    let previouslyCertified = advancePaymentAmount;
     if (pa.pa_no > 1) {
       const prevPa = await this.prisma.paymentApplication.findFirst({
         where: {
@@ -77,15 +83,18 @@ export class PaymentApplicationsService {
           pa_no: pa.pa_no - 1,
           status: { notIn: ['void'] },
         },
+        select: { amount_due_cumulative: true },
       });
       if (prevPa) {
-        prevCertifiedAmount = this.toNum(prevPa.certified_amount);
+        previouslyCertified = this.toNum(prevPa.amount_due_cumulative);
       }
     }
 
-    // (K) Current due = I - J
-    const currentDue = certifiedAmount - prevCertifiedAmount;
+    // current_due = amountDueCumulative - previouslyCertified
+    const currentDue = amountDueCumulative - previouslyCertified;
 
+    // NOTE: certified_amount is NOT updated here — it is set manually by the user
+    // during the certify operation and represents what the client actually certified.
     await this.prisma.paymentApplication.update({
       where: { id: paId },
       data: {
@@ -97,9 +106,10 @@ export class PaymentApplicationsService {
         retention_amount: parseFloat(retentionAmount.toFixed(2)),
         after_retention: parseFloat(afterRetention.toFixed(2)),
         other_deductions: parseFloat(otherDeductions.toFixed(2)),
-        certified_amount: parseFloat(certifiedAmount.toFixed(2)),
-        prev_certified_amount: parseFloat(prevCertifiedAmount.toFixed(2)),
+        amount_due_cumulative: parseFloat(amountDueCumulative.toFixed(2)),
+        prev_certified_amount: parseFloat(previouslyCertified.toFixed(2)),
         current_due: parseFloat(currentDue.toFixed(2)),
+        // certified_amount intentionally NOT updated here
       },
     });
   }
@@ -126,6 +136,27 @@ export class PaymentApplicationsService {
       orderBy: { pa_no: 'asc' },
     });
 
+    // Aggregate paid amounts for each IPA from PaymentIn records
+    const paidAmounts = await this.prisma.paymentIn.groupBy({
+      by: ['source_ref_id'],
+      where: {
+        source_type: 'ipa',
+        source_ref_id: { in: ipas.map(i => i.id) },
+        payment_in_status: 'paid',
+      },
+      _sum: { amount: true },
+    });
+    const paidAmountMap = new Map<number, number>();
+    for (const row of paidAmounts) {
+      if (row.source_ref_id != null) {
+        paidAmountMap.set(row.source_ref_id, this.toNum(row._sum.amount));
+      }
+    }
+    const ipasWithPaid = ipas.map(ipa => ({
+      ...ipa,
+      paid_amount_received: parseFloat((paidAmountMap.get(ipa.id) ?? 0).toFixed(2)),
+    }));
+
     // Build summary
     const bqTotal = contract.bq_items.reduce((s, i) => s + this.toNum(i.amount), 0);
     const voTotal = contract.variation_orders.reduce((s, v) => s + this.toNum(v.approved_amount), 0);
@@ -145,7 +176,7 @@ export class PaymentApplicationsService {
       : 0;
 
     return {
-      data: ipas,
+      data: ipasWithPaid,
       summary: {
         revised_contract_sum: parseFloat(revisedContractSum.toFixed(2)),
         cumulative_certified: parseFloat(cumulativeCertified.toFixed(2)),

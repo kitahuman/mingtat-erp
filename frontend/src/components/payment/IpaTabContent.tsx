@@ -274,15 +274,16 @@ export default function IpaTabContent({ contractId }: Props) {
               <th className="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500">截止日期</th>
               <th className="px-4 py-3 text-right text-xs font-medium uppercase text-gray-500">累計完工金額</th>
               <th className="px-4 py-3 text-right text-xs font-medium uppercase text-gray-500">保留金</th>
-              <th className="px-4 py-3 text-right text-xs font-medium uppercase text-gray-500">認證金額</th>
               <th className="px-4 py-3 text-right text-xs font-medium uppercase text-gray-500">當期應付</th>
+              <th className="px-4 py-3 text-right text-xs font-medium uppercase text-gray-500">認證金額</th>
+              <th className="px-4 py-3 text-right text-xs font-medium uppercase text-gray-500">已收金額</th>
               <th className="px-4 py-3 text-center text-xs font-medium uppercase text-gray-500">狀態</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-200 bg-white">
             {ipas.length === 0 ? (
               <tr>
-                <td colSpan={8} className="px-4 py-8 text-center text-gray-400">尚無 IPA 記錄</td>
+                <td colSpan={9} className="px-4 py-8 text-center text-gray-400">尚無 IPA 記錄</td>
               </tr>
             ) : (
               ipas.map((ipa: any) => (
@@ -299,8 +300,9 @@ export default function IpaTabContent({ contractId }: Props) {
                   <td className="px-4 py-3 text-sm text-gray-600">{fmtDate(ipa.period_to)}</td>
                   <td className="px-4 py-3 text-right text-sm text-gray-900 font-mono">{fmt$(ipa.cumulative_work_done)}</td>
                   <td className="px-4 py-3 text-right text-sm text-gray-900 font-mono">{fmt$(ipa.retention_amount)}</td>
-                  <td className="px-4 py-3 text-right text-sm text-gray-900 font-mono">{fmt$(ipa.certified_amount)}</td>
                   <td className="px-4 py-3 text-right text-sm font-medium text-gray-900 font-mono">{fmt$(ipa.current_due)}</td>
+                  <td className="px-4 py-3 text-right text-sm text-gray-900 font-mono">{fmt$(ipa.certified_amount)}</td>
+                  <td className="px-4 py-3 text-right text-sm text-gray-900 font-mono">{ipa.paid_amount_received != null && ipa.paid_amount_received > 0 ? fmt$(ipa.paid_amount_received) : '-'}</td>
                   <td className="px-4 py-3 text-center">
                     <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${IPA_STATUS_COLORS[ipa.status] || 'bg-gray-100 text-gray-700'}`}>
                       {IPA_STATUS_LABELS[ipa.status] || ipa.status}
