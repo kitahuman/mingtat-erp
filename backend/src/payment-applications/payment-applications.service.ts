@@ -445,6 +445,26 @@ export class PaymentApplicationsService {
   }
 
   // ═══════════════════════════════════════════════════════════
+  // Delete single BQ Progress item
+  // ═══════════════════════════════════════════════════════════
+  async removeBqProgress(contractId: number, paId: number, progressId: number) {
+    const pa = await this.prisma.paymentApplication.findFirst({
+      where: { id: paId, contract_id: contractId },
+    });
+    if (!pa) throw new NotFoundException('IPA 不存在');
+    if (pa.status !== 'draft') {
+      throw new BadRequestException('僅草稿狀態可以刪除進度記錄');
+    }
+    const progress = await this.prisma.paymentBqProgress.findFirst({
+      where: { id: progressId, payment_application_id: paId },
+    });
+    if (!progress) throw new NotFoundException('BQ 進度記錄不存在');
+    await this.prisma.paymentBqProgress.delete({ where: { id: progressId } });
+    await this.recalculate(paId);
+    return { message: '刪除成功' };
+  }
+
+  // ═══════════════════════════════════════════════════════════
   // VO Progress batch update
   // ═══════════════════════════════════════════════════════════
 

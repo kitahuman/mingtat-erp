@@ -70,6 +70,16 @@ export class PaymentApplicationsController {
     return this.service.updateBqProgress(+contractId, +paId, body.items);
   }
 
+  // ── Delete single BQ Progress item ──
+  @Delete(':paId/bq-progress/:progressId')
+  removeBqProgress(
+    @Param('contractId') contractId: string,
+    @Param('paId') paId: string,
+    @Param('progressId') progressId: string,
+  ) {
+    return this.service.removeBqProgress(+contractId, +paId, +progressId);
+  }
+
   // ── VO Progress batch update ──
   @Put(':paId/vo-progress')
   updateVoProgress(

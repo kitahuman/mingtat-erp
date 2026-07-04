@@ -1137,6 +1137,10 @@ export const paymentApplicationsApi = {
       `/contracts/${contractId}/payment-applications/${paId}/bq-progress`,
       { items },
     ),
+  removeBqProgress: (contractId: number, paId: number, progressId: number) =>
+    api.delete(
+      `/contracts/${contractId}/payment-applications/${paId}/bq-progress/${progressId}`,
+    ),
   updateVoProgress: (contractId: number, paId: number, items: any[]) =>
     api.put(
       `/contracts/${contractId}/payment-applications/${paId}/vo-progress`,

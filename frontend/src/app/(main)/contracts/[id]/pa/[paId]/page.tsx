@@ -120,6 +120,18 @@ export default function IpaDetailPage() {
     setDirty(true);
   };
 
+  // ── Delete BQ progress item ──
+  const handleDeleteBqProgress = async (progressId: number) => {
+    if (!confirm('確定刪除此 BQ 進度記錄？刪除後可在 BQ 頁面刪除對應的 BQ 項目。')) return;
+    try {
+      await paymentApplicationsApi.removeBqProgress(contractId, paId, progressId);
+      setLocalBqProgress(prev => prev.filter(item => item.id !== progressId));
+      alert('刪除成功');
+    } catch (err: any) {
+      alert(err?.response?.data?.message || '刪除失敗');
+    }
+  };
+
   // ── VO progress local update ──
   const handleVoChange = (voItemId: number, currentQty: number) => {
     setLocalVoProgress(prev => prev.map(item => {
@@ -479,6 +491,7 @@ export default function IpaDetailPage() {
                     <th className="px-3 py-2 text-right font-medium text-gray-500">本期數量</th>
                     <th className="px-3 py-2 text-right font-medium text-gray-500">累計金額</th>
                     <th className="px-3 py-2 text-right font-medium text-gray-500">本期金額</th>
+                    {editable && <th className="px-3 py-2 text-center font-medium text-gray-500">操作</th>}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200">
@@ -497,12 +510,12 @@ export default function IpaDetailPage() {
                     });
 
                     return Object.entries(grouped).map(([sKey, group]) => (
-                      <SectionGroup key={sKey} sKey={sKey} group={group} editable={editable} onBqChange={handleBqChange} />
+                      <SectionGroup key={sKey} sKey={sKey} group={group} editable={editable} onBqChange={handleBqChange} onDelete={handleDeleteBqProgress} />
                     ));
                   })()}
                   {/* BQ Total */}
                   <tr className="bg-blue-50 font-bold">
-                    <td colSpan={8} className="px-3 py-2 text-right text-blue-900">BQ 項目合計 (A)</td>
+                    <td colSpan={editable ? 9 : 8} className="px-3 py-2 text-right text-blue-900">BQ 項目合計 (A)</td>
                     <td className="px-3 py-2 text-right text-blue-900 font-mono">
                       {fmt$(localBqProgress.reduce((s: number, i: any) => s + Number(i.current_amount), 0))}
                     </td>
@@ -923,11 +936,11 @@ export default function IpaDetailPage() {
 
 // ── Sub-components for BQ section grouping ──
 
-function SectionGroup({ sKey, group, editable, onBqChange }: { sKey: string; group: any; editable: boolean; onBqChange: (bqItemId: number, qty: number) => void }) {
+function SectionGroup({ sKey, group, editable, onBqChange, onDelete }: { sKey: string; group: any; editable: boolean; onBqChange: (bqItemId: number, qty: number) => void; onDelete: (progressId: number) => void }) {
   return (
     <>
       <tr className="bg-blue-50">
-        <td colSpan={10} className="px-3 py-2 font-semibold text-blue-800">
+        <td colSpan={editable ? 11 : 10} className="px-3 py-2 font-semibold text-blue-800">
           {group.section.section_code} {group.section.section_name}
         </td>
       </tr>
@@ -959,12 +972,22 @@ function SectionGroup({ sKey, group, editable, onBqChange }: { sKey: string; gro
             <td className="px-3 py-2 text-right text-gray-600 font-mono">{fmtQty(item.this_period_qty)}</td>
             <td className="px-3 py-2 text-right text-gray-900 font-mono">{fmt$(item.current_amount)}</td>
             <td className="px-3 py-2 text-right font-medium text-gray-900 font-mono">{fmt$(item.this_period_amount)}</td>
+            {editable && (
+              <td className="px-3 py-2 text-center">
+                <button
+                  onClick={() => onDelete(item.id)}
+                  className="text-red-600 hover:text-red-800 text-xs font-medium"
+                >
+                  刪除
+                </button>
+              </td>
+            )}
           </tr>
         );
       })}
       {/* Section subtotal */}
       <tr className="bg-gray-50 font-medium">
-        <td colSpan={8} className="px-3 py-2 text-right text-gray-700">{group.section.section_code} 小計</td>
+        <td colSpan={editable ? 9 : 8} className="px-3 py-2 text-right text-gray-700">{group.section.section_code} 小計</td>
         <td className="px-3 py-2 text-right text-gray-900 font-mono">
           {fmt$(group.items.reduce((s: number, i: any) => s + Number(i.current_amount), 0))}
         </td>
