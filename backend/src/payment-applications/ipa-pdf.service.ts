@@ -400,7 +400,7 @@ export class IpaPdfService {
     const bqSectionHtml =
       Object.keys(bqGrouped).length > 0
         ? `
-      <section class="ipa-page page-break">
+      <section class="ipa-page ipa-page-landscape page-break">
         <div class="detail-header">
           <p class="bold underline">${this.escapeHtml(projectTitle)}</p>
           ${
@@ -418,14 +418,14 @@ export class IpaPdfService {
             </tr>
             <tr>
               <th class="bd w-item">Item</th>
-              <th class="bd">Description</th>
+              <th class="bd w-desc">Description</th>
               <th class="bd w-qty">Qty</th>
               <th class="bd w-unit">Unit</th>
               <th class="bd w-rate">Rate</th>
               <th class="bd w-amt">Amount</th>
               <th class="bd w-qty">Previous</th>
               <th class="bd w-qty">Current</th>
-              <th class="bd w-acc">Accumulated</th>
+              <th class="bd w-qty">Accumulated</th>
               <th class="bd w-amt">Amount (HK$)</th>
             </tr>
           </thead>
@@ -496,7 +496,7 @@ export class IpaPdfService {
     const voSectionHtml =
       Object.keys(voGrouped).length > 0
         ? `
-      <section class="ipa-page page-break">
+      <section class="ipa-page ipa-page-landscape page-break">
         <div class="detail-header">
           <p class="bold underline">${this.escapeHtml(projectTitle)}</p>
           <p class="bold underline">${this.escapeHtml(paLine)} — Variation Orders</p>
@@ -509,14 +509,14 @@ export class IpaPdfService {
             </tr>
             <tr>
               <th class="bd w-item">Item</th>
-              <th class="bd">Description</th>
+              <th class="bd w-desc">Description</th>
               <th class="bd w-qty">Qty</th>
               <th class="bd w-unit">Unit</th>
               <th class="bd w-rate">Rate</th>
               <th class="bd w-amt">Amount</th>
               <th class="bd w-qty">Previous</th>
               <th class="bd w-qty">Current</th>
-              <th class="bd w-acc">Accumulated</th>
+              <th class="bd w-qty">Accumulated</th>
               <th class="bd w-amt">Amount (HK$)</th>
             </tr>
           </thead>
@@ -539,7 +539,10 @@ export class IpaPdfService {
   <meta charset="UTF-8" />
   <title>${this.escapeHtml(ipa.reference || `IPA-${ipa.pa_no}`)}</title>
   <style>
-    @page { size: A4 portrait; margin: 12mm; }
+    /* Portrait for page 1 (Payment Summary) */
+    @page          { size: A4 portrait;  margin: 12mm; }
+    /* Landscape for BQ/VO detail pages */
+    @page landscape { size: A4 landscape; margin: 10mm; }
     * { box-sizing: border-box; }
     html, body {
       margin: 0; padding: 0; background: #ffffff; color: #000000;
@@ -586,14 +589,21 @@ export class IpaPdfService {
       border-top: 2px solid #1f2937; border-bottom: 6px double #1f2937;
     }
 
+    /* ── BQ / VO detail pages (landscape) ── */
+    .ipa-page-landscape { page: landscape; }
     .detail-header { margin-bottom: 10px; font-size: 10px; }
     table.bq-table { width: 100%; border-collapse: collapse; font-size: 10px; }
-    table.bq-table th, table.bq-table td { padding: 3px 4px; }
+    table.bq-table th, table.bq-table td { padding: 3px 5px; }
     .bd { border: 1px solid #1f2937; }
     .bx { border-left: 1px solid #1f2937; border-right: 1px solid #1f2937; }
     .section-title { font-weight: 700; text-decoration: underline; }
-    .w-item { width: 44px; } .w-qty { width: 70px; } .w-unit { width: 40px; }
-    .w-rate { width: 70px; } .w-amt { width: 96px; } .w-acc { width: 84px; }
+    /* Column widths — percentages of A4 landscape usable width (~277mm) */
+    .w-item { width: 5%; }   /* ~14mm  Item no */
+    .w-desc { }              /* flex   Description — takes remaining space */
+    .w-qty  { width: 9%; }   /* ~25mm  Qty / Previous / Current / Accumulated */
+    .w-unit { width: 4%; }   /* ~11mm  Unit */
+    .w-rate { width: 9%; }   /* ~25mm  Rate */
+    .w-amt  { width: 12%; }  /* ~33mm  Amount / Amount(HK$) */
 
     .page-break { page-break-before: always; break-before: page; }
     .ipa-page { padding: 0 2mm; }

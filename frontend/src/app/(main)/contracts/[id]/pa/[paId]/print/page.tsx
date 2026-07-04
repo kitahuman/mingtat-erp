@@ -307,7 +307,7 @@ export default function IpaPrintPage() {
 
       {/* ═══════════ PAGE 2 : BQ DETAIL (Applied Workdone) ═══════════ */}
       {Object.keys(bqGrouped).length > 0 && (
-        <section className="ipa-page ipa-page-break">
+        <section className="ipa-page ipa-page-break ipa-page-landscape">
           <div className="mb-3 text-xs">
             <p className="font-bold underline leading-snug">{projectTitle}</p>
             {subcontractWorks && subcontractWorks !== projectTitle && (
@@ -323,16 +323,16 @@ export default function IpaPrintPage() {
                 <th colSpan={4} className="border border-gray-800 px-1 py-0.5 text-center font-bold">Applied Workdone</th>
               </tr>
               <tr>
-                <th className="border border-gray-800 px-1 py-1 text-center w-12">Item</th>
+                <th className="border border-gray-800 px-1 py-1 text-center" style={{width:'5%'}}>Item</th>
                 <th className="border border-gray-800 px-1 py-1 text-center">Description</th>
-                <th className="border border-gray-800 px-1 py-1 text-center w-20">Qty</th>
-                <th className="border border-gray-800 px-1 py-1 text-center w-12">Unit</th>
-                <th className="border border-gray-800 px-1 py-1 text-center w-20">Rate</th>
-                <th className="border border-gray-800 px-1 py-1 text-center w-28">Amount</th>
-                <th className="border border-gray-800 px-1 py-1 text-center w-20">Previous</th>
-                <th className="border border-gray-800 px-1 py-1 text-center w-20">Current</th>
-                <th className="border border-gray-800 px-1 py-1 text-center w-24">Accumulated</th>
-                <th className="border border-gray-800 px-1 py-1 text-center w-28">Amount (HK$)</th>
+                <th className="border border-gray-800 px-1 py-1 text-center" style={{width:'9%'}}>Qty</th>
+                <th className="border border-gray-800 px-1 py-1 text-center" style={{width:'4%'}}>Unit</th>
+                <th className="border border-gray-800 px-1 py-1 text-center" style={{width:'9%'}}>Rate</th>
+                <th className="border border-gray-800 px-1 py-1 text-center" style={{width:'12%'}}>Amount</th>
+                <th className="border border-gray-800 px-1 py-1 text-center" style={{width:'9%'}}>Previous</th>
+                <th className="border border-gray-800 px-1 py-1 text-center" style={{width:'9%'}}>Current</th>
+                <th className="border border-gray-800 px-1 py-1 text-center" style={{width:'9%'}}>Accumulated</th>
+                <th className="border border-gray-800 px-1 py-1 text-center" style={{width:'12%'}}>Amount (HK$)</th>
               </tr>
             </thead>
             <tbody>
@@ -380,7 +380,7 @@ export default function IpaPrintPage() {
 
       {/* ═══════════ PAGE 3 : VO DETAIL (if any) ═══════════ */}
       {Object.keys(voGrouped).length > 0 && (
-        <section className="ipa-page ipa-page-break">
+        <section className="ipa-page ipa-page-break ipa-page-landscape">
           <div className="mb-3 text-xs">
             <p className="font-bold underline leading-snug">{projectTitle}</p>
             <p className="font-bold underline">{paLine} — Variation Orders</p>
@@ -393,16 +393,16 @@ export default function IpaPrintPage() {
                 <th colSpan={4} className="border border-gray-800 px-1 py-0.5 text-center font-bold">Applied Workdone</th>
               </tr>
               <tr>
-                <th className="border border-gray-800 px-1 py-1 text-center w-12">Item</th>
+                <th className="border border-gray-800 px-1 py-1 text-center" style={{width:'5%'}}>Item</th>
                 <th className="border border-gray-800 px-1 py-1 text-center">Description</th>
-                <th className="border border-gray-800 px-1 py-1 text-center w-20">Qty</th>
-                <th className="border border-gray-800 px-1 py-1 text-center w-12">Unit</th>
-                <th className="border border-gray-800 px-1 py-1 text-center w-20">Rate</th>
-                <th className="border border-gray-800 px-1 py-1 text-center w-28">Amount</th>
-                <th className="border border-gray-800 px-1 py-1 text-center w-20">Previous</th>
-                <th className="border border-gray-800 px-1 py-1 text-center w-20">Current</th>
-                <th className="border border-gray-800 px-1 py-1 text-center w-24">Accumulated</th>
-                <th className="border border-gray-800 px-1 py-1 text-center w-28">Amount (HK$)</th>
+                <th className="border border-gray-800 px-1 py-1 text-center" style={{width:'9%'}}>Qty</th>
+                <th className="border border-gray-800 px-1 py-1 text-center" style={{width:'4%'}}>Unit</th>
+                <th className="border border-gray-800 px-1 py-1 text-center" style={{width:'9%'}}>Rate</th>
+                <th className="border border-gray-800 px-1 py-1 text-center" style={{width:'12%'}}>Amount</th>
+                <th className="border border-gray-800 px-1 py-1 text-center" style={{width:'9%'}}>Previous</th>
+                <th className="border border-gray-800 px-1 py-1 text-center" style={{width:'9%'}}>Current</th>
+                <th className="border border-gray-800 px-1 py-1 text-center" style={{width:'9%'}}>Accumulated</th>
+                <th className="border border-gray-800 px-1 py-1 text-center" style={{width:'12%'}}>Amount (HK$)</th>
               </tr>
             </thead>
             <tbody>
@@ -453,7 +453,9 @@ export default function IpaPrintPage() {
           body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
           .print\\:hidden { display: none !important; }
           nav, header, aside { display: none !important; }
-          @page { size: A4 portrait; margin: 12mm; }
+          @page           { size: A4 portrait;  margin: 12mm; }
+          @page landscape { size: A4 landscape; margin: 10mm; }
+          .ipa-page-landscape { page: landscape; }
           .ipa-page-break { page-break-before: always; break-before: page; }
           .bq-table { page-break-inside: auto; }
           .bq-table tr { page-break-inside: avoid; }
