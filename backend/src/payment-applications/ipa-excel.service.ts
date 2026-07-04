@@ -311,6 +311,8 @@ export class IpaExcelService {
     });
 
     const pctText = this.pct(calc.advancePaymentRate);
+    const releasePctText = this.pct(calc.advanceReleaseRate ?? calc.advancePaymentRate);
+    const advanceReleaseRate = Number(calc.advanceReleaseRate ?? calc.advancePaymentRate);
     const detailTotalRef = `'${detailSheetName}'!J${detailRefs.totalRowNum}`;
 
     // Helper to write a data row: label + H (app) + J (prev) + L (outstanding formula)
@@ -421,12 +423,12 @@ export class IpaExcelService {
     }
 
     ws.getCell('A24').value = '2.2)';
-    ws.getCell('B24').value = `Release of Advance payment (${pctText} of Workdone)`;
+    ws.getCell('B24').value = `Release of Advance payment (${releasePctText} of Workdone)`;
     if (hasAdvance) {
-      // Release = -VALUE OF MEASURED WORKDONE × rate (Excel 公式：-H15*rate)
-      ws.getCell('H24').value = { formula: `-H15*${Number(calc.advancePaymentRate)}` };
+      // Release = -VALUE OF MEASURED WORKDONE × advance_release_rate (Excel 公式：-H15*rate)
+      ws.getCell('H24').value = { formula: `-H15*${advanceReleaseRate}` };
       ws.getCell('H24').numFmt = this.numFmt;
-      ws.getCell('J24').value = { formula: `-J15*${Number(calc.advancePaymentRate)}` };
+      ws.getCell('J24').value = { formula: `-J15*${advanceReleaseRate}` };
       ws.getCell('J24').numFmt = this.numFmt;
     } else {
       ws.getCell('H24').value = '-';

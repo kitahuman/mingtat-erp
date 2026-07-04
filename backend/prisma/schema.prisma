@@ -704,6 +704,7 @@ model Contract {
   advance_payment_rate       Decimal? @db.Decimal(5, 4)
   advance_payment_amount     Decimal? @db.Decimal(12, 2)
   advance_payment_invoice_id Int?
+  advance_release_rate       Decimal  @default(0.10) @db.Decimal(5, 4) // 扣回預付款比率（獨立於按金比例）
 
   client                  Partner   @relation("contract_client", fields: [client_id], references: [id], onDelete: Restrict)
   advance_payment_invoice Invoice?  @relation("ContractAdvancePaymentInvoice", fields: [advance_payment_invoice_id], references: [id], onDelete: SetNull)

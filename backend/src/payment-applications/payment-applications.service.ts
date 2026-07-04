@@ -176,6 +176,7 @@ export class PaymentApplicationsService {
             advance_payment_rate: true,
             advance_payment_amount: true,
             advance_payment_invoice_id: true,
+            advance_release_rate: true,
             advance_payment_invoice: {
               select: {
                 id: true,

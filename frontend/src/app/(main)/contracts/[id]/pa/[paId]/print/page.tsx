@@ -72,6 +72,7 @@ export default function IpaPrintPage() {
   // ═══════════════════════════════════════════════════════════
   const advancePaymentAmount = Number(ipa.contract?.advance_payment_amount || 0);
   const advancePaymentRate = Number(ipa.contract?.advance_payment_rate || 0);
+  const advanceReleaseRate = Number((ipa.contract?.advance_release_rate ?? ipa.contract?.advance_payment_rate) || 0);
 
   // Previously certified breakdowns (from the latest prior certified/paid IPA;
   // amounts on IPAs are cumulative, so the last prior IPA carries the totals)
@@ -105,10 +106,10 @@ export default function IpaPrintPage() {
   const hasAdvance = advancePaymentAmount > 0 && advancePaymentRate > 0;
 
   // Section 2 values (signed): 2.1 positive principal, 2.2 negative release
-  // Release = -bqWorkDone × rate（累計），與 Excel 公式一致
+  // Release = -bqWorkDone × advance_release_rate（累計），與 Excel 公式一致
   const appAdvance = hasAdvance ? advancePaymentAmount : 0;
-  const appRelease = hasAdvance ? -(bqWorkDone * advancePaymentRate) : 0;
-  const prevRelease = hasAdvance ? -(prevBqWorkDone * advancePaymentRate) : 0;
+  const appRelease = hasAdvance ? -(bqWorkDone * advanceReleaseRate) : 0;
+  const prevRelease = hasAdvance ? -(prevBqWorkDone * advanceReleaseRate) : 0;
 
   // Rows: { no, label, app, prev } — outstanding = app - prev; null = show "-"
   type SummaryRow = {
@@ -122,7 +123,7 @@ export default function IpaPrintPage() {
     { no: '1.3)', label: 'Daily', app: null, prev: null },
     { no: '', label: 'TOTAL VALUE OF WORKDONE  (1.1 to 1.3):', app: totalWorkDone, prev: prevTotalWorkDone, subtotal: true },
     { no: '2.1)', label: `Advance payment (${pct(advancePaymentRate)} of Contract Sum)`, app: hasAdvance ? appAdvance : null, prev: hasAdvance ? prevAdvancePayment : null },
-    { no: '2.2)', label: `Release of Advance payment (${pct(advancePaymentRate)} of Workdone)`, app: hasAdvance ? appRelease : null, prev: hasAdvance ? prevRelease : null },
+    { no: '2.2)', label: `Release of Advance payment (${pct(advanceReleaseRate)} of Workdone)`, app: hasAdvance ? appRelease : null, prev: hasAdvance ? prevRelease : null },
     { no: '', label: 'SUBTOTAL  (2.1 to 2.2):', app: hasAdvance ? appAdvance + appRelease : null, prev: hasAdvance ? prevAdvancePayment + prevRelease : null, subtotal: true },
     { no: '3.1)', label: 'Retention', app: retention > 0 ? -retention : null, prev: prevRetention > 0 ? -prevRetention : null },
     { no: '3.2)', label: 'LESS RETENTION', app: null, prev: null },

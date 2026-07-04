@@ -444,6 +444,8 @@ export default function IpaDetailPage() {
 
   const advancePaymentAmount = Number(ipa.contract?.advance_payment_amount || 0);
   const advancePaymentRate = Number(ipa.contract?.advance_payment_rate || 0);
+  // advance_release_rate: 扣回預付款比率（獨立欄位），未設定時 fallback 到 advance_payment_rate
+  const advanceReleaseRate = Number((ipa.contract?.advance_release_rate ?? ipa.contract?.advance_payment_rate) || 0);
 
   // ═══════════════════════════════════════════════════════════
   // Previously certified breakdowns (from the latest prior certified/paid IPA;
@@ -480,10 +482,10 @@ export default function IpaDetailPage() {
   const hasAdvance = advancePaymentAmount > 0 && advancePaymentRate > 0;
 
   // Section 2 values (signed): 2.1 positive principal, 2.2 negative release
-  // Release = -bqWorkDone × rate（累計），與 Excel 公式一致
+  // Release = -bqWorkDone × advance_release_rate（累計），與 Excel 公式一致
   const appAdvance = hasAdvance ? advancePaymentAmount : 0;
-  const appRelease = hasAdvance ? -(bqWorkDone * advancePaymentRate) : 0;
-  const prevRelease = hasAdvance ? -(prevBqWorkDone * advancePaymentRate) : 0;
+  const appRelease = hasAdvance ? -(bqWorkDone * advanceReleaseRate) : 0;
+  const prevRelease = hasAdvance ? -(prevBqWorkDone * advanceReleaseRate) : 0;
 
   // 當期應收（扣回預付款後）
   const currentDueAfterAdvanceRelease = Math.max(0, currentDueBeforeAdvanceRelease + appRelease);
@@ -500,7 +502,7 @@ export default function IpaDetailPage() {
     { no: '1.3)', label: '日工 Daily', app: null, prev: null },
     { no: '', label: '工程總値 Total Value of Workdone  (1.1 to 1.3):', app: totalWorkDone, prev: prevTotalWorkDone, subtotal: true },
     { no: '2.1)', label: `預付款（合約金額${pct(advancePaymentRate)}）Advance Payment (${pct(advancePaymentRate)} of Contract Sum)`, app: hasAdvance ? appAdvance : null, prev: hasAdvance ? prevAdvancePayment : null },
-    { no: '2.2)', label: `扣回預付款（已完工程${pct(advancePaymentRate)}）Release of Advance Payment (${pct(advancePaymentRate)} of Workdone)`, app: hasAdvance ? appRelease : null, prev: hasAdvance ? prevRelease : null },
+    { no: '2.2)', label: `扣回預付款（已完工程${pct(advanceReleaseRate)}）Release of Advance Payment (${pct(advanceReleaseRate)} of Workdone)`, app: hasAdvance ? appRelease : null, prev: hasAdvance ? prevRelease : null },
     { no: '', label: '小計 Subtotal  (2.1 to 2.2):', app: hasAdvance ? appAdvance + appRelease : null, prev: hasAdvance ? prevAdvancePayment + prevRelease : null, subtotal: true },
     { no: '3.1)', label: '保留金 Retention', app: retention > 0 ? -retention : null, prev: prevRetention > 0 ? -prevRetention : null },
     { no: '3.2)', label: '扣減保留金 Less Retention', app: null, prev: null },

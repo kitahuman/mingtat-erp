@@ -279,6 +279,7 @@ export class ContractsService {
       advance_payment_rate,
       advance_payment_amount,
       advance_payment_invoice_id,
+      advance_release_rate,
     } = dto;
     await this.ensureAdvancePaymentInvoiceExists(advance_payment_invoice_id);
 
@@ -307,6 +308,7 @@ export class ContractsService {
     if (advance_payment_invoice_id !== undefined) {
       updateData.advance_payment_invoice_id = advance_payment_invoice_id === null ? null : Number(advance_payment_invoice_id);
     }
+    if (advance_release_rate !== undefined) updateData.advance_release_rate = Number(advance_release_rate);
 
     let updated: Awaited<ReturnType<typeof this.prisma.contract.update>>;
     try {

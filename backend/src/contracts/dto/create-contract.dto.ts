@@ -16,6 +16,7 @@ export class CreateContractDto {
   @IsOptional() @Type(() => Number) @IsNumber() advance_payment_rate?: number | null;
   @IsOptional() @Type(() => Number) @IsNumber() advance_payment_amount?: number | null;
   @IsOptional() @Type(() => Number) @IsNumber() advance_payment_invoice_id?: number | null;
+  @IsOptional() @Type(() => Number) @IsNumber() advance_release_rate?: number;
 }
 
 export class UpdateContractDto extends CreateContractDto {

@@ -59,6 +59,7 @@ export class IpaPdfService {
             retention_cap_rate: true,
             advance_payment_rate: true,
             advance_payment_amount: true,
+            advance_release_rate: true,
             client: { select: { id: true, name: true } },
           },
         },
@@ -129,6 +130,8 @@ export class IpaPdfService {
 
     const advancePaymentAmount = toNum(ipa.contract?.advance_payment_amount);
     const advancePaymentRate = toNum(ipa.contract?.advance_payment_rate);
+    // advance_release_rate: 扣回預付款比率（獨立欄位，default 0.10）
+    const advanceReleaseRate = toNum(ipa.contract?.advance_release_rate ?? ipa.contract?.advance_payment_rate);
 
     // Previously certified breakdowns（取最後一期已認證/已收款的前期 IPA）
     const priorIpas = (ipaList || [])
@@ -159,11 +162,11 @@ export class IpaPdfService {
     const contractSum = toNum(ipa.contract?.original_amount);
     const hasAdvance = advancePaymentAmount > 0 && advancePaymentRate > 0;
 
-    // Release of Advance = 累計 VALUE OF MEASURED WORKDONE × advance rate
-    // 與 Excel 參考公式一致：-bqWorkDone × rate（Previously = -prevBqWorkDone × rate）
+    // Release of Advance = 累計 VALUE OF MEASURED WORKDONE × advance_release_rate
+    // 與 Excel 參考公式一致：-bqWorkDone × advanceReleaseRate
     const appAdvance = hasAdvance ? advancePaymentAmount : 0;
-    const appRelease = hasAdvance ? -(bqWorkDone * advancePaymentRate) : 0;
-    const prevRelease = hasAdvance ? -(prevBqWorkDone * advancePaymentRate) : 0;
+    const appRelease = hasAdvance ? -(bqWorkDone * advanceReleaseRate) : 0;
+    const prevRelease = hasAdvance ? -(prevBqWorkDone * advanceReleaseRate) : 0;
 
     const appGrand =
       totalWorkDone +
@@ -180,6 +183,7 @@ export class IpaPdfService {
     return {
       advancePaymentAmount,
       advancePaymentRate,
+      advanceReleaseRate,
       hasAdvance,
       bqWorkDone,
       voWorkDone,
@@ -242,7 +246,7 @@ export class IpaPdfService {
       },
       {
         no: '2.2)',
-        label: `Release of Advance payment (${this.pct(calc.advancePaymentRate)} of Workdone)`,
+        label: `Release of Advance payment (${this.pct(calc.advanceReleaseRate)} of Workdone)`,
         app: calc.hasAdvance ? calc.appRelease : null,
         prev: calc.hasAdvance ? calc.prevRelease : null,
       },

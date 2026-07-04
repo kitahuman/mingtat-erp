@@ -179,6 +179,9 @@ export default function ContractManagementTabs({
       updateData.advance_payment_rate = updateData.advance_payment_rate === '' || updateData.advance_payment_rate === undefined ? null : Number(updateData.advance_payment_rate);
       updateData.advance_payment_amount = updateData.advance_payment_amount === '' || updateData.advance_payment_amount === undefined ? null : Number(updateData.advance_payment_amount);
       updateData.advance_payment_invoice_id = updateData.advance_payment_invoice_id === '' || updateData.advance_payment_invoice_id === undefined ? null : Number(updateData.advance_payment_invoice_id);
+      if (updateData.advance_release_rate !== undefined && updateData.advance_release_rate !== '') {
+        updateData.advance_release_rate = Number(updateData.advance_release_rate);
+      }
       const res = await contractsApi.update(contract.id, updateData);
       setContract(res.data);
       setForm({ ...res.data });
@@ -636,6 +639,19 @@ export default function ContractManagementTabs({
                     clearable
                   />
                 </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-500 mb-1">扣回預付款比率 <span className="text-xs text-gray-400">（0.10 = 10%）</span></label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="1"
+                    step="0.0001"
+                    value={form.advance_release_rate ?? ''}
+                    onChange={e => setForm({ ...form, advance_release_rate: e.target.value })}
+                    className="input-field"
+                    placeholder="例如：0.10"
+                  />
+                </div>
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -660,6 +676,14 @@ export default function ContractManagementTabs({
                   ) : (
                     <p>-</p>
                   )}
+                </div>
+                <div>
+                  <p className="text-sm text-gray-500">扣回預付款比率</p>
+                  <p className="font-mono">
+                    {contract?.advance_release_rate != null
+                      ? `${contract.advance_release_rate}（${(Number(contract.advance_release_rate) * 100).toFixed(2)}%）`
+                      : '0.10（10.00%）'}
+                  </p>
                 </div>
               </div>
             )}
@@ -946,6 +970,19 @@ export default function ContractManagementTabs({
                     clearable
                   />
                 </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-500 mb-1">扣回預付款比率 <span className="text-xs text-gray-400">（0.10 = 10%）</span></label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="1"
+                    step="0.0001"
+                    value={form.advance_release_rate ?? ''}
+                    onChange={e => setForm({ ...form, advance_release_rate: e.target.value })}
+                    className="input-field"
+                    placeholder="例如：0.10"
+                  />
+                </div>
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -970,6 +1007,14 @@ export default function ContractManagementTabs({
                   ) : (
                     <p>-</p>
                   )}
+                </div>
+                <div>
+                  <p className="text-sm text-gray-500">扣回預付款比率</p>
+                  <p className="font-mono">
+                    {contract?.advance_release_rate != null
+                      ? `${contract.advance_release_rate}（${(Number(contract.advance_release_rate) * 100).toFixed(2)}%）`
+                      : '0.10（10.00%）'}
+                  </p>
                 </div>
               </div>
             )}
