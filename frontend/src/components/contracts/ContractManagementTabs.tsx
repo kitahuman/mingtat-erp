@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, type ReactNode } from 'react';
 import DateInput from '@/components/DateInput';
 import { useRouter } from 'next/navigation';
 import { contractsApi, partnersApi, projectsApi, expensesApi, bqSectionsApi, bqItemsApi, variationOrdersApi, contractSummaryApi, quotationsApi, paymentApplicationsApi, invoicesApi } from '@/lib/api';
@@ -28,14 +28,17 @@ const UNIT_OPTIONS = ['m³', 'm²', 'm', 'no.', 'item', 'kg', 'ton', 'set', 'lot
 const fmt$ = (v: any) => `$${Number(v || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 export const contractManagementTabs = [
-  { key: 'contract-info', label: '合約資料' },
+  { key: 'project-info', label: '工程資料' },
   { key: 'bq', label: '工程量清單 (BQ)' },
   { key: 'vo', label: '變更指令 (VO)' },
-  { key: 'projects', label: '項目列表' },
   { key: 'ipa', label: '計糧 (IPA)' },
   { key: 'retention', label: '扣留金' },
-  { key: 'deposit', label: '按金' },
+  { key: 'documents', label: '工程文件' },
 ];
+
+// Legacy tab keys merged into the new 工程資料 tab
+const LEGACY_PROJECT_INFO_TABS = ['contract-info', 'deposit', 'projects'];
+const normalizeTab = (tab: string) => (LEGACY_PROJECT_INFO_TABS.includes(tab) ? 'project-info' : tab);
 
 type ContractManagementTabsProps = {
   contractId: number;
@@ -47,6 +50,12 @@ type ContractManagementTabsProps = {
   backLabel?: string;
   fallbackHref?: string;
   onContractLoaded?: (contract: any) => void;
+  /** Rendered inside 工程資料 tab, between 合約資料 card and 金額匯總 cards */
+  projectInfoSlot?: ReactNode;
+  /** Rendered inside 工程資料 tab, after 按金管理 card (e.g. 關聯報價單 / 工程價目記錄) */
+  projectInfoBottomSlot?: ReactNode;
+  /** Rendered inside 工程文件 tab, after 合約文件 upload (e.g. 工程文件 upload) */
+  documentsSlot?: ReactNode;
 };
 
 export default function ContractManagementTabs({
@@ -59,6 +68,9 @@ export default function ContractManagementTabs({
   backLabel = '合約管理',
   fallbackHref = '/projects',
   onContractLoaded,
+  projectInfoSlot,
+  projectInfoBottomSlot,
+  documentsSlot,
 }: ContractManagementTabsProps) {
   const router = useRouter();
   const { isReadOnly } = useAuth();
@@ -68,8 +80,8 @@ export default function ContractManagementTabs({
   const [clients, setClients] = useState<any[]>([]);
   const [allInvoices, setAllInvoices] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [internalActiveTab, setInternalActiveTab] = useState('contract-info');
-  const activeTab = controlledActiveTab || internalActiveTab;
+  const [internalActiveTab, setInternalActiveTab] = useState('project-info');
+  const activeTab = normalizeTab(controlledActiveTab || internalActiveTab);
   const setActiveTab = (tab: string) => {
     if (onTabChange) onTabChange(tab);
     else setInternalActiveTab(tab);
@@ -166,7 +178,7 @@ export default function ContractManagementTabs({
   }, [contractId, loadContract, loadLinkedProjects, loadInvoiceOptions]);
 
   useEffect(() => {
-    if (activeTab === 'bq') loadBqData();
+    if (activeTab === 'bq' || activeTab === 'project-info') loadBqData();
     if (activeTab === 'vo') loadVoList();
   }, [activeTab, loadBqData, loadVoList]);
 
@@ -257,6 +269,12 @@ export default function ContractManagementTabs({
       }),
     [allExpenses, contractId],
   );
+
+  const issuingCompanyName = useMemo(() => {
+    const company = contract?.company || linkedProjects?.[0]?.company;
+    if (!company) return '';
+    return company.internal_prefix ? `${company.internal_prefix} - ${company.name}` : (company.name || '');
+  }, [contract, linkedProjects]);
 
   const invoiceOptions = useMemo(
     () => allInvoices.map((inv: any) => {
@@ -475,7 +493,7 @@ export default function ContractManagementTabs({
           </div>
           <p className="text-gray-500 mt-1">{contract?.contract_name}</p>
         </div>
-        {activeTab === 'contract-info' && (
+        {activeTab === 'project-info' && (
           <div className="flex gap-2">
             {editing ? (
               <>
@@ -495,27 +513,8 @@ export default function ContractManagementTabs({
       </div>
       )}
 
-      {/* Summary Cards */}
-      {summary && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-          <div className="card text-center">
-            <p className="text-xs text-gray-500">原始合約金額</p>
-            <p className="text-lg font-bold text-gray-900 font-mono">{fmt$(summary.original_amount)}</p>
-          </div>
-          <div className="card text-center">
-            <p className="text-xs text-gray-500">已批准 VO</p>
-            <p className="text-lg font-bold text-green-600 font-mono">{fmt$(summary.approved_vo_amount)}</p>
-          </div>
-          <div className="card text-center">
-            <p className="text-xs text-gray-500">待批 VO</p>
-            <p className="text-lg font-bold text-blue-600 font-mono">{fmt$(summary.pending_vo_amount)}</p>
-          </div>
-          <div className="card text-center">
-            <p className="text-xs text-gray-500">修訂合約總額</p>
-            <p className="text-lg font-bold text-primary-600 font-mono">{fmt$(summary.revised_amount)}</p>
-          </div>
-        </div>
-      )}
+      {/* Summary Cards (BQ / VO tabs) */}
+      {summary && (activeTab === 'bq' || activeTab === 'vo') && renderSummaryCards()}
 
       {/* Tabs */}
       {showTabs && (
@@ -538,9 +537,10 @@ export default function ContractManagementTabs({
       </div>
       )}
 
-      {/* ═══════════ Tab: 合約資料 ═══════════ */}
-      {activeTab === 'contract-info' && (
+      {/* ═══════════ Tab: 工程資料 ═══════════ */}
+      {activeTab === 'project-info' && (
         <>
+          {/* 1. 合約資料卡片 */}
           <div className="card mb-6">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-bold text-gray-900">合約資料</h2>
@@ -586,6 +586,7 @@ export default function ContractManagementTabs({
                 <>
                   <div><p className="text-sm text-gray-500">合約編號</p><p className="font-mono font-bold">{contract?.contract_no}</p></div>
                   <div><p className="text-sm text-gray-500">合約名稱</p><p className="font-medium">{contract?.contract_name}</p></div>
+                  {issuingCompanyName && <div><p className="text-sm text-gray-500">開立公司</p><p>{issuingCompanyName}</p></div>}
                   <div><p className="text-sm text-gray-500">客戶</p><p>{contract?.client?.name || '-'}</p></div>
                   <div><p className="text-sm text-gray-500">合約金額</p><p className="font-mono">{fmt$(contract?.original_amount)}</p></div>
                   <div><p className="text-sm text-gray-500">狀態</p><p><span className={statusColors[contract?.status]}>{statusLabels[contract?.status]}</span></p></div>
@@ -598,10 +599,29 @@ export default function ContractManagementTabs({
             </div>
           </div>
 
+          {/* 2. 工程資料卡片（由工程頁面提供） */}
+          {projectInfoSlot}
+
+          {/* 3. 金額匯總 */}
+          {summary && renderSummaryCards()}
+
+          {/* 4. 按金管理卡片（含編輯功能） */}
           <div className="card mb-6">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-bold text-gray-900">按金管理</h2>
-              <span className="text-xs text-gray-500">按金金額可由合約金額 × 按金比例自動計算，亦可手動覆寫</span>
+              <div>
+                <h2 className="text-lg font-bold text-gray-900">按金管理</h2>
+                <span className="text-xs text-gray-500">按金金額可由合約金額 × 按金比例自動計算，亦可手動覆寫</span>
+              </div>
+              <div className="flex gap-2">
+                {editing ? (
+                  <>
+                    <button onClick={() => { setForm({ ...contract }); setEditing(false); }} className="btn-secondary text-sm">取消</button>
+                    <button onClick={handleSave} className="btn-primary text-sm">儲存</button>
+                  </>
+                ) : (
+                  <button onClick={() => setEditing(true)} className="btn-primary text-sm">編輯</button>
+                )}
+              </div>
             </div>
             {editing ? (
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -689,14 +709,12 @@ export default function ContractManagementTabs({
             )}
           </div>
 
+          {/* 5-6. 關聯報價單 / 工程價目記錄（由工程頁面提供） */}
+          {projectInfoBottomSlot}
+
+          {/* 關聯項目 / 關聯支出統計卡 */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-            <div
-              role="button"
-              tabIndex={0}
-              onClick={() => setActiveTab('projects')}
-              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setActiveTab('projects'); } }}
-              className="card text-center cursor-pointer hover:shadow-md hover:border-primary-200 transition"
-            >
+            <div className="card text-center">
               <p className="text-sm text-gray-500">關聯項目</p>
               <p className="text-2xl font-bold text-primary-600">{contract?._count?.projects || 0}</p>
               <button
@@ -727,7 +745,41 @@ export default function ContractManagementTabs({
             <div className="card text-center"><p className="text-sm text-gray-500">合約金額</p><p className="text-2xl font-bold text-green-600">{fmt$(contract?.original_amount)}</p></div>
           </div>
 
-          <AttachmentUpload entityType="contract" entityId={contractId} title="合約文件" readOnly={isReadOnly('contracts')} />
+          {/* 關聯工程項目列表 */}
+          {linkedProjects.length > 0 && (
+            <div className="card mb-6">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-bold text-gray-900">關聯工程項目</h2>
+                <button type="button" onClick={openProjectLinkModal} className="btn-primary text-sm">關聯項目</button>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-gray-50 border-b">
+                      <th className="px-3 py-2 text-left">工程編號</th>
+                      <th className="px-3 py-2 text-left">工程名稱</th>
+                      <th className="px-3 py-2 text-left">公司</th>
+                      <th className="px-3 py-2 text-left">開始日期</th>
+                      <th className="px-3 py-2 text-left">結束日期</th>
+                      <th className="px-3 py-2 text-left">狀態</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {linkedProjects.map((p: any) => (
+                      <tr key={p.id} className="border-b hover:bg-gray-50 cursor-pointer" onClick={() => router.push(`/projects/${p.id}`)}>
+                        <td className="px-3 py-2 font-mono font-bold text-primary-600">{p.project_no}</td>
+                        <td className="px-3 py-2">{p.project_name || '-'}</td>
+                        <td className="px-3 py-2">{p.company?.internal_prefix || p.company?.name || '-'}</td>
+                        <td className="px-3 py-2">{fmtDate(p.start_date)}</td>
+                        <td className="px-3 py-2">{fmtDate(p.end_date)}</td>
+                        <td className="px-3 py-2"><span className={pStatusColors[p.status] || 'badge-gray'}>{pStatusLabels[p.status] || p.status}</span></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
         </>
       )}
 
@@ -862,46 +914,6 @@ export default function ContractManagementTabs({
         </>
       )}
 
-      {/* ═══════════ Tab: 項目列表 ═══════════ */}
-      {activeTab === 'projects' && (
-        <div className="card mb-6">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-bold text-gray-900">關聯工程項目</h2>
-            <button type="button" onClick={openProjectLinkModal} className="btn-primary text-sm">關聯項目</button>
-          </div>
-          {linkedProjects.length > 0 ? (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="bg-gray-50 border-b">
-                    <th className="px-3 py-2 text-left">工程編號</th>
-                    <th className="px-3 py-2 text-left">工程名稱</th>
-                    <th className="px-3 py-2 text-left">公司</th>
-                    <th className="px-3 py-2 text-left">開始日期</th>
-                    <th className="px-3 py-2 text-left">結束日期</th>
-                    <th className="px-3 py-2 text-left">狀態</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {linkedProjects.map((p: any) => (
-                    <tr key={p.id} className="border-b hover:bg-gray-50 cursor-pointer" onClick={() => router.push(`/projects/${p.id}`)}>
-                      <td className="px-3 py-2 font-mono font-bold text-primary-600">{p.project_no}</td>
-                      <td className="px-3 py-2">{p.project_name || '-'}</td>
-                      <td className="px-3 py-2">{p.company?.internal_prefix || p.company?.name || '-'}</td>
-                      <td className="px-3 py-2">{fmtDate(p.start_date)}</td>
-                      <td className="px-3 py-2">{fmtDate(p.end_date)}</td>
-                      <td className="px-3 py-2"><span className={pStatusColors[p.status] || 'badge-gray'}>{pStatusLabels[p.status] || p.status}</span></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <p className="text-gray-400 text-sm">暫無關聯工程項目</p>
-          )}
-        </div>
-      )}
-
       {/* ═══════════ Tab: 計糧 (IPA) ═══════════ */}
       {activeTab === 'ipa' && (
         <IpaTabContent contractId={contractId} />
@@ -914,111 +926,13 @@ export default function ContractManagementTabs({
 
 
 
-      {/* ═══════════ Tab: 按金 ═══════════ */}
-      {activeTab === 'deposit' && (
+      {/* ═══════════ Tab: 工程文件 ═══════════ */}
+      {activeTab === 'documents' && (
         <>
-          <div className="card mb-6">
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <h2 className="text-lg font-bold text-gray-900">按金管理</h2>
-                <span className="text-xs text-gray-500">按金金額可由合約金額 × 按金比例自動計算，亦可手動覆寫</span>
-              </div>
-              <div className="flex gap-2">
-                {editing ? (
-                  <>
-                    <button onClick={() => { setForm({ ...contract }); setEditing(false); }} className="btn-secondary text-sm">取消</button>
-                    <button onClick={handleSave} className="btn-primary text-sm">儲存</button>
-                  </>
-                ) : (
-                  <button onClick={() => setEditing(true)} className="btn-primary text-sm">編輯</button>
-                )}
-              </div>
-            </div>
-            {editing ? (
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-500 mb-1">按金比例 <span className="text-xs text-gray-400">（0.10 = 10%）</span></label>
-                  <input
-                    type="number"
-                    min="0"
-                    max="1"
-                    step="0.0001"
-                    value={form.advance_payment_rate ?? ''}
-                    onChange={e => handleAdvancePaymentRateChange(e.target.value)}
-                    className="input-field"
-                    placeholder="例如：0.10"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-500 mb-1">按金金額</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={form.advance_payment_amount ?? ''}
-                    onChange={e => setForm({ ...form, advance_payment_amount: e.target.value })}
-                    className="input-field"
-                    placeholder="可手動覆寫"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-500 mb-1">關聯按金發票</label>
-                  <SearchableSelect
-                    value={form.advance_payment_invoice_id ?? null}
-                    onChange={val => setForm({ ...form, advance_payment_invoice_id: val })}
-                    options={invoiceOptions}
-                    placeholder="搜尋並選擇發票"
-                    clearable
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-500 mb-1">扣回預付款比率 <span className="text-xs text-gray-400">（0.10 = 10%）</span></label>
-                  <input
-                    type="number"
-                    min="0"
-                    max="1"
-                    step="0.0001"
-                    value={form.advance_release_rate ?? ''}
-                    onChange={e => setForm({ ...form, advance_release_rate: e.target.value })}
-                    className="input-field"
-                    placeholder="例如：0.10"
-                  />
-                </div>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <p className="text-sm text-gray-500">按金比例</p>
-                  <p className="font-mono">
-                    {contract?.advance_payment_rate != null
-                      ? `${contract.advance_payment_rate}（${(Number(contract.advance_payment_rate) * 100).toFixed(2)}%）`
-                      : '-'}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-500">按金金額</p>
-                  <p className="font-mono font-bold text-amber-700">{contract?.advance_payment_amount != null ? fmt$(contract.advance_payment_amount) : '-'}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-500">關聯發票編號</p>
-                  {contract?.advance_payment_invoice ? (
-                    <Link href={`/invoices/${contract.advance_payment_invoice.id}`} className="inline-flex items-center text-primary-600 hover:underline font-mono font-bold">
-                      {contract.advance_payment_invoice.invoice_no || `Invoice #${contract.advance_payment_invoice.id}`}
-                    </Link>
-                  ) : (
-                    <p>-</p>
-                  )}
-                </div>
-                <div>
-                  <p className="text-sm text-gray-500">扣回預付款比率</p>
-                  <p className="font-mono">
-                    {contract?.advance_release_rate != null
-                      ? `${contract.advance_release_rate}（${(Number(contract.advance_release_rate) * 100).toFixed(2)}%）`
-                      : '0.10（10.00%）'}
-                  </p>
-                </div>
-              </div>
-            )}
+          <div className="mb-6">
+            <AttachmentUpload entityType="contract" entityId={contractId} title="合約文件" readOnly={isReadOnly('contracts')} />
           </div>
+          {documentsSlot}
         </>
       )}
       {/* ═══════════ Modals ═══════════ */}
@@ -1353,6 +1267,31 @@ export default function ContractManagementTabs({
       </Modal>
     </div>
   );
+
+  // ── 金額匯總卡片 (reusable) ──
+  function renderSummaryCards() {
+    if (!summary) return null;
+    return (
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+        <div className="card text-center">
+          <p className="text-xs text-gray-500">原始合約金額</p>
+          <p className="text-lg font-bold text-gray-900 font-mono">{fmt$(summary.original_amount)}</p>
+        </div>
+        <div className="card text-center">
+          <p className="text-xs text-gray-500">已批准 VO</p>
+          <p className="text-lg font-bold text-green-600 font-mono">{fmt$(summary.approved_vo_amount)}</p>
+        </div>
+        <div className="card text-center">
+          <p className="text-xs text-gray-500">待批 VO</p>
+          <p className="text-lg font-bold text-blue-600 font-mono">{fmt$(summary.pending_vo_amount)}</p>
+        </div>
+        <div className="card text-center">
+          <p className="text-xs text-gray-500">修訂合約總額</p>
+          <p className="text-lg font-bold text-primary-600 font-mono">{fmt$(summary.revised_amount)}</p>
+        </div>
+      </div>
+    );
+  }
 
   // ── BQ Items Table (reusable) ──
   function renderBqItemsTable(items: any[]) {

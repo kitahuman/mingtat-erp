@@ -92,7 +92,12 @@ export default function ProjectDetailPage() {
   const [linkedRateCards, setLinkedRateCards] = useState<any[]>([]);
   const [dailyReports, setDailyReports] = useState<any[]>([]);
   const [acceptanceReports, setAcceptanceReports] = useState<any[]>([]);
-  const [activeTab, setActiveTab] = useState('basic');
+  const [activeTab, setActiveTabState] = useState('project-info');
+  // Legacy tab keys merged into the new 工程資料 tab
+  const setActiveTab = (tab: string) => {
+    const merged = ['basic', 'contract-info', 'deposit', 'projects', 'quotations'];
+    setActiveTabState(merged.includes(tab) ? 'project-info' : tab);
+  };
 
   const loadData = () => {
     projectsApi.get(projectId).then(res => {
@@ -214,19 +219,16 @@ export default function ProjectDetailPage() {
   if (loading) return <div className="flex justify-center py-20"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div></div>;
 
   const tabs = [
-    { key: 'basic', label: '基本資料' },
-    { key: 'contract-info', label: '合約資料', requiresContract: true },
+    { key: 'project-info', label: '工程資料' },
     { key: 'bq', label: 'BQ', requiresContract: true },
     { key: 'vo', label: 'VO', requiresContract: true },
-    { key: 'projects', label: '項目列表', requiresContract: true },
     { key: 'ipa', label: 'IPA', requiresContract: true },
     { key: 'retention', label: '扣留金', requiresContract: true },
-    { key: 'deposit', label: '按金', requiresContract: true },
+    { key: 'daily-reports', label: '日報' },
+    { key: 'expenses', label: '支出' },
     { key: 'settlement', label: '結算匯總', requiresContract: true },
     { key: 'financial', label: '財務報表' },
-    { key: 'daily-reports', label: '日報' },
-    { key: 'quotations', label: '報價單' },
-    { key: 'expenses', label: '支出' },
+    { key: 'documents', label: '工程文件' },
   ];
 
   const hasLinkedContract = !!project?.contract_id;
@@ -283,13 +285,142 @@ export default function ProjectDetailPage() {
         </nav>
       </div>
 
-      {!hasLinkedContract && activeTab !== 'basic' && activeTab !== 'daily-reports' && activeTab !== 'quotations' && activeTab !== 'expenses' && activeTab !== 'financial' && (
-        <div className="card mb-6 text-gray-500">此工程尚未關聯合約，請先在基本資料中選擇合約。</div>
+      {!hasLinkedContract && !['project-info', 'daily-reports', 'expenses', 'financial', 'documents'].includes(activeTab) && (
+        <div className="card mb-6 text-gray-500">此工程尚未關聯合約，請先在工程資料中選擇合約。</div>
       )}
 
-      {activeTab === 'basic' && (
+      {/* 工程資料 tab（無合約時）：直接渲染工程資料卡片與報價單/價目卡片 */}
+      {activeTab === 'project-info' && !hasLinkedContract && (
       <>
+      {renderProjectInfoCard()}
+      {renderQuotationCards()}
+      </>
+      )}
 
+
+      {project?.contract_id && ['project-info', 'bq', 'vo', 'ipa', 'retention', 'documents'].includes(activeTab) && (
+        <ContractManagementTabs
+          contractId={Number(project.contract_id)}
+          activeTab={activeTab}
+          onTabChange={setActiveTab}
+          fallbackHref={`/projects/${projectId}`}
+          projectInfoSlot={renderProjectInfoCard()}
+          projectInfoBottomSlot={renderQuotationCards()}
+          documentsSlot={(
+            <div className="mb-6">
+              <AttachmentUpload entityType="project" entityId={projectId} title="工程文件" readOnly={isReadOnly('projects')} />
+            </div>
+          )}
+        />
+      )}
+
+      {/* 工程文件 tab（無合約時）：只顯示工程文件上載 */}
+      {activeTab === 'documents' && !hasLinkedContract && (
+        <div className="mb-6">
+          <AttachmentUpload entityType="project" entityId={projectId} title="工程文件" readOnly={isReadOnly('projects')} />
+        </div>
+      )}
+
+      {activeTab === 'settlement' && hasLinkedContract && (
+        <ProjectSettlementSummary projectId={projectId} />
+      )}
+
+      {activeTab === 'financial' && (
+        <ProjectFinancialStatement projectId={projectId} />
+      )}
+
+      {activeTab === 'daily-reports' && (
+      <>
+      {/* Daily Reports */}
+      <div className="card mb-6">
+        <h2 className="text-lg font-bold text-gray-900 mb-4">工程日報</h2>
+        {dailyReports.length > 0 ? (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-gray-50 border-b">
+                  <th className="px-3 py-2 text-left">日期</th>
+                  <th className="px-3 py-2 text-left">更次</th>
+                  <th className="px-3 py-2 text-left">工作摘要</th>
+                  <th className="px-3 py-2 text-left">建立人</th>
+                  <th className="px-3 py-2 text-left">狀態</th>
+                </tr>
+              </thead>
+              <tbody>
+                {dailyReports.map((dr: any) => (
+                  <tr key={dr.id} className="border-b hover:bg-gray-50">
+                    <td className="px-3 py-2">{fmtDate(dr.daily_report_date)}</td>
+                    <td className="px-3 py-2">{dr.daily_report_shift_type === 'day' ? '日更' : '夜更'}</td>
+                    <td className="px-3 py-2 max-w-xs truncate">{dr.daily_report_work_summary || '-'}</td>
+                    <td className="px-3 py-2">{dr.creator?.displayName || '-'}</td>
+                    <td className="px-3 py-2"><span className={dr.daily_report_status === 'submitted' ? 'badge-green' : 'badge-yellow'}>{dr.daily_report_status === 'submitted' ? '已提交' : '草稿'}</span></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <p className="text-gray-400 text-sm">暫無工程日報</p>
+        )}
+      </div>
+
+      </>
+      )}
+
+      {activeTab === 'expenses' && (
+      <>
+      {/* Expense Records */}
+      <div className="mb-6">
+        <ProjectExpensesList projectId={projectId} companyId={project?.company_id} />
+      </div>
+
+      {/* Cost Analysis */}
+      <div className="card mb-6">
+        <h2 className="text-lg font-bold text-gray-900 mb-4">成本統計</h2>
+        <ProjectCostAnalysis projectId={projectId} projectNo={project?.project_no} />
+      </div>
+
+      {/* Acceptance Reports */}
+      <div className="card mb-6">
+        <h2 className="text-lg font-bold text-gray-900 mb-4">工程收貨報告</h2>
+        {acceptanceReports.length > 0 ? (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-gray-50 border-b">
+                  <th className="px-3 py-2 text-left">報告日期</th>
+                  <th className="px-3 py-2 text-left">驗收日期</th>
+                  <th className="px-3 py-2 text-left">客戶</th>
+                  <th className="px-3 py-2 text-left">收貨項目</th>
+                  <th className="px-3 py-2 text-left">狀態</th>
+                </tr>
+              </thead>
+              <tbody>
+                {acceptanceReports.map((ar: any) => (
+                  <tr key={ar.id} className="border-b hover:bg-gray-50">
+                    <td className="px-3 py-2">{fmtDate(ar.acceptance_report_date)}</td>
+                    <td className="px-3 py-2">{fmtDate(ar.acceptance_report_acceptance_date)}</td>
+                    <td className="px-3 py-2">{ar.acceptance_report_client_name || '-'}</td>
+                    <td className="px-3 py-2 max-w-xs truncate">{ar.acceptance_report_items || '-'}</td>
+                    <td className="px-3 py-2"><span className={ar.acceptance_report_status === 'submitted' ? 'badge-green' : 'badge-yellow'}>{ar.acceptance_report_status === 'submitted' ? '已提交' : '草稿'}</span></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <p className="text-gray-400 text-sm">暫無收貨報告</p>
+        )}
+      </div>
+      </>
+      )}
+    </div>
+  );
+
+  // ── 工程資料卡片 (含編輯功能) ──
+  function renderProjectInfoCard() {
+    return (
+      <>
       {/* Project Info */}
       <div className="card mb-6">
         <h2 className="text-lg font-bold text-gray-900 mb-4">工程資料</h2>
@@ -348,7 +479,7 @@ export default function ProjectDetailPage() {
                 <p className="text-sm text-gray-500">關聯合約</p>
                 {project?.contract ? (
                   <button 
-                    onClick={() => setActiveTab('contract-info')}
+                    onClick={() => setActiveTab('project-info')}
                     className="font-mono text-primary-600 hover:underline text-left"
                   >
                     {project.contract.contract_no} - {project.contract.contract_name}
@@ -367,32 +498,13 @@ export default function ProjectDetailPage() {
           )}
         </div>
       </div>
-
-      <div className="mb-6">
-        <AttachmentUpload entityType="project" entityId={projectId} title="工程文件" readOnly={isReadOnly('projects')} />
-      </div>
-
       </>
-      )}
+    );
+  }
 
-      {project?.contract_id && ['contract-info', 'bq', 'vo', 'projects', 'ipa', 'retention', 'deposit'].includes(activeTab) && (
-        <ContractManagementTabs
-          contractId={Number(project.contract_id)}
-          activeTab={activeTab}
-          onTabChange={setActiveTab}
-          fallbackHref={`/projects/${projectId}`}
-        />
-      )}
-
-      {activeTab === 'settlement' && hasLinkedContract && (
-        <ProjectSettlementSummary projectId={projectId} />
-      )}
-
-      {activeTab === 'financial' && (
-        <ProjectFinancialStatement projectId={projectId} />
-      )}
-
-      {activeTab === 'quotations' && (
+  // ── 關聯報價單 / 工程價目記錄卡片 ──
+  function renderQuotationCards() {
+    return (
       <>
       {/* Linked Quotations */}
       <div className="card mb-6">
@@ -490,95 +602,7 @@ export default function ProjectDetailPage() {
           <p className="text-gray-400 text-sm">暫無價目記錄</p>
         )}
       </div>
-
       </>
-      )}
-
-      {activeTab === 'daily-reports' && (
-      <>
-      {/* Daily Reports */}
-      <div className="card mb-6">
-        <h2 className="text-lg font-bold text-gray-900 mb-4">工程日報</h2>
-        {dailyReports.length > 0 ? (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="bg-gray-50 border-b">
-                  <th className="px-3 py-2 text-left">日期</th>
-                  <th className="px-3 py-2 text-left">更次</th>
-                  <th className="px-3 py-2 text-left">工作摘要</th>
-                  <th className="px-3 py-2 text-left">建立人</th>
-                  <th className="px-3 py-2 text-left">狀態</th>
-                </tr>
-              </thead>
-              <tbody>
-                {dailyReports.map((dr: any) => (
-                  <tr key={dr.id} className="border-b hover:bg-gray-50">
-                    <td className="px-3 py-2">{fmtDate(dr.daily_report_date)}</td>
-                    <td className="px-3 py-2">{dr.daily_report_shift_type === 'day' ? '日更' : '夜更'}</td>
-                    <td className="px-3 py-2 max-w-xs truncate">{dr.daily_report_work_summary || '-'}</td>
-                    <td className="px-3 py-2">{dr.creator?.displayName || '-'}</td>
-                    <td className="px-3 py-2"><span className={dr.daily_report_status === 'submitted' ? 'badge-green' : 'badge-yellow'}>{dr.daily_report_status === 'submitted' ? '已提交' : '草稿'}</span></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : (
-          <p className="text-gray-400 text-sm">暫無工程日報</p>
-        )}
-      </div>
-
-      </>
-      )}
-
-      {activeTab === 'expenses' && (
-      <>
-      {/* Expense Records */}
-      <div className="mb-6">
-        <ProjectExpensesList projectId={projectId} companyId={project?.company_id} />
-      </div>
-
-      {/* Cost Analysis */}
-      <div className="card mb-6">
-        <h2 className="text-lg font-bold text-gray-900 mb-4">成本統計</h2>
-        <ProjectCostAnalysis projectId={projectId} projectNo={project?.project_no} />
-      </div>
-
-      {/* Acceptance Reports */}
-      <div className="card mb-6">
-        <h2 className="text-lg font-bold text-gray-900 mb-4">工程收貨報告</h2>
-        {acceptanceReports.length > 0 ? (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="bg-gray-50 border-b">
-                  <th className="px-3 py-2 text-left">報告日期</th>
-                  <th className="px-3 py-2 text-left">驗收日期</th>
-                  <th className="px-3 py-2 text-left">客戶</th>
-                  <th className="px-3 py-2 text-left">收貨項目</th>
-                  <th className="px-3 py-2 text-left">狀態</th>
-                </tr>
-              </thead>
-              <tbody>
-                {acceptanceReports.map((ar: any) => (
-                  <tr key={ar.id} className="border-b hover:bg-gray-50">
-                    <td className="px-3 py-2">{fmtDate(ar.acceptance_report_date)}</td>
-                    <td className="px-3 py-2">{fmtDate(ar.acceptance_report_acceptance_date)}</td>
-                    <td className="px-3 py-2">{ar.acceptance_report_client_name || '-'}</td>
-                    <td className="px-3 py-2 max-w-xs truncate">{ar.acceptance_report_items || '-'}</td>
-                    <td className="px-3 py-2"><span className={ar.acceptance_report_status === 'submitted' ? 'badge-green' : 'badge-yellow'}>{ar.acceptance_report_status === 'submitted' ? '已提交' : '草稿'}</span></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : (
-          <p className="text-gray-400 text-sm">暫無收貨報告</p>
-        )}
-      </div>
-      </>
-      )}
-    </div>
-  );
+    );
+  }
 }
