@@ -491,6 +491,24 @@ export const projectsApi = {
     api.patch(`/projects/${id}/status`, { status }),
 };
 
+// Project Cost Rates (工程內部成本單價) + 工程財務匯總
+export const projectCostRatesApi = {
+  list: (projectId: number) => api.get(`/projects/${projectId}/cost-rates`),
+  batchUpsert: (projectId: number, rates: any[]) =>
+    api.post(`/projects/${projectId}/cost-rates`, { rates }),
+  update: (projectId: number, rateId: number, data: any) =>
+    api.put(`/projects/${projectId}/cost-rates/${rateId}`, data),
+  delete: (projectId: number, rateId: number) =>
+    api.delete(`/projects/${projectId}/cost-rates/${rateId}`),
+};
+
+export const projectFinanceApi = {
+  settlementSummary: (projectId: number) =>
+    api.get(`/projects/${projectId}/settlement-summary`),
+  financialStatement: (projectId: number) =>
+    api.get(`/projects/${projectId}/financial-statement`),
+};
+
 // Quotations (報價單)
 export const quotationsApi = {
   list: (params?: any) => api.post('/quotations/search', params || {}),

@@ -877,7 +877,32 @@ model Project {
   daily_reports      DailyReport[]
   acceptance_reports AcceptanceReport[]
 
+  // Internal cost rates (財務報表內部成本單價)
+  cost_rates ProjectCostRate[]
+
   @@map("projects")
+}
+
+// ══════════════════════════════════════════════════════════════
+// Project Cost Rates (工程內部成本單價 — 獨立於客戶價目表 RateCard)
+// ══════════════════════════════════════════════════════════════
+
+model ProjectCostRate {
+  id                           Int      @id @default(autoincrement())
+  project_cost_rate_project_id Int
+  project_cost_rate_category   String   @db.VarChar(30) // worker | machinery | vehicle | tool
+  project_cost_rate_type       String   @db.VarChar(100) // worker_type value or machine_type/tonnage
+  project_cost_rate_tonnage    Decimal? @db.Decimal(5, 1)
+  project_cost_rate_day_rate   Decimal  @default(0) @db.Decimal(12, 2)
+  project_cost_rate_ot_rate    Decimal  @default(0) @db.Decimal(12, 2)
+  project_cost_rate_remarks    String?  @db.Text
+  created_at                   DateTime @default(now())
+  updated_at                   DateTime @default(now()) @updatedAt
+
+  project Project @relation(fields: [project_cost_rate_project_id], references: [id], onDelete: Cascade)
+
+  @@unique([project_cost_rate_project_id, project_cost_rate_category, project_cost_rate_type])
+  @@map("project_cost_rates")
 }
 
 model ProjectSequence {

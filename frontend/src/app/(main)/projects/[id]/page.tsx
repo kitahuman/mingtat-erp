@@ -5,6 +5,9 @@ import { projectsApi, companiesApi, partnersApi, quotationsApi, rateCardsApi, co
 import ContractManagementTabs from '@/components/contracts/ContractManagementTabs';
 import ClientContractCombobox from '@/components/ClientContractCombobox';
 import ProjectCostAnalysis from '@/components/ProjectCostAnalysis';
+import ProjectSettlementSummary from '@/components/ProjectSettlementSummary';
+import ProjectFinancialStatement from '@/components/ProjectFinancialStatement';
+import ProjectExpensesList from '@/components/ProjectExpensesList';
 import Link from 'next/link';
 import { fmtDate, toInputDate } from '@/lib/dateUtils';
 import { useAuth } from '@/lib/auth';
@@ -219,6 +222,8 @@ export default function ProjectDetailPage() {
     { key: 'ipa', label: 'IPA', requiresContract: true },
     { key: 'retention', label: '扣留金', requiresContract: true },
     { key: 'deposit', label: '按金', requiresContract: true },
+    { key: 'settlement', label: '結算匯總', requiresContract: true },
+    { key: 'financial', label: '財務報表' },
     { key: 'daily-reports', label: '日報' },
     { key: 'quotations', label: '報價單' },
     { key: 'expenses', label: '支出' },
@@ -278,7 +283,7 @@ export default function ProjectDetailPage() {
         </nav>
       </div>
 
-      {!hasLinkedContract && activeTab !== 'basic' && activeTab !== 'daily-reports' && activeTab !== 'quotations' && activeTab !== 'expenses' && (
+      {!hasLinkedContract && activeTab !== 'basic' && activeTab !== 'daily-reports' && activeTab !== 'quotations' && activeTab !== 'expenses' && activeTab !== 'financial' && (
         <div className="card mb-6 text-gray-500">此工程尚未關聯合約，請先在基本資料中選擇合約。</div>
       )}
 
@@ -377,6 +382,14 @@ export default function ProjectDetailPage() {
           onTabChange={setActiveTab}
           fallbackHref={`/projects/${projectId}`}
         />
+      )}
+
+      {activeTab === 'settlement' && hasLinkedContract && (
+        <ProjectSettlementSummary projectId={projectId} />
+      )}
+
+      {activeTab === 'financial' && (
+        <ProjectFinancialStatement projectId={projectId} />
       )}
 
       {activeTab === 'quotations' && (
@@ -521,6 +534,11 @@ export default function ProjectDetailPage() {
 
       {activeTab === 'expenses' && (
       <>
+      {/* Expense Records */}
+      <div className="mb-6">
+        <ProjectExpensesList projectId={projectId} companyId={project?.company_id} />
+      </div>
+
       {/* Cost Analysis */}
       <div className="card mb-6">
         <h2 className="text-lg font-bold text-gray-900 mb-4">成本統計</h2>
