@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { projectsApi, companiesApi, partnersApi, quotationsApi, rateCardsApi, contractsApi, dailyReportsApi, acceptanceReportsApi } from '@/lib/api';
 import ContractManagementTabs from '@/components/contracts/ContractManagementTabs';
@@ -14,13 +14,60 @@ import Modal from '@/components/Modal';
 import SearchableSelect from '@/components/SearchableSelect';
 
 const statusLabels: Record<string, string> = {
-  pending: '等待', active: '進行中', completed: '已完成', cancelled: '已取消',
+  pending: '等待', active: '進行中', completed: '已完成', cancelled: '已取消', suspended: '暫停',
 };
 const statusColors: Record<string, string> = {
-  pending: 'badge-yellow', active: 'badge-green', completed: 'badge-gray', cancelled: 'badge-red',
+  pending: 'badge-yellow', active: 'badge-green', completed: 'badge-gray', cancelled: 'badge-red', suspended: 'badge-yellow',
 };
 const qStatusLabels: Record<string, string> = { draft: '草稿', sent: '已發送', accepted: '已接受', rejected: '已拒絕' };
 const qStatusColors: Record<string, string> = { draft: 'badge-gray', sent: 'badge-blue', accepted: 'badge-green', rejected: 'badge-red' };
+
+const allStatuses = ['active', 'completed', 'cancelled', 'suspended'] as const;
+const statusActionLabels: Record<string, string> = {
+  active: '進行中',
+  completed: '已完成',
+  cancelled: '已取消',
+  suspended: '暫停',
+};
+
+function StatusDropdown({ currentStatus, onStatusChange }: { currentStatus: string; onStatusChange: (s: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  const options = allStatuses.filter(s => s !== currentStatus);
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        onClick={() => setOpen(!open)}
+        className="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 text-sm"
+      >
+        更改工程狀態
+      </button>
+      {open && (
+        <div className="absolute right-0 mt-1 w-36 bg-white border border-gray-200 rounded-lg shadow-lg z-50">
+          {options.map(s => (
+            <button
+              key={s}
+              onClick={() => { onStatusChange(s); setOpen(false); }}
+              className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 first:rounded-t-lg last:rounded-b-lg"
+            >
+              {statusActionLabels[s]}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function ProjectDetailPage() {
   const params = useParams();
@@ -194,18 +241,7 @@ export default function ProjectDetailPage() {
           <p className="text-gray-500 mt-1">{project?.project_name}</p>
         </div>
         <div className="flex gap-2">
-          {project?.status === 'pending' && (
-            <button onClick={() => handleStatusChange('active')} className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 text-sm">開始進行</button>
-          )}
-          {project?.status === 'active' && (
-            <>
-              <button onClick={() => handleStatusChange('completed')} className="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 text-sm">標記完成</button>
-              <button onClick={() => handleStatusChange('cancelled')} className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 text-sm">取消</button>
-            </>
-          )}
-          {(project?.status === 'cancelled' || project?.status === 'completed') && (
-            <button onClick={() => handleStatusChange('active')} className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 text-sm">恢復進行中</button>
-          )}
+          <StatusDropdown currentStatus={project?.status} onStatusChange={handleStatusChange} />
           {editing ? (
             <>
               <button onClick={() => { setForm({ ...project }); setEditing(false); }} className="btn-secondary">取消</button>
