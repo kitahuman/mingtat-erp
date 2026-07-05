@@ -1,8 +1,9 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { dashboardApi, employeesApi, issueReportsApi } from '@/lib/api';
 import Link from 'next/link';
 import ConfirmProjectModal from '@/components/ConfirmProjectModal';
+import { useAuth } from '@/lib/auth';
 
 // ══════════════════════════════════════════════════════════════
 // 工具函數
@@ -1631,8 +1632,38 @@ function AttendanceTab({ data, onRefresh }: { data: any; onRefresh: () => void }
 // ════════════════════════════════════════════════════════════════
 
 type TabId = 'work' | 'alerts' | 'financial' | 'whatsapp' | 'attendance';
+
+// Tab 定義，key 對應 dashboard-* 權限
+const ALL_TABS: { id: TabId; permKey: string }[] = [
+  { id: 'work',       permKey: 'dashboard-work' },
+  { id: 'attendance', permKey: 'dashboard-attendance' },
+  { id: 'alerts',     permKey: 'dashboard-alerts' },
+  { id: 'financial',  permKey: 'dashboard-financial' },
+  { id: 'whatsapp',   permKey: 'dashboard-whatsapp' },
+];
+
 export default function DashboardPage() {
-  const [activeTab, setActiveTab] = useState<TabId>('work');
+  const { user } = useAuth();
+
+  // 計算用戶可見的 tab（admin 永遠全部可見；舊用戶有 dashboard 但無任何 dashboard-* 子項時也全部可見）
+  const visibleTabs = useMemo<TabId[]>(() => {
+    if (user?.role === 'admin') return ALL_TABS.map(t => t.id);
+    const allowed = user?.allowedPages ?? [];
+    const hasDashboardSubPerm = ALL_TABS.some(t => allowed.includes(t.permKey));
+    // 向後兼容：有 dashboard 但無任何子項 → 顯示全部
+    if (!hasDashboardSubPerm) return ALL_TABS.map(t => t.id);
+    return ALL_TABS.filter(t => allowed.includes(t.permKey)).map(t => t.id);
+  }, [user]);
+
+  const defaultTab: TabId = visibleTabs[0] ?? 'work';
+  const [activeTab, setActiveTab] = useState<TabId>(defaultTab);
+
+  // 當 visibleTabs 改變時，若目前 activeTab 不在可見列表中則重設
+  useEffect(() => {
+    if (visibleTabs.length > 0 && !visibleTabs.includes(activeTab)) {
+      setActiveTab(visibleTabs[0]);
+    }
+  }, [visibleTabs]);
   const [workData, setWorkData] = useState<any>(null);
   const [alertsData, setAlertsData] = useState<any>(null);
   const [financialData, setFinancialData] = useState<any>(null);
@@ -1718,34 +1749,44 @@ export default function DashboardPage() {
       {/* Tab 導航 */}
       <div className="border-b border-gray-200 mb-6">
         <nav className="flex gap-0 -mb-px overflow-x-auto">
-          <TabButton
-            active={activeTab === 'work'}
-            onClick={() => setActiveTab('work')}
-            label="工作狀況"
-          />
-          <TabButton
-            active={activeTab === 'attendance'}
-            onClick={() => setActiveTab('attendance')}
-            label="打卡總覽"
-            badge={loadingAttendance ? undefined : attendanceTotalRecords}
-          />
-          <TabButton
-            active={activeTab === 'alerts'}
-            onClick={() => setActiveTab('alerts')}
-            label="警告及提醒"
-            badge={loadingAlerts ? undefined : alertTotalCount}
-          />
-          <TabButton
-            active={activeTab === 'financial'}
-            onClick={() => setActiveTab('financial')}
-            label="公司收支"
-          />
-          <TabButton
-            active={activeTab === 'whatsapp'}
-            onClick={() => setActiveTab('whatsapp')}
-            label="💬 報工訊息"
-            badge={loadingFeed ? undefined : feedMessages.length}
-          />
+          {visibleTabs.includes('work') && (
+            <TabButton
+              active={activeTab === 'work'}
+              onClick={() => setActiveTab('work')}
+              label="工作狀況"
+            />
+          )}
+          {visibleTabs.includes('attendance') && (
+            <TabButton
+              active={activeTab === 'attendance'}
+              onClick={() => setActiveTab('attendance')}
+              label="打卡總覽"
+              badge={loadingAttendance ? undefined : attendanceTotalRecords}
+            />
+          )}
+          {visibleTabs.includes('alerts') && (
+            <TabButton
+              active={activeTab === 'alerts'}
+              onClick={() => setActiveTab('alerts')}
+              label="警告及提醒"
+              badge={loadingAlerts ? undefined : alertTotalCount}
+            />
+          )}
+          {visibleTabs.includes('financial') && (
+            <TabButton
+              active={activeTab === 'financial'}
+              onClick={() => setActiveTab('financial')}
+              label="公司收支"
+            />
+          )}
+          {visibleTabs.includes('whatsapp') && (
+            <TabButton
+              active={activeTab === 'whatsapp'}
+              onClick={() => setActiveTab('whatsapp')}
+              label="💬 報工訊息"
+              badge={loadingFeed ? undefined : feedMessages.length}
+            />
+          )}
         </nav>
       </div>
 

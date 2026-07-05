@@ -19,6 +19,11 @@ export interface PageDef {
 export const ALL_PAGES: PageDef[] = [
   // 儀表板
   { key: 'dashboard', label: '儀表板', group: '總覽', path: '/dashboard' },
+  { key: 'dashboard-work', label: '工作狀況', group: '總覽', path: '/dashboard' },
+  { key: 'dashboard-attendance', label: '打卡總覽', group: '總覽', path: '/dashboard' },
+  { key: 'dashboard-alerts', label: '警告及提醒', group: '總覽', path: '/dashboard' },
+  { key: 'dashboard-financial', label: '公司收支', group: '總覽', path: '/dashboard' },
+  { key: 'dashboard-whatsapp', label: '報工訊息', group: '總覽', path: '/dashboard' },
   { key: 'chat', label: 'AI 助手', group: '總覽', path: '/chat' },
   { key: 'work-logs', label: '工作記錄', group: '總覽', path: '/work-logs' },
 
