@@ -1497,6 +1497,48 @@ export default function SummaryTab() {
     [refreshPresets],
   );
 
+  const handleResetFilters = useCallback(() => {
+    const range = getDefaultDateRange();
+    setDateFrom(range.from);
+    setDateTo(range.to);
+    // 重設所有篩選器為全選（空陣列代表全選，由 syncSelectedValues 處理）
+    const resetToAll = (key: string, options: Option[], setValues: Dispatch<SetStateAction<string[]>>) => {
+      filterSelectionInitializedRef.current[key] = true;
+      setValues(optionValues(options));
+    };
+    resetToAll('companies', companies, setCompanyIds);
+    resetToAll('clients', clients, setClientIds);
+    resetToAll('employees', employees, setEmployeeIds);
+    resetToAll('equipment_numbers', equipmentOptions, setEquipmentNumbers);
+    resetToAll('machine_types', machineTypes, setSelectedMachineTypes);
+    resetToAll('start_locations', startLocationOptions, setStartLocations);
+    resetToAll('end_locations', endLocationOptions, setEndLocations);
+    resetToAll('contracts', contractOptions, setSelectedContracts);
+    resetToAll('quotations', quotationOptions, setSelectedQuotations);
+    resetToAll('day_nights', dayNights, setSelectedDayNights);
+    resetToAll('service_types', serviceTypes, setSelectedServiceTypes);
+    filterSelectionInitializedRef.current['statuses'] = true;
+    setSelectedStatuses(optionValues(STATUS_OPTIONS));
+  }, [
+    companies,
+    clients,
+    employees,
+    equipmentOptions,
+    machineTypes,
+    startLocationOptions,
+    endLocationOptions,
+    contractOptions,
+    quotationOptions,
+    dayNights,
+    serviceTypes,
+  ]);
+
+  const handleResetAxis = useCallback(() => {
+    setRowFields(['employee']);
+    setColFields(['scheduled_date']);
+    setValueTypes(['quantity_sum']);
+  }, []);
+
   const rowTree = useMemo(() => buildAxisTree(pivot?.rows || []), [pivot]);
   const colTree = useMemo(() => buildAxisTree(pivot?.cols || []), [pivot]);
   const visibleRows = useMemo(
@@ -1954,13 +1996,23 @@ export default function SummaryTab() {
       {controlsOpen && (
         <div className="space-y-2 px-3 py-2">
           <section className="rounded-xl border border-gray-200 bg-white shadow-sm">
-            <button
-              onClick={() => setFiltersOpen((open) => !open)}
-              className="flex w-full items-center justify-between px-4 py-3 text-left text-sm font-semibold text-gray-800"
-            >
-              <span>篩選區</span>
-              <span>{filtersOpen ? '−' : '+'}</span>
-            </button>
+            <div className="flex items-center justify-between px-4 py-3">
+              <button
+                onClick={() => setFiltersOpen((open) => !open)}
+                className="flex flex-1 items-center justify-between text-left text-sm font-semibold text-gray-800"
+              >
+                <span>篩選區</span>
+                <span>{filtersOpen ? '−' : '+'}</span>
+              </button>
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); handleResetFilters(); }}
+                className="ml-3 shrink-0 rounded border border-gray-300 bg-white px-2 py-1 text-xs text-gray-500 hover:bg-gray-100 hover:text-gray-700"
+                title="清空所有篩選條件"
+              >
+                重設
+              </button>
+            </div>
             {filtersOpen && (
               <div className="border-t border-gray-100 p-4">
                 <div className="mb-3 flex flex-wrap gap-2">
@@ -2091,13 +2143,23 @@ export default function SummaryTab() {
           </section>
 
           <section className="rounded-xl border border-gray-200 bg-white shadow-sm">
-            <button
-              onClick={() => setAxisOpen((open) => !open)}
-              className="flex w-full items-center justify-between px-4 py-3 text-left text-sm font-semibold text-gray-800"
-            >
-              <span>軸設定區</span>
-              <span>{axisOpen ? '−' : '+'}</span>
-            </button>
+            <div className="flex items-center justify-between px-4 py-3">
+              <button
+                onClick={() => setAxisOpen((open) => !open)}
+                className="flex flex-1 items-center justify-between text-left text-sm font-semibold text-gray-800"
+              >
+                <span>軸設定區</span>
+                <span>{axisOpen ? '−' : '+'}</span>
+              </button>
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); handleResetAxis(); }}
+                className="ml-3 shrink-0 rounded border border-gray-300 bg-white px-2 py-1 text-xs text-gray-500 hover:bg-gray-100 hover:text-gray-700"
+                title="恢復預設軸設定"
+              >
+                重設
+              </button>
+            </div>
             {axisOpen && (
               <div className="grid gap-3 border-t border-gray-100 p-4 lg:grid-cols-3">
                 <AxisFieldSelector
