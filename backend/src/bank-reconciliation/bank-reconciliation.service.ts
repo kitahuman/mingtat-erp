@@ -2,6 +2,7 @@ import { Injectable, NotFoundException, BadRequestException, InternalServerError
 import { PrismaService } from '../prisma/prisma.service';
 import { SystemSettingsService } from '../system-settings/system-settings.service';
 import { Prisma } from '@prisma/client';
+import * as ExcelJS from 'exceljs';
 
 @Injectable()
 export class BankReconciliationService {
@@ -1110,7 +1111,217 @@ export class BankReconciliationService {
     }
   }
 
-  // Find BankTransaction candidates for a given PaymentIn or PaymentOut
+  // ══════════════════════════════════════════════════════════════
+  // Export Excel
+  // ══════════════════════════════════════════════════════════════
+  async exportExcel(params: {
+    bank_account_id: number;
+    date_from?: string;
+    date_to?: string;
+  }): Promise<{ buffer: Buffer; filename: string }> {
+    const { bank_account_id, date_from, date_to } = params;
+
+    // Fetch bank account info (with company)
+    const bankAccount = await this.prisma.bankAccount.findUnique({
+      where: { id: bank_account_id },
+      include: { company: { select: { id: true, name: true } } },
+    });
+    if (!bankAccount) throw new NotFoundException('銀行帳戶不存在');
+
+    // Build date filter
+    const where: Prisma.BankTransactionWhereInput = { bank_account_id };
+    if (date_from || date_to) {
+      where.date = {};
+      if (date_from) where.date.gte = new Date(date_from);
+      if (date_to) where.date.lte = new Date(date_to);
+    }
+
+    // Fetch all transactions (no pagination)
+    const transactions = await this.prisma.bankTransaction.findMany({
+      where,
+      orderBy: [{ date: 'asc' }, { id: 'asc' }],
+      include: { matches: true },
+    });
+
+    // Enrich matched records
+    const enriched = await Promise.all(
+      transactions.map(async (tx) => {
+        let matchedNames: string[] = [];
+        let matchedCategory = '';
+        if (tx.match_status === 'matched') {
+          const matchList = tx.matches && tx.matches.length > 0 ? tx.matches : [];
+          if (matchList.length > 0) {
+            for (const m of matchList) {
+              if (m.matched_type === 'payment_in') {
+                const r = await this.prisma.paymentIn.findUnique({
+                  where: { id: m.matched_id },
+                  include: {
+                    project: { select: { project_name: true, client: { select: { name: true, code: true } } } },
+                    payer_partner: { select: { name: true } },
+                  },
+                });
+                if (r) {
+                  const srcLabels: Record<string, string> = { payment_certificate: 'PC', invoice: '發票', retention_release: '扣留金', other: '其他' };
+                  const parts = [srcLabels[r.source_type] || r.source_type || '', r.payer_partner?.name || (r as any).payer_name || r.project?.client?.code || r.project?.client?.name || '', r.reference_no, r.remarks].filter(Boolean);
+                  matchedNames.push(parts.join(' ') || r.project?.project_name || '未命名項目');
+                  matchedCategory = '收款';
+                }
+              } else if (m.matched_type === 'payment_out') {
+                const r = await this.prisma.paymentOut.findUnique({
+                  where: { id: m.matched_id },
+                  include: {
+                    expense: { select: { item: true, supplier_name: true } },
+                    company: { select: { name: true } },
+                  },
+                });
+                if (r) {
+                  matchedNames.push(r.expense?.item || (r as any).payment_out_description || (r as any).description || '未命名支出');
+                  matchedCategory = '支出';
+                }
+              }
+            }
+          } else if ((tx as any).matched_id) {
+            // Legacy single match
+            if ((tx as any).matched_type === 'payment_in') {
+              const r = await this.prisma.paymentIn.findUnique({
+                where: { id: (tx as any).matched_id },
+                include: {
+                  project: { select: { project_name: true, client: { select: { name: true, code: true } } } },
+                  payer_partner: { select: { name: true } },
+                },
+              });
+              if (r) {
+                const srcLabels: Record<string, string> = { payment_certificate: 'PC', invoice: '發票', retention_release: '扣留金', other: '其他' };
+                const parts = [srcLabels[r.source_type] || r.source_type || '', r.payer_partner?.name || (r as any).payer_name || r.project?.client?.code || r.project?.client?.name || '', r.reference_no, r.remarks].filter(Boolean);
+                matchedNames.push(parts.join(' ') || r.project?.project_name || '未命名項目');
+                matchedCategory = '收款';
+              }
+            } else if ((tx as any).matched_type === 'payment_out') {
+              const r = await this.prisma.paymentOut.findUnique({
+                where: { id: (tx as any).matched_id },
+                include: {
+                  expense: { select: { item: true, supplier_name: true } },
+                  company: { select: { name: true } },
+                },
+              });
+              if (r) {
+                matchedNames.push(r.expense?.item || (r as any).payment_out_description || (r as any).description || '未命名支出');
+                matchedCategory = '支出';
+              }
+            }
+          }
+        }
+        return { ...tx, matchedNames, matchedCategory };
+      }),
+    );
+
+    // Build Excel
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = 'MingTat ERP';
+    const sheet = workbook.addWorksheet('銀行對帳');
+
+    // ── Header info block ──
+    const companyName = bankAccount.company?.name || '—';
+    const accountLabel = `${bankAccount.bank_name} | ${bankAccount.account_name} | ${bankAccount.account_no} | ${bankAccount.currency}`;
+    const dateRangeLabel = `${date_from || '(全部)'} 至 ${date_to || '(全部)'}`;
+
+    sheet.mergeCells('A1:I1');
+    const titleCell = sheet.getCell('A1');
+    titleCell.value = '銀行對帳明細';
+    titleCell.font = { bold: true, size: 14 };
+    titleCell.alignment = { horizontal: 'center' };
+
+    sheet.mergeCells('A2:I2');
+    sheet.getCell('A2').value = `公司：${companyName}`;
+    sheet.getCell('A2').font = { bold: true };
+
+    sheet.mergeCells('A3:I3');
+    sheet.getCell('A3').value = `銀行帳戶：${accountLabel}`;
+
+    sheet.mergeCells('A4:I4');
+    sheet.getCell('A4').value = `日期範圍：${dateRangeLabel}`;
+
+    sheet.addRow([]); // blank row
+
+    // ── Column headers (row 6) ──
+    const headerRow = sheet.addRow([
+      '日期',
+      'Transaction 描述',
+      'Ref No',
+      'Withdrawals（提取）',
+      'Deposits（存入）',
+      'Balance（結餘）',
+      '核對狀態',
+      '系統類別',
+      '配對記錄',
+      '備註',
+      '來源',
+    ]);
+    headerRow.font = { bold: true };
+    headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE2E8F0' } };
+    headerRow.alignment = { vertical: 'middle' };
+
+    // Set column widths
+    sheet.getColumn(1).width = 12;  // 日期
+    sheet.getColumn(2).width = 40;  // Transaction
+    sheet.getColumn(3).width = 16;  // Ref No
+    sheet.getColumn(4).width = 16;  // Withdrawals
+    sheet.getColumn(5).width = 16;  // Deposits
+    sheet.getColumn(6).width = 16;  // Balance
+    sheet.getColumn(7).width = 10;  // 核對狀態
+    sheet.getColumn(8).width = 10;  // 系統類別
+    sheet.getColumn(9).width = 40;  // 配對記錄
+    sheet.getColumn(10).width = 30; // 備註
+    sheet.getColumn(11).width = 8;  // 來源
+
+    const matchStatusLabel: Record<string, string> = {
+      matched: '已核對',
+      unmatched: '未核對',
+      excluded: '已排除',
+    };
+
+    for (const tx of enriched) {
+      const isWithdrawal = Number(tx.amount) < 0;
+      const row = sheet.addRow([
+        new Date(tx.date).toLocaleDateString('en-GB', { timeZone: 'Asia/Hong_Kong', day: '2-digit', month: '2-digit', year: 'numeric' }),
+        tx.description || '',
+        tx.reference_no || '',
+        isWithdrawal ? Math.abs(Number(tx.amount)) : '',
+        !isWithdrawal ? Number(tx.amount) : '',
+        tx.balance != null ? Number(tx.balance) : '',
+        matchStatusLabel[tx.match_status] || tx.match_status,
+        tx.matchedCategory || '',
+        tx.matchedNames.join(' / ') || '',
+        tx.bank_txn_remark || '',
+        tx.bank_txn_source || 'csv',
+      ]);
+
+      // Color-code match status
+      const statusCell = row.getCell(7);
+      if (tx.match_status === 'matched') {
+        statusCell.font = { color: { argb: 'FF16A34A' }, bold: true };
+      } else if (tx.match_status === 'unmatched') {
+        statusCell.font = { color: { argb: 'FFDC2626' }, bold: true };
+      } else {
+        statusCell.font = { color: { argb: 'FF6B7280' } };
+      }
+
+      // Number format for amount columns
+      row.getCell(4).numFmt = '#,##0.00';
+      row.getCell(5).numFmt = '#,##0.00';
+      row.getCell(6).numFmt = '#,##0.00';
+    }
+
+    // Freeze header row
+    sheet.views = [{ state: 'frozen', ySplit: 6 }];
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    const dateStr = new Date().toISOString().slice(0, 10);
+    const safeAccountNo = bankAccount.account_no.replace(/[^a-zA-Z0-9-]/g, '_');
+    const filename = `bank_reconciliation_${safeAccountNo}_${dateStr}.xlsx`;
+    return { buffer: Buffer.from(buffer), filename };
+  }
+
   async findBankTransactionCandidates(
     type: 'payment_in' | 'payment_out',
     recordId: number,

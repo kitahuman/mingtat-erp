@@ -1650,6 +1650,11 @@ export const bankReconciliationApi = {
     api.post(`/bank-reconciliation/exclude/${txId}`, { remarks }),
   syncBalances: (bankAccountId: number) =>
     api.post(`/bank-reconciliation/sync-balances/${bankAccountId}`),
+  exportExcel: (params: { bank_account_id: number; date_from?: string; date_to?: string }) =>
+    api.get('/bank-reconciliation/export-excel', {
+      params,
+      responseType: 'blob',
+    }),
 };
 
 // Project Profit & Loss (工程損益表)

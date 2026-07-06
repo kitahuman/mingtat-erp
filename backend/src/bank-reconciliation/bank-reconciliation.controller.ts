@@ -7,11 +7,13 @@ import {
   Param,
   Body,
   Query,
+  Res,
   UseGuards,
   UseInterceptors,
   UploadedFile,
   BadRequestException,
 } from '@nestjs/common';
+import type { Response } from 'express';
 import { AuthGuard } from '@nestjs/passport';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
@@ -249,5 +251,26 @@ export class BankReconciliationController {
   @Post('sync-balances/:bankAccountId')
   syncBalances(@Param('bankAccountId') bankAccountId: string) {
     return this.service.syncBalances(+bankAccountId);
+  }
+
+  /** Export transactions as Excel file */
+  @Get('export-excel')
+  async exportExcel(
+    @Res() res: Response,
+    @Query('bank_account_id') bank_account_id: string,
+    @Query('date_from') date_from?: string,
+    @Query('date_to') date_to?: string,
+  ) {
+    if (!bank_account_id) {
+      throw new BadRequestException('請提供銀行帳戶 ID');
+    }
+    const { buffer, filename } = await this.service.exportExcel({
+      bank_account_id: +bank_account_id,
+      date_from,
+      date_to,
+    });
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.end(buffer);
   }
 }

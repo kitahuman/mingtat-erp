@@ -9,6 +9,7 @@ import {
 import { format } from 'date-fns';
 import ImportModal from './ImportModal';
 import MatchModal from './MatchModal';
+import ExportExcelModal from './ExportExcelModal';
 import Modal from '@/components/Modal';
 import { useAuth } from '@/lib/auth';
 import { useRefetchOnFocus } from '@/hooks/useRefetchOnFocus';
@@ -114,6 +115,9 @@ export default function BankReconciliationPage() {
   );
   const [moveFilteredAccounts, setMoveFilteredAccounts] = useState<any[]>([]);
   const [batchLoading, setBatchLoading] = useState(false);
+
+  // ── Export Excel modal state ──
+  const [isExportModalOpen, setIsExportModalOpen] = useState(false);
 
   // ── Delete confirm state ──
   const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
@@ -619,6 +623,13 @@ export default function BankReconciliationPage() {
                 className="px-4 py-2 text-sm border rounded-lg hover:bg-gray-50 disabled:opacity-50 transition-colors"
               >
                 {autoMatchLoading ? '配對中...' : '⚡ 自動配對'}
+              </button>
+              <button
+                onClick={() => setIsExportModalOpen(true)}
+                disabled={!selectedAccountId}
+                className="px-4 py-2 text-sm border rounded-lg hover:bg-gray-50 disabled:opacity-50 transition-colors text-green-700 border-green-300 hover:bg-green-50"
+              >
+                ⇩ 匯出 Excel
               </button>
               <button
                 onClick={() => setIsImportModalOpen(true)}
@@ -1141,6 +1152,22 @@ export default function BankReconciliationPage() {
           </button>
         </div>
       )}
+
+      {/* ── Export Excel Modal ── */}
+      <ExportExcelModal
+        isOpen={isExportModalOpen}
+        onClose={() => setIsExportModalOpen(false)}
+        selectedAccount={selectedAccount ? {
+          id: selectedAccount.id,
+          bank_name: selectedAccount.bank_name,
+          account_name: selectedAccount.account_name,
+          account_no: selectedAccount.account_no,
+          currency: selectedAccount.currency,
+          company: selectedAccount.company,
+        } : null}
+        defaultDateFrom={dateFrom}
+        defaultDateTo={dateTo}
+      />
 
       {/* ── Modals ── */}
       <ImportModal
