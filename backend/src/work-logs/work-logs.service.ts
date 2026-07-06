@@ -383,8 +383,12 @@ export class WorkLogsService {
     // Legacy format: sortBy + sortOrder single strings (backward compatible)
     type SortEntry = { field: string; order: string };
     let sortList: SortEntry[] = [];
+    // Track whether the client explicitly sent a sorts key (even as empty array).
+    // Empty array means "no explicit sort" — backend uses its own default.
+    // Absent key means legacy client — fall back to sortBy/sortOrder.
+    let sortsKeyProvided = false;
     const rawSorts = (query as any).sorts;
-    if (rawSorts) {
+    if (rawSorts !== undefined && rawSorts !== null) {
       let parsed: unknown = rawSorts;
       if (typeof rawSorts === 'string') {
         try {
@@ -394,7 +398,8 @@ export class WorkLogsService {
         }
       }
       if (Array.isArray(parsed)) {
-        sortList = parsed
+        sortsKeyProvided = true;
+        sortList = (parsed as any[])
           .filter(
             (s: any): s is SortEntry =>
               s && typeof s.field === 'string' && typeof s.order === 'string',
@@ -402,8 +407,8 @@ export class WorkLogsService {
           .map((s: any) => ({ field: s.field, order: s.order }));
       }
     }
-    if (!sortList.length) {
-      // Fall back to legacy single-field format
+    if (!sortList.length && !sortsKeyProvided) {
+      // sorts key was absent — fall back to legacy single-field format
       const legacyField =
         typeof query.sortBy === 'string' && query.sortBy
           ? query.sortBy
@@ -414,6 +419,8 @@ export class WorkLogsService {
           : 'DESC';
       sortList = [{ field: legacyField, order: legacyOrder }];
     }
+    // If sortList is still empty (client sent sorts=[] explicitly),
+    // orderByArray will also be empty and the fallback below applies.
 
     // Build Prisma orderBy array from the sort list
     const orderByArray: any[] = [];

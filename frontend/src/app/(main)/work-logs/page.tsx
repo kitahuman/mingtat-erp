@@ -303,7 +303,7 @@ export default function WorkLogsPage() {
   const { pageState, saveState, clearState } = usePageState({
     page: 1,
     limit: 25,
-    sorts: [{ field: 'created_at', order: 'DESC' as const }],
+    sorts: [],
     filterPublisher: [],
     filterStatus: [],
     filterCompany: [],
@@ -322,9 +322,12 @@ export default function WorkLogsPage() {
   // Multi-column sort state. Migrate legacy sessionStorage format
   // ({ sortBy, sortOrder }) to the new sorts array if present.
   const sorts = useMemo<Array<{ field: string; order: 'ASC' | 'DESC' }>>(() => {
-    if (Array.isArray(pageState.sorts) && pageState.sorts.length) {
-      return pageState.sorts;
+    // If sorts array is present (even empty), use it directly.
+    // Empty array means "no explicit sort" — backend will apply its own default.
+    if (Array.isArray(pageState.sorts)) {
+      return pageState.sorts as Array<{ field: string; order: 'ASC' | 'DESC' }>;
     }
+    // Legacy migration: sessionStorage still has old sortBy/sortOrder keys
     if (pageState.sortBy) {
       return [
         {
@@ -333,7 +336,7 @@ export default function WorkLogsPage() {
         },
       ];
     }
-    return [{ field: 'created_at', order: 'DESC' }];
+    return [];
   }, [pageState.sorts, pageState.sortBy, pageState.sortOrder]);
 
   const activeColumnFilters = useMemo<Record<string, Set<string>>>(
@@ -1220,12 +1223,8 @@ export default function WorkLogsPage() {
         setDirtyRows(new Map());
       }
       const newSorts = sorts.filter((s) => s.field !== field);
-      // If all removed, fall back to default
-      setSorts(
-        newSorts.length > 0
-          ? newSorts
-          : [{ field: 'created_at', order: 'DESC' }],
-      );
+      // Empty array = no explicit sort; backend applies its own default
+      setSorts(newSorts);
       setPage(1);
     },
     [hasDirty, unlockDirtyRows, sorts, setSorts, setPage],
@@ -1769,7 +1768,7 @@ export default function WorkLogsPage() {
     setFilterDateFrom('');
     setFilterDateTo('');
     setColumnFilters({});
-    setSorts([{ field: 'created_at', order: 'DESC' }]);
+    setSorts([]);
     setPage(1);
   };
 
