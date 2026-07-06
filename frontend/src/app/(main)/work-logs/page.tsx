@@ -3133,10 +3133,15 @@ export default function WorkLogsPage() {
                     return (
                       <th
                         key={col.key}
-                        onClick={
+                        onMouseDown={
                           sortField
-                            ? (e: React.MouseEvent) =>
-                                handleSort(sortField, e.shiftKey)
+                            ? (e: React.MouseEvent) => {
+                                // Prevent browser's default Shift+Click
+                                // "extend selection" behaviour so the
+                                // shiftKey is reliably readable.
+                                e.preventDefault();
+                                handleSort(sortField, e.shiftKey);
+                              }
                             : undefined
                         }
                         title={

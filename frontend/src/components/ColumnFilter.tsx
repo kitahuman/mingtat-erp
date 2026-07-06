@@ -393,6 +393,7 @@ export default function ColumnFilter({
       <button
         ref={buttonRef}
         type="button"
+        onMouseDown={(e) => e.stopPropagation()}
         onClick={(e) => { e.stopPropagation(); setIsOpen(!isOpen); setSearchTerm(''); }}
         className={`ml-1 p-0.5 rounded hover:bg-gray-200 transition-colors ${isFiltered ? 'text-primary-600' : 'text-gray-400'}`}
         title="篩選"
