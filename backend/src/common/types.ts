@@ -13,6 +13,8 @@ export interface PaginationQuery {
   sort_order?: 'asc' | 'desc';
   sortBy?: string;
   sortOrder?: string;
+  /** Multi-column sort: JSON string of Array<{ field, order }> (also accepts a parsed array at runtime) */
+  sorts?: string;
 }
 
 export interface PaginatedResult<T> {

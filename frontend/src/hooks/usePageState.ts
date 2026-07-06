@@ -15,6 +15,7 @@ interface PageState {
   dateTo?: string;
   sortBy?: string;
   sortOrder?: 'ASC' | 'DESC';
+  sorts?: Array<{ field: string; order: 'ASC' | 'DESC' }>;
   columnFilters?: Record<string, string[]>;
   limit?: number;
   filterPublisher?: (string | number)[];

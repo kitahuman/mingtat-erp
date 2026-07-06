@@ -332,12 +332,7 @@ export class WorkLogsService {
   }
 
   async findAll(query: WorkLogQuery) {
-    const {
-      page = 1,
-      limit = 25,
-      sortBy = 'created_at',
-      sortOrder = 'DESC',
-    } = query;
+    const { page = 1, limit = 25 } = query;
 
     const where = this.buildWorkLogWhere(query);
 
@@ -372,33 +367,78 @@ export class WorkLogsService {
       'remarks',
       'source',
     ];
-    // Relation fields that need nested orderBy
-    const relationSortMap: Record<string, any> = {
-      publisher: {
-        publisher: { displayName: sortOrder === 'ASC' ? 'asc' : 'desc' },
-      },
-      company: { company: { name: sortOrder === 'ASC' ? 'asc' : 'desc' } },
-      client: { client: { name: sortOrder === 'ASC' ? 'asc' : 'desc' } },
-      quotation: {
-        quotation: { quotation_no: sortOrder === 'ASC' ? 'asc' : 'desc' },
-      },
-      contract: {
-        contract: { contract_no: sortOrder === 'ASC' ? 'asc' : 'desc' },
-      },
-      employee: { employee: { name_zh: sortOrder === 'ASC' ? 'asc' : 'desc' } },
-      client_contract_no: {
-        client_contract_no: sortOrder === 'ASC' ? 'asc' : 'desc',
-      },
+    // Relation fields that need nested orderBy (dir is injected per sort entry)
+    const relationSortMap: Record<string, (dir: 'asc' | 'desc') => any> = {
+      publisher: (dir) => ({ publisher: { displayName: dir } }),
+      company: (dir) => ({ company: { name: dir } }),
+      client: (dir) => ({ client: { name: dir } }),
+      quotation: (dir) => ({ quotation: { quotation_no: dir } }),
+      contract: (dir) => ({ contract: { contract_no: dir } }),
+      employee: (dir) => ({ employee: { name_zh: dir } }),
+      client_contract_no: (dir) => ({ client_contract_no: dir }),
     };
-    const safeSortOrder = sortOrder === 'ASC' ? 'asc' : 'desc';
-    let orderBy: OrderByClause;
-    if (relationSortMap[sortBy]) {
-      orderBy = relationSortMap[sortBy];
-    } else if (allowedSort.includes(sortBy)) {
-      orderBy = { [sortBy]: safeSortOrder };
-    } else {
-      orderBy = { scheduled_date: 'desc' };
+
+    // ── Resolve sort list ─────────────────────────────────────
+    // New format: sorts = [{ field, order }, ...] (array or JSON string)
+    // Legacy format: sortBy + sortOrder single strings (backward compatible)
+    type SortEntry = { field: string; order: string };
+    let sortList: SortEntry[] = [];
+    const rawSorts = (query as any).sorts;
+    if (rawSorts) {
+      let parsed: unknown = rawSorts;
+      if (typeof rawSorts === 'string') {
+        try {
+          parsed = JSON.parse(rawSorts);
+        } catch {
+          parsed = null;
+        }
+      }
+      if (Array.isArray(parsed)) {
+        sortList = parsed
+          .filter(
+            (s: any): s is SortEntry =>
+              s && typeof s.field === 'string' && typeof s.order === 'string',
+          )
+          .map((s: any) => ({ field: s.field, order: s.order }));
+      }
     }
+    if (!sortList.length) {
+      // Fall back to legacy single-field format
+      const legacyField =
+        typeof query.sortBy === 'string' && query.sortBy
+          ? query.sortBy
+          : 'created_at';
+      const legacyOrder =
+        typeof query.sortOrder === 'string' && query.sortOrder
+          ? query.sortOrder
+          : 'DESC';
+      sortList = [{ field: legacyField, order: legacyOrder }];
+    }
+
+    // Build Prisma orderBy array from the sort list
+    const orderByArray: any[] = [];
+    const seenFields = new Set<string>();
+    for (const { field, order } of sortList) {
+      if (seenFields.has(field)) continue;
+      const dir: 'asc' | 'desc' =
+        String(order).toUpperCase() === 'ASC' ? 'asc' : 'desc';
+      if (relationSortMap[field]) {
+        orderByArray.push(relationSortMap[field](dir));
+        seenFields.add(field);
+      } else if (allowedSort.includes(field)) {
+        orderByArray.push({ [field]: dir });
+        seenFields.add(field);
+      }
+      // Unknown fields are silently skipped
+    }
+    if (!orderByArray.length) {
+      orderByArray.push({ scheduled_date: 'desc' });
+    }
+    // Stable tiebreaker
+    if (!seenFields.has('id')) {
+      orderByArray.push({ id: 'desc' });
+    }
+    const orderBy: OrderByClause = orderByArray;
 
     const pg = Number(page);
     const lm = Number(limit);

@@ -303,8 +303,7 @@ export default function WorkLogsPage() {
   const { pageState, saveState, clearState } = usePageState({
     page: 1,
     limit: 25,
-    sortBy: 'created_at',
-    sortOrder: 'DESC',
+    sorts: [{ field: 'created_at', order: 'DESC' as const }],
     filterPublisher: [],
     filterStatus: [],
     filterCompany: [],
@@ -318,7 +317,24 @@ export default function WorkLogsPage() {
     columnFilters: {},
   });
 
-  const { page, limit, sortBy, sortOrder, filterPublisher, filterStatus, filterCompany, filterClient, filterQuotation, filterContract, filterEmployee, filterEquipment, filterDateFrom, filterDateTo, columnFilters = {} } = pageState;
+  const { page, limit, filterPublisher, filterStatus, filterCompany, filterClient, filterQuotation, filterContract, filterEmployee, filterEquipment, filterDateFrom, filterDateTo, columnFilters = {} } = pageState;
+
+  // Multi-column sort state. Migrate legacy sessionStorage format
+  // ({ sortBy, sortOrder }) to the new sorts array if present.
+  const sorts = useMemo<Array<{ field: string; order: 'ASC' | 'DESC' }>>(() => {
+    if (Array.isArray(pageState.sorts) && pageState.sorts.length) {
+      return pageState.sorts;
+    }
+    if (pageState.sortBy) {
+      return [
+        {
+          field: pageState.sortBy,
+          order: (pageState.sortOrder === 'ASC' ? 'ASC' : 'DESC') as 'ASC' | 'DESC',
+        },
+      ];
+    }
+    return [{ field: 'created_at', order: 'DESC' }];
+  }, [pageState.sorts, pageState.sortBy, pageState.sortOrder]);
 
   const activeColumnFilters = useMemo<Record<string, Set<string>>>(
     () => Object.fromEntries(
@@ -330,8 +346,12 @@ export default function WorkLogsPage() {
   // Helper to update state and save it
   const setPage = (newPage: number) => saveState((prev) => ({ ...prev, page: newPage }));
   const setLimit = (newLimit: number) => saveState((prev) => ({ ...prev, limit: newLimit }));
-  const setSortBy = (newSortBy: string) => saveState((prev) => ({ ...prev, sortBy: newSortBy }));
-  const setSortOrder = (newSortOrder: string) => saveState((prev) => ({ ...prev, sortOrder: newSortOrder as 'ASC' | 'DESC' }));
+  const setSorts = (newSorts: Array<{ field: string; order: 'ASC' | 'DESC' }>) =>
+    saveState((prev) => {
+      // Drop legacy keys so migration logic doesn't resurrect them
+      const { sortBy: _sb, sortOrder: _so, ...rest } = prev;
+      return { ...rest, sorts: newSorts };
+    });
   const setFilterPublisher = (newFilterPublisher: (string | number)[]) => saveState((prev) => ({ ...prev, filterPublisher: newFilterPublisher }));
   const setFilterStatus = (newFilterStatus: (string | number)[]) => saveState((prev) => ({ ...prev, filterStatus: newFilterStatus }));
   const setFilterCompany = (newFilterCompany: (string | number)[]) => saveState((prev) => ({ ...prev, filterCompany: newFilterCompany }));
@@ -961,8 +981,7 @@ export default function WorkLogsPage() {
   const buildListParams = useCallback(
     (overrides: Record<string, unknown> = {}, { skipColumnFilters = false, excludeColumnFilter }: { skipColumnFilters?: boolean; excludeColumnFilter?: string } = {}) => {
       const params: Record<string, unknown> = {
-        sortBy,
-        sortOrder,
+        sorts,
         ...overrides,
       };
       if (filterPublisher.length)
@@ -1003,8 +1022,7 @@ export default function WorkLogsPage() {
       return params;
     },
     [
-      sortBy,
-      sortOrder,
+      sorts,
       filterPublisher,
       filterStatus,
       filterCompany,
@@ -1156,8 +1174,11 @@ export default function WorkLogsPage() {
   }, [rows, selected]);
 
   // ── Sort handler ──────────────────────────────────────────
+  // Plain click: single-column sort (replaces all existing sorts).
+  // Shift+Click: append column to multi-sort (or toggle its direction
+  // if already present), preserving click order as priority.
   const handleSort = useCallback(
-    (field: string, order: "ASC" | "DESC") => {
+    (field: string, isShift: boolean) => {
       if (
         hasDirty &&
         !confirm("有未儲存的修改，切換排序將會丟失。確定要繼續嗎？")
@@ -1167,11 +1188,35 @@ export default function WorkLogsPage() {
         unlockDirtyRows();
         setDirtyRows(new Map());
       }
-      setSortBy(field);
-      setSortOrder(order);
+      const existingIdx = sorts.findIndex((s) => s.field === field);
+      let newSorts: Array<{ field: string; order: 'ASC' | 'DESC' }>;
+      if (isShift) {
+        if (existingIdx >= 0) {
+          // Toggle direction of the existing entry, keep priority order
+          newSorts = sorts.map((s, i) =>
+            i === existingIdx
+              ? { ...s, order: s.order === 'ASC' ? 'DESC' : 'ASC' }
+              : s,
+          );
+        } else {
+          // Append as a new lowest-priority sort
+          newSorts = [...sorts, { field, order: 'ASC' }];
+        }
+      } else {
+        // Single-column sort: replace everything
+        if (existingIdx === 0 && sorts.length === 1) {
+          // Same single column → toggle direction
+          newSorts = [
+            { field, order: sorts[0].order === 'ASC' ? 'DESC' : 'ASC' },
+          ];
+        } else {
+          newSorts = [{ field, order: 'ASC' }];
+        }
+      }
+      setSorts(newSorts);
       setPage(1);
     },
-    [hasDirty, unlockDirtyRows, setSortBy, setSortOrder, setPage],
+    [hasDirty, unlockDirtyRows, sorts, setSorts, setPage],
   );
 
   // ── Dirty tracking ─────────────────────────────────────────
@@ -1712,8 +1757,7 @@ export default function WorkLogsPage() {
     setFilterDateFrom('');
     setFilterDateTo('');
     setColumnFilters({});
-    setSortBy('created_at');
-    setSortOrder('DESC');
+    setSorts([{ field: 'created_at', order: 'DESC' }]);
     setPage(1);
   };
 
@@ -3080,18 +3124,24 @@ export default function WorkLogsPage() {
                   {/* Visible COLUMNS in user-defined order */}
                   {(visibleColumns as any[]).map((col: any) => {
                     const sortField = COLUMN_SORT_FIELD[col.key];
-                    const isActive = sortField && sortBy === sortField;
+                    const sortIdx = sortField
+                      ? sorts.findIndex((s) => s.field === sortField)
+                      : -1;
+                    const isActive = sortIdx >= 0;
+                    const activeOrder = isActive ? sorts[sortIdx].order : null;
                     const isFilterable = col.key !== 'attachments';
                     return (
                       <th
                         key={col.key}
                         onClick={
                           sortField
-                            ? () =>
-                                handleSort(
-                                  sortField,
-                                  isActive && sortOrder === 'ASC' ? 'DESC' : 'ASC',
-                                )
+                            ? (e: React.MouseEvent) =>
+                                handleSort(sortField, e.shiftKey)
+                            : undefined
+                        }
+                        title={
+                          sortField
+                            ? '點擊排序；Shift+點擊可累加多欄位排序'
                             : undefined
                         }
                         className={`px-2 py-2 text-left font-semibold text-gray-600 whitespace-nowrap ${col.width} ${
@@ -3107,9 +3157,11 @@ export default function WorkLogsPage() {
                               className={`ml-0.5 text-[10px] ${isActive ? 'text-blue-600' : 'text-gray-300'}`}
                             >
                               {isActive
-                                ? sortOrder === 'ASC'
-                                  ? '▲'
-                                  : '▼'
+                                ? `${activeOrder === 'ASC' ? '▲' : '▼'}${
+                                    sorts.length > 1
+                                      ? String.fromCharCode(0x2460 + sortIdx)
+                                      : ''
+                                  }`
                                 : '▲▼'}
                             </span>
                           )}

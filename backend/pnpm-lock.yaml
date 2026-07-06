@@ -98,6 +98,9 @@ importers:
       pdf-to-img:
         specifier: ^5.0.0
         version: 5.0.0
+      pdfjs-dist:
+        specifier: ^5.4.624
+        version: 5.4.624
       pg:
         specifier: ^8.20.0
         version: 8.20.0
