@@ -48,7 +48,17 @@ export class WhatsappController {
   @Post('whatsapp-heartbeat')
   @HttpCode(HttpStatus.OK)
   async handleHeartbeat(
-    @Body() body: { status: 'connected' | 'disconnected'; uptime?: number; lastMessageAt?: string },
+    @Body()
+    body: {
+      status: 'connected' | 'disconnected';
+      uptime?: number;
+      lastMessageAt?: string;
+      reconnectCount?: number;
+      unstableSince?: string;
+      decryptErrorCount?: number;
+      recoveredFrom?: string;
+      recoveredAt?: string;
+    },
     @Headers('x-webhook-secret') webhookSecret?: string,
   ) {
     this.validateWebhookSecret(webhookSecret);

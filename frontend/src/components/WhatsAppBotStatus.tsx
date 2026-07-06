@@ -9,13 +9,18 @@ import { verificationApi } from '@/lib/api';
 // ══════════════════════════════════════════════════════════════
 
 interface BotStatusData {
-  status: 'connected' | 'disconnected' | 'unknown';
+  status: 'connected' | 'disconnected' | 'unstable' | 'needs_qr' | 'unknown';
   reported_status: string;
   last_heartbeat_at: string | null;
   last_message_at: string | null;
   uptime: number | null;
   offline_duration_ms: number | null;
   has_qr_code: boolean;
+  reconnect_count?: number;
+  unstable_since?: string | null;
+  decrypt_error_count?: number;
+  recovered_from?: string | null;
+  recovered_at?: string | null;
   server_time: string;
 }
 
@@ -157,6 +162,22 @@ export default function WhatsAppBotStatus({ collapsed = false, onCollapsedClick 
           textColor: 'text-green-400',
           description: botStatus.uptime ? `已運行 ${formatUptime(botStatus.uptime)}` : '已連線',
         };
+      case 'unstable':
+        return {
+          color: 'bg-orange-400',
+          pulseColor: 'bg-orange-400',
+          label: '連線不穩定',
+          textColor: 'text-orange-400',
+          description: '頻繁斷線重連',
+        };
+      case 'needs_qr':
+        return {
+          color: 'bg-blue-400',
+          pulseColor: 'bg-blue-400',
+          label: '等待掃碼',
+          textColor: 'text-blue-400',
+          description: '請掃描 QR Code',
+        };
       case 'disconnected':
         return {
           color: 'bg-red-500',
@@ -272,13 +293,19 @@ export default function WhatsAppBotStatus({ collapsed = false, onCollapsedClick 
                   <span className="text-gray-300">{formatTime(botStatus.last_message_at)}</span>
                 </div>
               )}
-              {botStatus?.uptime != null && botStatus.status === 'connected' && (
+              {botStatus?.unstable_since && (
+                <div className="flex justify-between">
+                  <span className="text-orange-400">異常開始</span>
+                  <span className="text-orange-300">{formatTime(botStatus.unstable_since)}</span>
+                </div>
+              )}
+              {botStatus?.uptime != null && (botStatus.status === 'connected' || botStatus.status === 'unstable') && (
                 <div className="flex justify-between">
                   <span className="text-gray-400">運行時間</span>
                   <span className="text-gray-300">{formatUptime(botStatus.uptime)}</span>
                 </div>
               )}
-              {botStatus?.status === 'disconnected' && botStatus.offline_duration_ms && (
+              {(botStatus?.status === 'disconnected' || botStatus?.status === 'needs_qr') && botStatus.offline_duration_ms && (
                 <div className="flex justify-between">
                   <span className="text-gray-400">離線時長</span>
                   <span className="text-red-400 font-medium">{formatDuration(botStatus.offline_duration_ms)}</span>
@@ -288,7 +315,7 @@ export default function WhatsAppBotStatus({ collapsed = false, onCollapsedClick 
           </div>
 
           {/* QR Code 區域（僅在離線且有 QR code 時顯示）*/}
-          {botStatus?.status === 'disconnected' && (
+          {(botStatus?.status === 'disconnected' || botStatus?.status === 'needs_qr') && (
             <div className="px-4 py-3 border-t border-gray-700">
               <div className="text-xs font-medium text-gray-400 mb-2">掃碼重新連線</div>
 

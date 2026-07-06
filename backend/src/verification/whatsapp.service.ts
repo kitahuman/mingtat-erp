@@ -232,6 +232,13 @@ export class WhatsappService {
   private latestQrCode: string | null = null;
   private latestQrCodeAt: Date | null = null;
 
+  // 異常狀態追蹤
+  private reconnectCount = 0;
+  private unstableSince: Date | null = null;
+  private decryptErrorCount = 0;
+  private lastRecoveredFrom: Date | null = null;
+  private lastRecoveredAt: Date | null = null;
+
   // 心跳超時閾值（毫秒）
   private readonly HEARTBEAT_TIMEOUT_MS = 5 * 60 * 1000; // 5 分鐘
   // QR code 有效期（毫秒）
@@ -258,6 +265,11 @@ export class WhatsappService {
     status: 'connected' | 'disconnected';
     uptime?: number;
     lastMessageAt?: string;
+    reconnectCount?: number;
+    unstableSince?: string;
+    decryptErrorCount?: number;
+    recoveredFrom?: string;
+    recoveredAt?: string;
   }) {
     this.botStatus = payload.status;
     this.lastHeartbeatAt = new Date();
@@ -267,13 +279,38 @@ export class WhatsappService {
       this.lastMessageAt = new Date(payload.lastMessageAt);
     }
 
+    // 異常狀態更新
+    if (payload.reconnectCount !== undefined) {
+      this.reconnectCount = payload.reconnectCount;
+    }
+    if (payload.unstableSince) {
+      this.unstableSince = new Date(payload.unstableSince);
+    } else if (payload.reconnectCount === 0) {
+      this.unstableSince = null;
+    }
+
+    if (payload.decryptErrorCount !== undefined) {
+      this.decryptErrorCount = payload.decryptErrorCount;
+    }
+
+    // 記錄恢復事件
+    if (payload.recoveredFrom && payload.recoveredAt) {
+      this.lastRecoveredFrom = new Date(payload.recoveredFrom);
+      this.lastRecoveredAt = new Date(payload.recoveredAt);
+      this.logger.log(
+        `Bot recovered from unstable state: ${payload.recoveredFrom} to ${payload.recoveredAt}`,
+      );
+    }
+
     // 連線成功後清除 QR code
     if (payload.status === 'connected') {
       this.latestQrCode = null;
       this.latestQrCodeAt = null;
     }
 
-    this.logger.log(`Heartbeat received: status=${payload.status}, uptime=${payload.uptime}`);
+    this.logger.log(
+      `Heartbeat received: status=${payload.status}, reconnectCount=${this.reconnectCount}, unstableSince=${this.unstableSince}`,
+    );
 
     return {
       received: true,
@@ -303,27 +340,34 @@ export class WhatsappService {
    */
   async getBotStatus() {
     const now = new Date();
-    let effectiveStatus: 'connected' | 'disconnected' | 'unknown' = 'unknown';
+    let effectiveStatus: 'connected' | 'disconnected' | 'unstable' | 'needs_qr' | 'unknown' =
+      'unknown';
     let offlineDurationMs: number | null = null;
-
-    if (this.lastHeartbeatAt) {
-      const msSinceLastHeartbeat = now.getTime() - this.lastHeartbeatAt.getTime();
-
-      if (this.botStatus === 'connected' && msSinceLastHeartbeat <= this.HEARTBEAT_TIMEOUT_MS) {
-        effectiveStatus = 'connected';
-      } else {
-        effectiveStatus = 'disconnected';
-        // 離線時長：從最後一次心跳開始計算
-        offlineDurationMs = msSinceLastHeartbeat;
-      }
-    }
-    // 如果從未收到心跳，保持 'unknown'
 
     // 檢查是否有有效的 QR code
     let hasQrCode = false;
     if (this.latestQrCode && this.latestQrCodeAt) {
       const qrAge = now.getTime() - this.latestQrCodeAt.getTime();
       hasQrCode = qrAge <= this.QR_CODE_TTL_MS;
+    }
+
+    if (this.lastHeartbeatAt) {
+      const msSinceLastHeartbeat = now.getTime() - this.lastHeartbeatAt.getTime();
+
+      if (this.botStatus === 'connected' && msSinceLastHeartbeat <= this.HEARTBEAT_TIMEOUT_MS) {
+        if (this.reconnectCount >= 3) {
+          effectiveStatus = 'unstable';
+        } else {
+          effectiveStatus = 'connected';
+        }
+      } else {
+        effectiveStatus = hasQrCode ? 'needs_qr' : 'disconnected';
+        // 離線時長：從最後一次心跳開始計算
+        offlineDurationMs = msSinceLastHeartbeat;
+      }
+    } else {
+      // 從未收到心跳，但有 QR code
+      if (hasQrCode) effectiveStatus = 'needs_qr';
     }
 
     return {
@@ -334,6 +378,11 @@ export class WhatsappService {
       uptime: this.botUptime,
       offline_duration_ms: offlineDurationMs,
       has_qr_code: hasQrCode,
+      reconnect_count: this.reconnectCount,
+      unstable_since: this.unstableSince ? toHKDateTimeString(this.unstableSince) : null,
+      decrypt_error_count: this.decryptErrorCount,
+      recovered_from: this.lastRecoveredFrom ? toHKDateTimeString(this.lastRecoveredFrom) : null,
+      recovered_at: this.lastRecoveredAt ? toHKDateTimeString(this.lastRecoveredAt) : null,
       server_time: toHKDateTimeString(now),
     };
   }
