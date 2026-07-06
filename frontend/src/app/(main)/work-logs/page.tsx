@@ -1174,11 +1174,11 @@ export default function WorkLogsPage() {
   }, [rows, selected]);
 
   // ── Sort handler ──────────────────────────────────────────
-  // Plain click: single-column sort (replaces all existing sorts).
-  // Shift+Click: append column to multi-sort (or toggle its direction
-  // if already present), preserving click order as priority.
+  // Click unsorted column  → append to sort list (accumulate)
+  // Click already-sorted column → toggle ASC/DESC
+  // Click the sort badge (×) → remove that column from sort list
   const handleSort = useCallback(
-    (field: string, isShift: boolean) => {
+    (field: string) => {
       if (
         hasDirty &&
         !confirm("有未儲存的修改，切換排序將會丟失。確定要繼續嗎？")
@@ -1190,30 +1190,42 @@ export default function WorkLogsPage() {
       }
       const existingIdx = sorts.findIndex((s) => s.field === field);
       let newSorts: Array<{ field: string; order: 'ASC' | 'DESC' }>;
-      if (isShift) {
-        if (existingIdx >= 0) {
-          // Toggle direction of the existing entry, keep priority order
-          newSorts = sorts.map((s, i) =>
-            i === existingIdx
-              ? { ...s, order: s.order === 'ASC' ? 'DESC' : 'ASC' }
-              : s,
-          );
-        } else {
-          // Append as a new lowest-priority sort
-          newSorts = [...sorts, { field, order: 'ASC' }];
-        }
+      if (existingIdx >= 0) {
+        // Already sorted: toggle direction
+        newSorts = sorts.map((s, i) =>
+          i === existingIdx
+            ? { ...s, order: s.order === 'ASC' ? 'DESC' : 'ASC' }
+            : s,
+        );
       } else {
-        // Single-column sort: replace everything
-        if (existingIdx === 0 && sorts.length === 1) {
-          // Same single column → toggle direction
-          newSorts = [
-            { field, order: sorts[0].order === 'ASC' ? 'DESC' : 'ASC' },
-          ];
-        } else {
-          newSorts = [{ field, order: 'ASC' }];
-        }
+        // New column: append as lowest-priority sort
+        newSorts = [...sorts, { field, order: 'ASC' }];
       }
       setSorts(newSorts);
+      setPage(1);
+    },
+    [hasDirty, unlockDirtyRows, sorts, setSorts, setPage],
+  );
+
+  // Remove a single column from the sort list (called by the badge × button)
+  const handleRemoveSort = useCallback(
+    (field: string) => {
+      if (
+        hasDirty &&
+        !confirm("有未儲存的修改，切換排序將會丟失。確定要繼續嗎？")
+      )
+        return;
+      if (hasDirty) {
+        unlockDirtyRows();
+        setDirtyRows(new Map());
+      }
+      const newSorts = sorts.filter((s) => s.field !== field);
+      // If all removed, fall back to default
+      setSorts(
+        newSorts.length > 0
+          ? newSorts
+          : [{ field: 'created_at', order: 'DESC' }],
+      );
       setPage(1);
     },
     [hasDirty, unlockDirtyRows, sorts, setSorts, setPage],
@@ -3133,20 +3145,16 @@ export default function WorkLogsPage() {
                     return (
                       <th
                         key={col.key}
-                        onMouseDown={
+                        onClick={
                           sortField
-                            ? (e: React.MouseEvent) => {
-                                // Prevent browser's default Shift+Click
-                                // "extend selection" behaviour so the
-                                // shiftKey is reliably readable.
-                                e.preventDefault();
-                                handleSort(sortField, e.shiftKey);
-                              }
+                            ? () => handleSort(sortField)
                             : undefined
                         }
                         title={
                           sortField
-                            ? '點擊排序；Shift+點擊可累加多欄位排序'
+                            ? isActive
+                              ? '點擊切換排序方向；點擊序號可移除該欄排序'
+                              : '點擊加入排序'
                             : undefined
                         }
                         className={`px-2 py-2 text-left font-semibold text-gray-600 whitespace-nowrap ${col.width} ${
@@ -3157,17 +3165,30 @@ export default function WorkLogsPage() {
                       >
                         <span className="flex items-center gap-0.5">
                           {col.label}
-                          {sortField && (
-                            <span
-                              className={`ml-0.5 text-[10px] ${isActive ? 'text-blue-600' : 'text-gray-300'}`}
-                            >
-                              {isActive
-                                ? `${activeOrder === 'ASC' ? '▲' : '▼'}${
-                                    sorts.length > 1
-                                      ? String.fromCharCode(0x2460 + sortIdx)
-                                      : ''
-                                  }`
-                                : '▲▼'}
+                          {sortField && !isActive && (
+                            <span className="ml-0.5 text-[10px] text-gray-300">▲▼</span>
+                          )}
+                          {sortField && isActive && (
+                            <span className="ml-0.5 flex items-center gap-0.5">
+                              {/* Arrow indicator */}
+                              <span className="text-[10px] text-blue-600">
+                                {activeOrder === 'ASC' ? '▲' : '▼'}
+                              </span>
+                              {/* Removable badge showing priority number */}
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleRemoveSort(sortField);
+                                }}
+                                title="移除此欄排序"
+                                className="inline-flex items-center gap-0.5 px-1 py-0 rounded text-[9px] font-bold bg-blue-100 text-blue-700 hover:bg-red-100 hover:text-red-600 transition-colors leading-tight"
+                              >
+                                {sorts.length > 1
+                                  ? String.fromCharCode(0x2460 + sortIdx)
+                                  : null}
+                                <span className="text-[8px] leading-none">×</span>
+                              </button>
                             </span>
                           )}
                           {isFilterable && (
