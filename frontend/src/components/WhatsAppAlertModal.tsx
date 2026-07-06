@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { verificationApi } from '@/lib/api';
 import { QRCodeSVG } from 'qrcode.react';
+import { useAuth } from '@/lib/auth';
 
 interface BotStatusData {
   status: 'connected' | 'disconnected' | 'unstable' | 'needs_qr' | 'unknown';
@@ -18,6 +19,10 @@ interface QrCodeData {
 }
 
 export default function WhatsAppAlertModal() {
+  const { user } = useAuth();
+
+  // 只有 admin 角色才顯示此 modal
+  if (!user || user.role !== 'admin') return null;
   const [status, setStatus] = useState<BotStatusData | null>(null);
   const [qrCode, setQrCode] = useState<QrCodeData | null>(null);
   const [showModal, setShowModal] = useState(false);
