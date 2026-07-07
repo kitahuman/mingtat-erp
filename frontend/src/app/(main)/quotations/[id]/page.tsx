@@ -349,11 +349,20 @@ export default function QuotationDetailPage() {
             </span>
             <span className={statusColors[quotation?.status] || 'badge-gray'}>{statusLabels[quotation?.status] || quotation?.status}</span>
           </div>
-          <p className="text-gray-500 mt-1">
-            {quotation?.contract_name && <><span className="font-medium">{quotation.contract_name}</span> | </>}
-            {quotation?.project_name || '-'}
+          <p className="text-gray-500 mt-1 flex items-center gap-1 flex-wrap">
+            {quotation?.contract_name && <><span className="font-medium">{quotation.contract_name}</span><span>|</span></>}
+            {editing ? (
+              <input
+                value={form.project_name || ''}
+                onChange={e => setForm({...form, project_name: e.target.value})}
+                className="border-b border-gray-400 bg-transparent text-gray-700 text-sm focus:outline-none focus:border-primary-500 min-w-[12rem] max-w-xs"
+                placeholder={form.quotation_type === 'project' ? '工程名稱' : '服務說明'}
+              />
+            ) : (
+              <span>{quotation?.project_name || '-'}</span>
+            )}
             {quotation?.project && (
-              <> | 工程項目：<Link href={`/projects/${quotation.project.id}`} className="text-primary-600 hover:underline font-mono">{quotation.project.project_no}</Link></>
+              <><span>|</span><span>工程項目：</span><Link href={`/projects/${quotation.project.id}`} className="text-primary-600 hover:underline font-mono">{quotation.project.project_no}</Link></>
             )}
           </p>
         </div>
