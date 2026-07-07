@@ -862,6 +862,7 @@ export default function SummaryTab() {
   );
   const [selectedStatuses, setSelectedStatuses] = useState<string[]>([]);
   const [controlsOpen, setControlsOpen] = useState(false);
+  const [titleExpanded, setTitleExpanded] = useState(false);
   const [axisOpen, setAxisOpen] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
   // ── 儲存/載入視圖（Pivot View Presets）──
@@ -1549,14 +1550,13 @@ export default function SummaryTab() {
     () => flattenCols(colTree, collapsedCols, Math.max(colFields.length, 1)),
     [colTree, collapsedCols, colFields.length],
   );
-  const pivotTitle = useMemo(() => {
+    const pivotTitleParts = useMemo(() => {
     const parts: string[] = [];
     const addSelectedFilter = (values: string[], options: Option[]) => {
       if (values.length === 0 || areAllOptionsSelected(values, options)) return;
       const labels = getOptionLabels(values, options);
       if (labels.length > 0) parts.push(labels.join('、'));
     };
-
     addSelectedFilter(companyIds, companies);
     addSelectedFilter(clientIds, clients);
     addSelectedFilter(employeeIds, employees);
@@ -1570,7 +1570,7 @@ export default function SummaryTab() {
     addSelectedFilter(selectedServiceTypes, serviceTypes);
     addSelectedFilter(selectedStatuses, STATUS_OPTIONS);
     parts.push(`${formatTitleDate(dateFrom)} - ${formatTitleDate(dateTo)}`);
-    return `Pivot Table 交叉表 >> ${parts.join(' ')}`;
+    return parts;
   }, [
     companyIds,
     companies,
@@ -1598,6 +1598,27 @@ export default function SummaryTab() {
     dateFrom,
     dateTo,
   ]);
+  // Full title string (for backward compat / copy)
+  const pivotTitle = useMemo(
+    () => `Pivot Table 交叉表 >> ${pivotTitleParts.join(' ')}`,
+    [pivotTitleParts],
+  );
+  // Collapsed one-line summary: show first 2 filter parts + "...等 N 項"
+  const pivotTitleCollapsed = useMemo(() => {
+    const PREVIEW = 2;
+    const filterParts = pivotTitleParts.slice(0, -1); // exclude date range
+    const datePart = pivotTitleParts[pivotTitleParts.length - 1] ?? '';
+    if (filterParts.length === 0) {
+      return `Pivot Table 交叉表 · ${datePart}`;
+    }
+    const shown = filterParts.slice(0, PREVIEW);
+    const remaining = filterParts.length - PREVIEW;
+    const filterSummary =
+      remaining > 0
+        ? `${shown.join(' ')} …等 ${remaining + 1} 項`
+        : shown.join(' ');
+    return `Pivot Table 交叉表 · ${filterSummary} · ${datePart}`;
+  }, [pivotTitleParts]);
   const rowAxisHeader = useMemo(() => {
     const labels = rowFields.map(getDimensionLabel).filter(Boolean);
     return labels.length > 0 ? labels.join(' / ') : '直軸';
@@ -2198,14 +2219,52 @@ export default function SummaryTab() {
 
       <div className="p-3 pt-2">
         <div className="rounded-xl border border-gray-200 bg-white shadow-sm">
-          <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3">
-            <div className="text-sm font-semibold text-gray-800">
-              {pivotTitle}
-            </div>
-            <div className="text-xs text-gray-500">
-              {loading
-                ? '載入中...'
-                : `直軸 ${visibleRows.length} 項，橫軸 ${visibleCols.length} 項`}
+          <div className="border-b border-gray-200 px-4 py-3">
+            <div className="flex items-center justify-between gap-2">
+              {/* Collapsed one-line summary */}
+              <div
+                className="min-w-0 flex-1 cursor-pointer select-none text-sm font-semibold text-gray-800"
+                onClick={() => setTitleExpanded((v) => !v)}
+                title={titleExpanded ? '收起篩選摘要' : '展開篩選摘要'}
+              >
+                {titleExpanded ? null : (
+                  <span className="block truncate">{pivotTitleCollapsed}</span>
+                )}
+                {titleExpanded && (
+                  <span className="block break-words">{pivotTitle}</span>
+                )}
+              </div>
+              <div className="flex shrink-0 items-center gap-3">
+                {/* Row/col count */}
+                <span className="text-xs text-gray-500">
+                  {loading
+                    ? '載入中...'
+                    : `直軸 ${visibleRows.length} 項，橫軸 ${visibleCols.length} 項`}
+                </span>
+                {/* Expand/collapse toggle */}
+                <button
+                  type="button"
+                  onClick={() => setTitleExpanded((v) => !v)}
+                  className="flex items-center gap-0.5 rounded px-1.5 py-0.5 text-xs text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors"
+                  title={titleExpanded ? '收起篩選摘要' : '展開篩選摘要'}
+                >
+                  {titleExpanded ? (
+                    <>
+                      <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+                      </svg>
+                      收起
+                    </>
+                  ) : (
+                    <>
+                      <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                      展開
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
           </div>
           {error && (
