@@ -321,6 +321,23 @@ export default function QuotationsPage() {
     return res.data;
   };
 
+  const hasFilters = !!(search || statusFilter || typeFilter || dateFrom || dateTo || Object.keys(columnFilters).length > 0 || sortBy !== 'id' || sortOrder !== 'DESC');
+
+  const resetFilters = () => {
+    saveState((prev) => ({
+      ...prev,
+      page: 1,
+      search: '',
+      statusFilter: '',
+      typeFilter: '',
+      dateFrom: '',
+      dateTo: '',
+      sortBy: 'id',
+      sortOrder: 'DESC',
+      columnFilters: {},
+    }));
+  };
+
   const applyDateShortcut = (monthOffset: number) => {
     const { from, to } = getMonthRange(monthOffset);
     setDateFrom(from);
@@ -664,6 +681,14 @@ export default function QuotationsPage() {
                   上上月
                 </button>
               </div>
+              <button
+                type="button"
+                onClick={resetFilters}
+                disabled={!hasFilters}
+                className="px-3 py-1 text-xs text-gray-700 border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed self-end whitespace-nowrap"
+              >
+                重設篩選
+              </button>
             </div>
           }
         />
