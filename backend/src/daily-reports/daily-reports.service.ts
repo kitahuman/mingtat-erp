@@ -111,22 +111,146 @@ export class DailyReportsService {
   private readonly allowedSortFields = [
     'id', 'daily_report_date', 'daily_report_status', 'daily_report_shift_type',
     'daily_report_project_name', 'daily_report_client_name', 'daily_report_client_contract_no',
-    'daily_report_project_location', 'created_at',
+    'daily_report_project_location', 'created_at', 'daily_report_created_at',
   ];
 
-  async findAll(query: any) {
-    const page = Number(query.page) || 1;
-    const limit = Number(query.limit) || 20;
-    const where: any = { daily_report_deleted_at: null };
+  // Columns supported by the column-header filter (filter_xxx params + filter-options API)
+  private readonly columnFilterFields = [
+    'daily_report_date',
+    'daily_report_status',
+    'daily_report_shift_type',
+    'daily_report_project_name',
+    'daily_report_project_location',
+    'daily_report_client_name',
+    'daily_report_client_contract_no',
+    'creator',
+  ];
 
-    const sortBy = this.allowedSortFields.includes(query.sortBy || '') ? query.sortBy : 'daily_report_date';
-    const sortOrder = query.sortOrder?.toUpperCase() === 'ASC' ? 'asc' : 'desc';
-    const relationSortMap: Record<string, any> = {
-      project: { project: { project_name: sortOrder } },
-      client: { client: { name: sortOrder } },
-      creator: { creator: { displayName: sortOrder } },
-    };
-    const orderBy = relationSortMap[sortBy] || { [sortBy]: sortOrder };
+  // Relation columns: filter/options resolved through a Prisma relation
+  private readonly relationFilterConfig: Record<
+    string,
+    { relation: string; field: string; foreignKey: string }
+  > = {
+    creator: { relation: 'creator', field: 'displayName', foreignKey: 'daily_report_created_by' },
+  };
+
+  private readonly dateFilterFields = ['daily_report_date'];
+
+  // ── Filter value helpers (same semantics as work-logs) ─────────
+
+  private splitFilterValues(raw: unknown): string[] {
+    if (raw === null || raw === undefined) return [];
+    if (raw === '') return [''];
+    if (Array.isArray(raw)) {
+      return raw.map((v) => String(v).trim()).filter((v) => v.length > 0);
+    }
+    const rawString = String(raw);
+    const trimmed = rawString.trim();
+    if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+      try {
+        const parsed: unknown = JSON.parse(trimmed);
+        if (Array.isArray(parsed)) {
+          return parsed
+            .filter(
+              (v): v is string | number | boolean =>
+                ['string', 'number', 'boolean'].includes(typeof v),
+            )
+            .map((v) => String(v).trim())
+            .filter((v) => v.length > 0);
+        }
+      } catch {
+        // fall through to comma-separated parsing
+      }
+    }
+    return rawString.split(',').map((v) => v.trim()).filter((v) => v.length > 0);
+  }
+
+  private isBlankFilterValue(value: string): boolean {
+    return value === '(空白)' || value === '__BLANK__' || value === '';
+  }
+
+  private getNonBlankFilterValues(values: string[]): string[] {
+    return values.filter((v) => !this.isBlankFilterValue(v));
+  }
+
+  private hasBlankFilterValue(values: string[]): boolean {
+    return values.some((v) => this.isBlankFilterValue(v));
+  }
+
+  private appendAndCondition(where: any, condition: any): void {
+    const existing = Array.isArray(where.AND) ? where.AND : [];
+    where.AND = [...existing, condition];
+  }
+
+  private applyOrConditions(where: any, conditions: any[]): void {
+    if (conditions.length === 0) return;
+    if (conditions.length === 1) {
+      this.appendAndCondition(where, conditions[0]);
+      return;
+    }
+    this.appendAndCondition(where, { OR: conditions });
+  }
+
+  private makeDateRange(value: string) {
+    if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+      // daily_report_date is a DATE column — no timezone conversion.
+      const start = new Date(`${value}T00:00:00.000Z`);
+      const end = new Date(start);
+      end.setUTCDate(end.getUTCDate() + 1);
+      return { gte: start, lt: end };
+    }
+    return undefined;
+  }
+
+  // ── Column-header filters ───────────────────────────────────────
+
+  private applyColumnFilters(where: any, query: any, excludeColumn?: string) {
+    for (const field of this.columnFilterFields) {
+      if (field === excludeColumn) continue;
+      const vals = this.splitFilterValues(query[`filter_${field}`]);
+      if (vals.length === 0) continue;
+
+      const nonBlank = this.getNonBlankFilterValues(vals);
+      const blankSelected = this.hasBlankFilterValue(vals);
+      const relation = this.relationFilterConfig[field];
+
+      if (relation) {
+        const conditions: any[] = [];
+        if (nonBlank.length > 0) {
+          conditions.push({
+            [relation.relation]: { [relation.field]: { in: nonBlank } },
+          });
+        }
+        if (blankSelected) {
+          conditions.push({ [relation.foreignKey]: null });
+        }
+        this.applyOrConditions(where, conditions);
+        continue;
+      }
+
+      if (this.dateFilterFields.includes(field)) {
+        const ranges = nonBlank
+          .map((v) => this.makeDateRange(v))
+          .filter((r): r is { gte: Date; lt: Date } => Boolean(r));
+        const conditions: any[] = ranges.map((range) => ({ [field]: range }));
+        if (blankSelected) conditions.push({ [field]: null });
+        this.applyOrConditions(where, conditions);
+        continue;
+      }
+
+      const conditions: any[] = [];
+      if (nonBlank.length === 1) conditions.push({ [field]: nonBlank[0] });
+      else if (nonBlank.length > 1)
+        conditions.push({ [field]: { in: nonBlank } });
+      if (blankSelected) conditions.push({ [field]: null }, { [field]: '' });
+      this.applyOrConditions(where, conditions);
+    }
+  }
+
+  // ── Shared where builder for findAll / getFilterOptions ─────────────────
+
+  private buildDailyReportWhere(query: any, excludeColumnFilter?: string) {
+    const where: any = { daily_report_deleted_at: null };
 
     if (query.project_id) where.daily_report_project_id = Number(query.project_id);
     if (query.project_name) where.daily_report_project_name = { contains: query.project_name, mode: 'insensitive' };
@@ -151,11 +275,89 @@ export class DailyReportsService {
       ];
     }
 
+    this.applyColumnFilters(where, query, excludeColumnFilter);
+    return where;
+  }
+
+  async findAll(query: any) {
+    const page = Number(query.page) || 1;
+    const limit = Number(query.limit) || 20;
+    const where = this.buildDailyReportWhere(query);
+
+    // Relation sort fields — dir injected per entry to support multi-sort
+    const relationSortMap: Record<string, (dir: 'asc' | 'desc') => any> = {
+      project: (dir) => ({ project: { project_name: dir } }),
+      client: (dir) => ({ client: { name: dir } }),
+      creator: (dir) => ({ creator: { displayName: dir } }),
+    };
+
+    // ── Resolve sort list ─────────────────────────────────
+    // New format: sorts = [{ field, order }, ...] (array or JSON string)
+    // Legacy format: sortBy + sortOrder single strings (backward compatible)
+    type SortEntry = { field: string; order: string };
+    let sortList: SortEntry[] = [];
+    let sortsKeyProvided = false;
+    const rawSorts = query.sorts;
+    if (rawSorts !== undefined && rawSorts !== null) {
+      let parsed: unknown = rawSorts;
+      if (typeof rawSorts === 'string') {
+        try {
+          parsed = JSON.parse(rawSorts);
+        } catch {
+          parsed = null;
+        }
+      }
+      if (Array.isArray(parsed)) {
+        sortsKeyProvided = true;
+        sortList = (parsed as any[])
+          .filter(
+            (s: any): s is SortEntry =>
+              s && typeof s.field === 'string' && typeof s.order === 'string',
+          )
+          .map((s: any) => ({ field: s.field, order: s.order }));
+      }
+    }
+    if (!sortList.length && !sortsKeyProvided) {
+      // Legacy client — fall back to sortBy/sortOrder
+      const legacyField =
+        typeof query.sortBy === 'string' && query.sortBy
+          ? query.sortBy
+          : 'daily_report_date';
+      const legacyOrder =
+        typeof query.sortOrder === 'string' && query.sortOrder
+          ? query.sortOrder
+          : 'DESC';
+      sortList = [{ field: legacyField, order: legacyOrder }];
+    }
+
+    const orderByArray: any[] = [];
+    const seenFields = new Set<string>();
+    for (const { field, order } of sortList) {
+      if (seenFields.has(field)) continue;
+      const dir: 'asc' | 'desc' =
+        String(order).toUpperCase() === 'ASC' ? 'asc' : 'desc';
+      if (relationSortMap[field]) {
+        orderByArray.push(relationSortMap[field](dir));
+        seenFields.add(field);
+      } else if (this.allowedSortFields.includes(field)) {
+        orderByArray.push({ [field]: dir });
+        seenFields.add(field);
+      }
+      // Unknown fields silently skipped
+    }
+    if (!orderByArray.length) {
+      orderByArray.push({ daily_report_date: 'desc' });
+    }
+    // Stable tiebreaker
+    if (!seenFields.has('id')) {
+      orderByArray.push({ id: 'desc' });
+    }
+
     const [data, total] = await Promise.all([
       this.prisma.dailyReport.findMany({
         where,
         include: this.includeAll,
-        orderBy,
+        orderBy: orderByArray,
         skip: (page - 1) * limit,
         take: limit,
       }),
@@ -163,6 +365,77 @@ export class DailyReportsService {
     ]);
 
     return { data, total, page, limit };
+  }
+
+  /**
+   * Distinct values of a column for the column-header filter dropdown.
+   * Applies all other filters but excludes the target column's own filter.
+   */
+  async getFilterOptions(column: string, query: any = {}): Promise<string[]> {
+    if (!this.columnFilterFields.includes(column)) return [];
+
+    const where = this.buildDailyReportWhere(query, column);
+
+    const relation = this.relationFilterConfig[column];
+    if (relation) {
+      const rows = await this.prisma.dailyReport.findMany({
+        where,
+        select: {
+          [relation.relation]: { select: { [relation.field]: true } },
+        } as any,
+        take: 2000,
+      });
+      return Array.from(
+        new Set(
+          rows.map(
+            (row: any) => row[relation.relation]?.[relation.field] || '(空白)',
+          ),
+        ),
+      )
+        .sort((a, b) => a.localeCompare(b, 'zh-Hant'))
+        .slice(0, 500);
+    }
+
+    if (this.dateFilterFields.includes(column)) {
+      const existing =
+        where[column] && typeof where[column] === 'object' ? where[column] : {};
+      const merged = { ...existing, not: null };
+      const rows = await this.prisma.dailyReport.findMany({
+        where: { ...where, [column]: merged },
+        select: { [column]: true } as any,
+        orderBy: { [column]: 'desc' } as any,
+        take: 2000,
+      });
+      return Array.from(
+        new Set(
+          rows
+            .map((row: any) => {
+              const val = row[column];
+              if (!val) return '';
+              // DATE column — use UTC date string directly.
+              return val instanceof Date
+                ? val.toISOString().split('T')[0]
+                : String(val).split('T')[0];
+            })
+            .filter(Boolean),
+        ),
+      ).slice(0, 500);
+    }
+
+    const rows = await this.prisma.dailyReport.findMany({
+      where,
+      select: { [column]: true } as any,
+      distinct: [column as any],
+      take: 500,
+    });
+    return Array.from(
+      new Set(rows.map((row: any) => {
+        const val = row[column];
+        return val === null || val === undefined || val === ''
+          ? '(空白)'
+          : String(val);
+      })),
+    ).sort((a, b) => a.localeCompare(b, 'zh-Hant'));
   }
 
   async findOne(id: number) {

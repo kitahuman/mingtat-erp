@@ -2037,6 +2037,10 @@ export const dailyReportStatsApi = {
 
 export const dailyReportsApi = {
   list: (params?: any) => api.get('/daily-reports', { params }),
+  // POST variant — avoids query-string length limits with column filters / sorts
+  listPost: (params?: any) => api.post('/daily-reports/search', params || {}),
+  filterOptions: (column: string, params?: any) =>
+    api.post(`/daily-reports/filter-options/${column}`, params || {}),
   get: (id: number) => api.get(`/daily-reports/${id}`),
   create: (data: any) => api.post('/daily-reports', data),
   update: (id: number, data: any) => api.put(`/daily-reports/${id}`, data),

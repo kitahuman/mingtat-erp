@@ -28,6 +28,20 @@ export class DailyReportsController {
     return this.service.findAll(query);
   }
 
+  // POST variant of findAll to avoid query-string length limits when many
+  // column filters / sorts are applied (same pattern as work-logs /search).
+  @Post('search')
+  findAllPost(@Body() body: any) {
+    return this.service.findAll(body || {});
+  }
+
+  // Distinct values of a column for the column-header filter dropdown.
+  // POST so the current filter context can be sent in the body.
+  @Post('filter-options/:column')
+  getFilterOptions(@Param('column') column: string, @Body() body: any) {
+    return this.service.getFilterOptions(column, body || {});
+  }
+
   @Get('project-names')
   async getDistinctProjectNames(): Promise<DailyReportProjectNameDto[]> {
     const names = await this.service.getDistinctProjectNames();
