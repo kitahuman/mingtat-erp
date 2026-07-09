@@ -304,12 +304,17 @@ export class PaymentOutAllocationService {
 
     // 2) Plus legacy PaymentOuts that point directly at this target but
     //    have no allocation row to that same target (avoid double count).
+    //    Note: expense links now live exclusively in allocations (the legacy
+    //    expense_id FK is migrated by scripts/migrate-expense-id-to-allocations),
+    //    so only payroll / subcon legacy FKs are still counted here.
+    if (kind === 'expense') {
+      return allocSum;
+    }
+
     const legacyWhere: Prisma.PaymentOutWhereInput =
-      kind === 'expense'
-        ? { expense_id: targetId, payment_out_status: 'paid' }
-        : kind === 'payroll'
-          ? { payroll_id: targetId, payment_out_status: 'paid' }
-          : { subcon_payroll_id: targetId, payment_out_status: 'paid' };
+      kind === 'payroll'
+        ? { payroll_id: targetId, payment_out_status: 'paid' }
+        : { subcon_payroll_id: targetId, payment_out_status: 'paid' };
 
     const legacyPayments = await this.prisma.paymentOut.findMany({
       where: legacyWhere,

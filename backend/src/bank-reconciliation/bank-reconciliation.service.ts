@@ -147,6 +147,19 @@ export class BankReconciliationService {
                         category: { select: { id: true, name: true } },
                       },
                     },
+                    allocations: {
+                      include: {
+                        expense: {
+                          select: {
+                            id: true,
+                            item: true,
+                            supplier_name: true,
+                            category: { select: { id: true, name: true } },
+                          },
+                        },
+                      },
+                      orderBy: { id: 'asc' as const },
+                    },
                     company: { select: { id: true, name: true } },
                     bank_account: { select: { id: true, bank_name: true, account_no: true } },
                   },
@@ -184,6 +197,19 @@ export class BankReconciliationService {
                       category: { select: { id: true, name: true } },
                     },
                   },
+                  allocations: {
+                    include: {
+                      expense: {
+                        select: {
+                          id: true,
+                          item: true,
+                          supplier_name: true,
+                          category: { select: { id: true, name: true } },
+                        },
+                      },
+                    },
+                    orderBy: { id: 'asc' as const },
+                  },
                   company: { select: { id: true, name: true } },
                   bank_account: { select: { id: true, bank_name: true, account_no: true } },
                 },
@@ -220,8 +246,13 @@ export class BankReconciliationService {
           r.project?.project_name,
         ];
       }
-      // payment_out
+      // payment_out (allocation-based expense links, with legacy FK fallback)
+      const allocExpenses: any[] = (r.allocations || [])
+        .map((a: any) => a.expense)
+        .filter(Boolean);
       return [
+        ...allocExpenses.map((e: any) => e.item),
+        ...allocExpenses.map((e: any) => e.supplier_name),
         r.expense?.item,
         r.expense?.supplier_name,
         r.company?.name,
@@ -243,8 +274,16 @@ export class BankReconciliationService {
           r.contract?.contract_name,
         ];
       }
-      // payment_out
-      return [r.reference_no, r.expense?.category?.name, r.payment_out_description];
+      // payment_out (allocation-based expense links, with legacy FK fallback)
+      const allocCategoryNames: any[] = (r.allocations || [])
+        .map((a: any) => a.expense?.category?.name)
+        .filter(Boolean);
+      return [
+        r.reference_no,
+        ...allocCategoryNames,
+        r.expense?.category?.name,
+        r.payment_out_description,
+      ];
     };
 
     let filtered = enrichedAll;
@@ -1094,6 +1133,19 @@ export class BankReconciliationService {
               category: { select: { id: true, name: true } },
             },
           },
+          allocations: {
+            include: {
+              expense: {
+                select: {
+                  id: true,
+                  item: true,
+                  supplier_name: true,
+                  category: { select: { id: true, name: true } },
+                },
+              },
+            },
+            orderBy: { id: 'asc' as const },
+          },
           company: { select: { id: true, name: true } },
           bank_account: { select: { id: true, bank_name: true, account_no: true } },
         },
@@ -1171,11 +1223,15 @@ export class BankReconciliationService {
                   where: { id: m.matched_id },
                   include: {
                     expense: { select: { item: true, supplier_name: true } },
+                    allocations: {
+                      include: { expense: { select: { item: true, supplier_name: true } } },
+                      orderBy: { id: 'asc' as const },
+                    },
                     company: { select: { name: true } },
                   },
                 });
                 if (r) {
-                  matchedNames.push(r.expense?.item || (r as any).payment_out_description || (r as any).description || '未命名支出');
+                  matchedNames.push(r.allocations?.[0]?.expense?.item || r.expense?.item || (r as any).payment_out_description || (r as any).description || '未命名支出');
                   matchedCategory = '支出';
                 }
               }
@@ -1201,11 +1257,15 @@ export class BankReconciliationService {
                 where: { id: (tx as any).matched_id },
                 include: {
                   expense: { select: { item: true, supplier_name: true } },
+                  allocations: {
+                    include: { expense: { select: { item: true, supplier_name: true } } },
+                    orderBy: { id: 'asc' as const },
+                  },
                   company: { select: { name: true } },
                 },
               });
               if (r) {
-                matchedNames.push(r.expense?.item || (r as any).payment_out_description || (r as any).description || '未命名支出');
+                matchedNames.push(r.allocations?.[0]?.expense?.item || r.expense?.item || (r as any).payment_out_description || (r as any).description || '未命名支出');
                 matchedCategory = '支出';
               }
             }

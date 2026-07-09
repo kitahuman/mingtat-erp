@@ -177,7 +177,7 @@ export default function MatchModal({ isOpen, onClose, tx, onSuccess }: any) {
                           <span className="font-medium text-sm">
                             {isCredit
                               ? (c.project?.project_name || c.description || '無關聯工程')
-                              : (c.expense?.supplier_name || c.expense?.item || c.company?.name || c.description || '—')
+                              : (c.allocations?.[0]?.expense?.supplier_name || c.allocations?.[0]?.expense?.item || c.expense?.supplier_name || c.expense?.item || c.company?.name || c.description || '—')
                             }
                           </span>
                           {amountMatch && (
@@ -190,7 +190,7 @@ export default function MatchModal({ isOpen, onClose, tx, onSuccess }: any) {
                           {c.reference_no && <span>🔖 {c.reference_no}</span>}
                           {c.cheque_no && <span>📝 支票: {c.cheque_no}</span>}
                           {c.bank_account && <span>🏦 {c.bank_account.bank_name} ({c.bank_account.account_no})</span>}
-                          {!isCredit && c.expense?.category?.name && <span>📁 {c.expense.category.name}</span>}
+                          {!isCredit && (c.allocations?.[0]?.expense?.category?.name || c.expense?.category?.name) && <span>📁 {c.allocations?.[0]?.expense?.category?.name || c.expense?.category?.name}</span>}
                           {isCredit && c.project?.project_no && <span>📋 {c.project.project_no}</span>}
                           {isCredit && c.contract?.contract_no && <span>📄 合約: {c.contract.contract_no}</span>}
                         </div>

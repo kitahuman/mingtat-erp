@@ -3961,9 +3961,6 @@ export class PayrollService {
             ? Number(rawBankAccount.trim())
             : null;
 
-      // Also set expense_id on the PaymentOut for legacy compatibility
-      const primaryExpenseId = payrollExpenses.length === 1 ? payrollExpenses[0].id : null;
-
       const paymentOut = await tx.paymentOut.create({
         data: {
           date: new Date(body.payroll_payment_date),
@@ -3975,7 +3972,6 @@ export class PayrollService {
           payment_out_status: 'paid',
           remarks: body.payroll_payment_remarks || null,
           payroll_id: payrollId,
-          expense_id: primaryExpenseId,
           company_id: body.company_id || payroll.company_id || null,
         },
       });
@@ -4513,22 +4509,20 @@ export class PayrollService {
    * 此方法在 generateExpensesFromPayroll 完成後，將這些 payment_outs 連結到新建的 expenses
    * 
    * 邏輯：
-   * 1. 查詢所有 payroll_id = 該糧單 ID 且 expense_id IS NULL 的 payment_outs
+   * 1. 查詢所有 payroll_id = 該粧單 ID 且沒有任何 expense allocation 的 payment_outs
    * 2. 查詢剛建立的 expenses（source='PAYROLL', source_ref_id=payrollId, deleted_at=null）
-   * 3. 如果只有一個 expense：
-   *    - 更新這些 payment_outs 的 expense_id 為該 expense ID
-   *    - 為每個 payment_out 建立 payment_out_allocation 記錄
-   * 4. 如果有多個 expenses（按工程分拆）：
-   *    - 更新 payment_outs 的 expense_id 為金額最大的 expense ID
-   *    - 按比例建立 allocation 記錄分配到各 expense
+   * 3. 如果只有一個 expense：為每個 payment_out 建立 payment_out_allocation 記錄
+   * 4. 如果有多個 expenses（按工程分拆）：按比例建立 allocation 記錄分配到各 expense
    * 5. 呼叫 recalculateExpense 更新每個 expense 的 payment_status
    */
   private async relinkPaymentOutsToExpenses(payrollId: number): Promise<void> {
-    // 1. 查詢所有 payroll_id = 該糧單 ID 且 expense_id IS NULL 的 payment_outs
+    // 1. 查詢所有 payroll_id = 該粧單 ID 且沒有任何 expense allocation 的 payment_outs
     const orphanedPaymentOuts = await this.prisma.paymentOut.findMany({
       where: {
         payroll_id: payrollId,
-        expense_id: null,
+        allocations: {
+          none: { payment_out_allocation_expense_id: { not: null } },
+        },
       },
     });
 
@@ -4554,13 +4548,6 @@ export class PayrollService {
     if (newExpenses.length === 1) {
       // 只有一個 expense：直接連結所有 payment_outs
       const expenseId = newExpenses[0].id;
-      const expenseAmount = Number(newExpenses[0].total_amount) || 0;
-
-      // 更新 payment_outs 的 expense_id
-      await this.prisma.paymentOut.updateMany({
-        where: { id: { in: orphanedPaymentOuts.map((p) => p.id) } },
-        data: { expense_id: expenseId },
-      });
 
       // 為每個 payment_out 建立 allocation 記錄
       for (const paymentOut of orphanedPaymentOuts) {
@@ -4589,12 +4576,6 @@ export class PayrollService {
         (sum, p) => sum + (Number(p.amount) || 0),
         0,
       );
-
-      // 更新所有 payment_outs 的 expense_id 為主 expense
-      await this.prisma.paymentOut.updateMany({
-        where: { id: { in: orphanedPaymentOuts.map((p) => p.id) } },
-        data: { expense_id: primaryExpenseId },
-      });
 
       // 為每個 payment_out 按比例建立 allocation 記錄
       for (const paymentOut of orphanedPaymentOuts) {

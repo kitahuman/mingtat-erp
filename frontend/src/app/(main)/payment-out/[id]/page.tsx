@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { paymentOutApi, expensesApi, bankAccountsApi, fieldOptionsApi } from '@/lib/api';
+import { paymentOutApi, bankAccountsApi, fieldOptionsApi } from '@/lib/api';
 import AllocationsCard from './AllocationsCard';
 import { fmtDate } from '@/lib/dateUtils';
 import SearchableSelect from '@/app/(main)/work-logs/SearchableSelect';
@@ -127,7 +127,6 @@ interface PaymentOutRecord {
 interface PaymentOutForm {
   date: string;
   amount: number | '';
-  expense_id: number | '';
   payment_out_description: string;
   payment_out_status: string;
   bank_account_id: number | '';
@@ -171,7 +170,6 @@ export default function PaymentOutDetailPage() {
   const [form, setForm] = useState<PaymentOutForm>({
     date: '',
     amount: '',
-    expense_id: '',
     payment_out_description: '',
     payment_out_status: 'unpaid',
     bank_account_id: '',
@@ -183,7 +181,6 @@ export default function PaymentOutDetailPage() {
   });
 
   // Reference data
-  const [expenses, setExpenses] = useState<ExpenseMini[]>([]);
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
   const [paymentMethods, setPaymentMethods] = useState<string[]>([]);
 
@@ -205,10 +202,6 @@ export default function PaymentOutDetailPage() {
   }, [loadRecord]);
 
   useEffect(() => {
-    expensesApi
-      .list({ limit: 500 })
-      .then((r) => setExpenses((r.data?.data || []) as ExpenseMini[]))
-      .catch(() => {});
     bankAccountsApi
       .simple()
       .then((r) => setBankAccounts((r.data || []) as BankAccount[]))
@@ -220,10 +213,6 @@ export default function PaymentOutDetailPage() {
   }, []);
 
   useRefetchOnFocus(() => {
-    expensesApi
-      .list({ limit: 500 })
-      .then((r) => setExpenses((r.data?.data || []) as ExpenseMini[]))
-      .catch(() => {});
     bankAccountsApi
       .simple()
       .then((r) => setBankAccounts((r.data || []) as BankAccount[]))
@@ -233,15 +222,6 @@ export default function PaymentOutDetailPage() {
       .then((r) => setPaymentMethods((r.data || []).filter((o: any) => o.is_active !== false).map((o: any) => o.label)))
       .catch(() => setPaymentMethods([]));
   });
-
-  const expenseOptions: SelectOption[] = useMemo(
-    () =>
-      expenses.map((e) => ({
-        value: e.id,
-        label: `#${e.id} ${e.item || e.supplier_name || '未命名'} ${fmt$(e.total_amount)}`,
-      })),
-    [expenses],
-  );
 
   const bankAccountOptions: SelectOption[] = useMemo(
     () =>
@@ -256,7 +236,6 @@ export default function PaymentOutDetailPage() {
     return {
       date: r.date ? r.date.slice(0, 10) : '',
       amount: r.amount != null ? Number(r.amount) : '',
-      expense_id: r.expense_id ?? '',
       payment_out_description: r.payment_out_description || '',
       payment_out_status: r.payment_out_status || 'unpaid',
       bank_account_id: r.bank_account_id ?? '',
@@ -279,7 +258,6 @@ export default function PaymentOutDetailPage() {
           typeof form.amount === 'number'
             ? form.amount
             : parseFloat(String(form.amount)),
-        expense_id: form.expense_id ? Number(form.expense_id) : null,
         payment_out_description: form.payment_out_description || null,
         payment_out_status: form.payment_out_status || 'unpaid',
         bank_account_id: form.bank_account_id
@@ -509,25 +487,6 @@ export default function PaymentOutDetailPage() {
                 </select>
               </div>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  關聯支出
-                </label>
-                <SearchableSelect
-                  value={form.expense_id ? Number(form.expense_id) : null}
-                  onChange={(v) =>
-                    setForm({
-                      ...form,
-                      expense_id: v == null ? '' : Number(v),
-                    })
-                  }
-                  options={expenseOptions}
-                  placeholder="選擇支出"
-                  clearable
-                />
-              </div>
-            </div>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -554,15 +513,21 @@ export default function PaymentOutDetailPage() {
               ) : null}
             </Field>
             <Field label="關聯支出">
-              {record.expense ? (
-                <Link
-                  href={`/expenses/${record.expense.id}`}
-                  className="text-primary-600 hover:underline"
-                >
-                  #{record.expense.id}{' '}
-                  {record.expense.item || record.expense.supplier_name || '—'}
-                </Link>
-              ) : null}
+              {(() => {
+                const allocExpense = record.allocations?.find(
+                  (a) => a.expense,
+                )?.expense;
+                const linkedExpense = allocExpense || record.expense;
+                return linkedExpense ? (
+                  <Link
+                    href={`/expenses/${linkedExpense.id}`}
+                    className="text-primary-600 hover:underline"
+                  >
+                    #{linkedExpense.id}{' '}
+                    {linkedExpense.item || linkedExpense.supplier_name || '—'}
+                  </Link>
+                ) : null;
+              })()}
             </Field>
             <Field label="關聯糧單">
               {record.payroll ? (

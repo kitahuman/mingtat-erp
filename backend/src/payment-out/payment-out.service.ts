@@ -360,7 +360,6 @@ export class PaymentOutService {
       data: {
         date: new Date(dto.date),
         amount: dto.amount,
-        expense_id: dto.expense_id || null,
         payroll_id: dto.payroll_id || null,
         subcon_payroll_id: dto.subcon_payroll_id || null,
         company_id: companyId,
@@ -373,6 +372,18 @@ export class PaymentOutService {
       },
       include: this.listInclude,
     });
+
+    // If an expense was specified, link it through the allocation mechanism
+    // instead of the legacy expense_id direct foreign key.
+    if (dto.expense_id) {
+      await this.prisma.paymentOutAllocation.create({
+        data: {
+          payment_out_allocation_payment_out_id: created.id,
+          payment_out_allocation_expense_id: dto.expense_id,
+          payment_out_allocation_amount: dto.amount,
+        },
+      });
+    }
 
     // Recalculate linked source payment status
     await this.recalculateLinkedStatus(created);
@@ -390,11 +401,6 @@ export class PaymentOutService {
     if (dto.amount !== undefined) {
       if (dto.amount <= 0) throw new BadRequestException('金額必須大於 0');
       data.amount = dto.amount;
-    }
-    if (dto.expense_id !== undefined) {
-      data.expense = dto.expense_id
-        ? { connect: { id: dto.expense_id } }
-        : { disconnect: true };
     }
     if (dto.payroll_id !== undefined) {
       data.payroll = dto.payroll_id
@@ -512,7 +518,8 @@ export class PaymentOutService {
     payroll_id?: number | null;
     subcon_payroll_id?: number | null;
   }) {
-    // 1) legacy direct foreign-key targets
+    // 1) legacy direct foreign-key targets (payroll / subcon; legacy expense_id
+    //    is still recalculated for historical pre-migration records)
     if (record.expense_id) {
       await this.allocationService.recalculateExpense(record.expense_id);
     }

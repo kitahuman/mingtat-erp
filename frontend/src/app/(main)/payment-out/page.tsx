@@ -3,7 +3,6 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   paymentOutApi,
-  expensesApi,
   bankAccountsApi,
   fieldOptionsApi,
 } from '@/lib/api';
@@ -54,7 +53,6 @@ export default function PaymentOutPage() {
   const [matchModal, setMatchModal] = useState<{ id: number; amount: number; date: string } | null>(null);
 
   // Reference data
-  const [expenses, setExpenses] = useState<any[]>([]);
   const [bankAccounts, setBankAccounts] = useState<any[]>([]);
   const [paymentMethods, setPaymentMethods] = useState<string[]>([]);
 
@@ -62,7 +60,6 @@ export default function PaymentOutPage() {
   const defaultForm = {
     date: new Date().toISOString().slice(0, 10),
     amount: '',
-    expense_id: '',
     payment_out_description: '',
     payment_out_status: 'unpaid',
     bank_account_id: '',
@@ -103,10 +100,6 @@ export default function PaymentOutPage() {
   }, [fetchData]);
 
   useEffect(() => {
-    expensesApi
-      .list({ limit: 500 })
-      .then((r) => setExpenses(r.data?.data || []))
-      .catch(() => {});
     bankAccountsApi
       .simple()
       .then((r) => setBankAccounts(r.data || []))
@@ -118,10 +111,6 @@ export default function PaymentOutPage() {
   }, []);
 
   useRefetchOnFocus(() => {
-    expensesApi
-      .list({ limit: 500 })
-      .then((r) => setExpenses(r.data?.data || []))
-      .catch(() => {});
     bankAccountsApi
       .simple()
       .then((r) => setBankAccounts(r.data || []))
@@ -131,15 +120,6 @@ export default function PaymentOutPage() {
       .then((r) => setPaymentMethods((r.data || []).filter((o: any) => o.is_active !== false).map((o: any) => o.label)))
       .catch(() => setPaymentMethods([]));
   });
-
-  const expenseOptions = useMemo(
-    () =>
-      expenses.map((e) => ({
-        value: e.id,
-        label: `#${e.id} ${e.item || e.supplier_name || '未命名'} ${fmt$(e.total_amount)}`,
-      })),
-    [expenses],
-  );
 
   const bankAccountOptions = useMemo(
     () =>
@@ -157,7 +137,6 @@ export default function PaymentOutPage() {
       await paymentOutApi.create({
         ...form,
         amount: parseFloat(form.amount as string),
-        expense_id: form.expense_id ? Number(form.expense_id) : null,
         bank_account_id: form.bank_account_id
           ? Number(form.bank_account_id)
           : null,
@@ -176,10 +155,6 @@ export default function PaymentOutPage() {
     const payload: any = { ...updated };
     if (payload.amount !== undefined)
       payload.amount = parseFloat(payload.amount);
-    if (payload.expense_id !== undefined)
-      payload.expense_id = payload.expense_id
-        ? Number(payload.expense_id)
-        : null;
     if (payload.bank_account_id !== undefined)
       payload.bank_account_id = payload.bank_account_id
         ? Number(payload.bank_account_id)
@@ -209,13 +184,15 @@ export default function PaymentOutPage() {
       editType: 'text',
       minWidth: 160,
       render: (v: any, row: any) => {
+        const allocExpense = row.allocations?.find((a: any) => a.expense)?.expense;
+        const linkedExpense = allocExpense || row.expense;
         const text =
           v ||
-          (row.expense
-            ? `#${row.expense.id} ${row.expense.item || row.expense.supplier_name || '-'}`
+          (linkedExpense
+            ? `#${linkedExpense.id} ${linkedExpense.item || linkedExpense.supplier_name || '-'}`
             : null) ||
           (row.payroll
-            ? `糧單 #${row.payroll.id} ${row.payroll.employee?.name_zh || ''}`
+            ? `粧單 #${row.payroll.id} ${row.payroll.employee?.name_zh || ''}`
             : null);
         if (!text) return <span className="text-gray-400">-</span>;
         return (
@@ -271,13 +248,16 @@ export default function PaymentOutPage() {
             </button>
           );
         }
-        if (row.expense_id) {
+        const linkedExpenseId =
+          row.allocations?.find((a: any) => a.payment_out_allocation_expense_id)
+            ?.payment_out_allocation_expense_id || row.expense_id;
+        if (linkedExpenseId) {
           return (
             <button
               className="text-xs text-blue-600 hover:underline font-medium"
               onClick={(e) => {
                 e.stopPropagation();
-                router.push(`/expenses/${row.expense_id}`);
+                router.push(`/expenses/${linkedExpenseId}`);
               }}
             >
               支出
@@ -532,18 +512,6 @@ export default function PaymentOutPage() {
                 }
                 className="input-field"
                 placeholder="例如：2026年4月 張三的糧單"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                關聯支出
-              </label>
-              <SearchableSelect
-                value={form.expense_id ? Number(form.expense_id) : null}
-                onChange={(v: any) => setForm({ ...form, expense_id: v || '' })}
-                options={expenseOptions}
-                placeholder="選擇支出"
-                clearable
               />
             </div>
           </div>

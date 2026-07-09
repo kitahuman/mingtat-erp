@@ -547,7 +547,7 @@ export default function BankReconciliationPage() {
     } else {
       return {
         category: '支出',
-        name: r.expense?.item || r.payment_out_description || r.description || '未命名支出',
+        name: r.allocations?.[0]?.expense?.item || r.expense?.item || r.payment_out_description || r.description || '未命名支出',
         link: `/payment-out/${r.id}`,
         isMulti: false,
         records: [r],
@@ -1105,7 +1105,7 @@ export default function BankReconciliationPage() {
                               const parts = [srcLabels[r.source_type] || r.source_type || '', r.payer_partner?.name || r.payer_name || r.project?.client?.code || r.project?.client?.name || '', r.reference_no, r.remarks].filter(Boolean);
                               rName = parts.join(' ') || r.project?.project_name || '未命名項目';
                             } else {
-                              rName = r.expense?.item || r.payment_out_description || r.company?.name || '未命名支出';
+                              rName = r.allocations?.[0]?.expense?.item || r.expense?.item || r.payment_out_description || r.company?.name || '未命名支出';
                             }
                             const rLink = isPayIn ? `/payment-in/${r.id}` : `/payment-out/${r.id}`;
                             return (
