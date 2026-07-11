@@ -98,8 +98,15 @@ export default function CertificatesPage() {
       const photoUrl = uploadRes.data.url;
       await employeePortalApi.updateCertPhoto(certKey, photoUrl);
       await loadCertificates();
-    } catch {
-      setError(t('error'));
+    } catch (err: any) {
+      const errMsg: string = err?.response?.data?.message || err?.message || '';
+      const isNetworkErr =
+        errMsg.toLowerCase().includes('multipart') ||
+        errMsg.toLowerCase().includes('unexpected end') ||
+        errMsg.toLowerCase().includes('network') ||
+        err?.code === 'ECONNABORTED' ||
+        err?.code === 'ERR_NETWORK';
+      setError(isNetworkErr ? '相片上傳中斷，請檢查網絡連線後重新嘗試' : '相片上傳失敗，請重試');
     } finally {
       setUploadingKey(null);
     }

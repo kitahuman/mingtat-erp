@@ -806,7 +806,16 @@ export default function WorkReportPage() {
       if (res.data.url) {
         set('photo_urls', [...form.photo_urls, res.data.url]);
       }
-    } catch {}
+    } catch (err: any) {
+      const errMsg: string = err?.response?.data?.message || err?.message || '';
+      const isNetworkErr =
+        errMsg.toLowerCase().includes('multipart') ||
+        errMsg.toLowerCase().includes('unexpected end') ||
+        errMsg.toLowerCase().includes('network') ||
+        err?.code === 'ECONNABORTED' ||
+        err?.code === 'ERR_NETWORK';
+      alert(isNetworkErr ? '相片上傳中斷，請檢查網絡連線後重新嘗試' : '相片上傳失敗，請重試');
+    }
     setUploadingPhoto(false);
     e.target.value = '';
   };

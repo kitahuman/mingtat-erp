@@ -211,7 +211,14 @@ export default function ClockPage() {
       setIsMidShift(false);
       await loadTodayRecords();
     } catch (err: any) {
-      setError(err.response?.data?.message || t('error'));
+      const errMsg: string = err?.response?.data?.message || err?.message || '';
+      const isUploadError =
+        errMsg.toLowerCase().includes('multipart') ||
+        errMsg.toLowerCase().includes('unexpected end') ||
+        errMsg.toLowerCase().includes('network') ||
+        err?.code === 'ECONNABORTED' ||
+        err?.code === 'ERR_NETWORK';
+      setError(isUploadError ? '相片上傳失敗，請檢查網絡連線後重試' : t('error'));
     } finally {
       setLoading(false);
     }

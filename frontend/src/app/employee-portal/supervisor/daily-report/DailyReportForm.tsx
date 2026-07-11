@@ -324,7 +324,25 @@ export default function DailyReportForm({ reportId, copyFromId }: Props) {
         setAttachments(prev => [...prev, ...newAttachments]);
       }
     } catch (err: any) {
-      alert(err.response?.data?.message || '上傳失敗');
+      // 顯示友善中文錯誤，不直接暴露後端技術錯誤
+      const errMsg: string = err?.response?.data?.message || err?.message || '';
+      const isNetworkOrMultipart =
+        errMsg.toLowerCase().includes('multipart') ||
+        errMsg.toLowerCase().includes('unexpected end') ||
+        errMsg.toLowerCase().includes('network') ||
+        errMsg.toLowerCase().includes('econnreset') ||
+        errMsg.toLowerCase().includes('timeout') ||
+        err?.code === 'ECONNABORTED' ||
+        err?.code === 'ERR_NETWORK';
+      if (isNetworkOrMultipart) {
+        alert('檔案上傳中斷，請檢查網絡連線後重新嘗試');
+      } else if (errMsg.includes('File size') || errMsg.includes('超過')) {
+        alert('檔案大小超過限制（20MB），請選擇較小的檔案');
+      } else if (errMsg.includes('MIME') || errMsg.includes('not allowed') || errMsg.includes('不支援')) {
+        alert('不支援的檔案格式，請上傳圖片或 PDF 檔案');
+      } else {
+        alert('上傳失敗，請檢查網絡連線後重試');
+      }
     } finally {
       setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = '';

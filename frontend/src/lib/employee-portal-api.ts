@@ -168,12 +168,19 @@ export const employeePortalApi = {
     portalApi.get('/employee-portal/attendance/history', { params }),
 
   // Photo upload
-  uploadPhoto: (file: File) => {
+  // 上傳改走 /api/upload-proxy 繞過 Next.js rewrites 的 multipart 緩衝問題
+  uploadPhoto: async (file: File) => {
     const formData = new FormData();
     formData.append('file', file);
-    return portalApi.post('/employee-portal/upload-photo', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
+    const token = Cookies.get('ep_token');
+    const res = await fetch('/api/upload-proxy?path=/employee-portal/upload-photo', {
+      method: 'POST',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: formData,
     });
+    const data = await res.json();
+    if (!res.ok) throw Object.assign(new Error(data.message || '上傳失敗'), { response: { data, status: res.status } });
+    return { data };
   },
 
   // Work logs
@@ -235,12 +242,18 @@ export const employeePortalApi = {
     portalApi.post(`/employee-portal/daily-reports/${id}`, data),
   deleteDailyReport: (id: number) =>
     portalApi.post(`/employee-portal/daily-reports/${id}/delete`),
-  uploadDailyReportFile: (file: File) => {
+  uploadDailyReportFile: async (file: File) => {
     const formData = new FormData();
     formData.append('file', file);
-    return portalApi.post('/employee-portal/daily-reports/upload', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
+    const token = Cookies.get('ep_token');
+    const res = await fetch('/api/upload-proxy?path=/employee-portal/daily-reports/upload', {
+      method: 'POST',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: formData,
     });
+    const data = await res.json();
+    if (!res.ok) throw Object.assign(new Error(data.message || '上傳失敗'), { response: { data, status: res.status } });
+    return { data };
   },
   addDailyReportAttachments: (id: number, attachments: { file_name: string; file_url: string; file_type: string }[]) =>
     portalApi.post(`/employee-portal/daily-reports/${id}/attachments`, { attachments }),

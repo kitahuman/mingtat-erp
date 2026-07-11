@@ -85,7 +85,16 @@ export default function ExpensePage() {
     try {
       const res = await employeePortalApi.uploadPhoto(file);
       if (res.data.url) set('receipt_url', res.data.url);
-    } catch {}
+    } catch (err: any) {
+      const errMsg: string = err?.response?.data?.message || err?.message || '';
+      const isNetworkErr =
+        errMsg.toLowerCase().includes('multipart') ||
+        errMsg.toLowerCase().includes('unexpected end') ||
+        errMsg.toLowerCase().includes('network') ||
+        err?.code === 'ECONNABORTED' ||
+        err?.code === 'ERR_NETWORK';
+      alert(isNetworkErr ? '收据上傳中斷，請檢查網絡連線後重新嘗試' : '收据上傳失敗，請重試');
+    }
     setUploadingReceipt(false);
   };
 
