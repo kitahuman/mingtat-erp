@@ -86,6 +86,7 @@ const defaultForm = {
   project_id: '',
   quotation_id: '',
   invoice_title: '',
+  invoice_category: '',
   client_contract_no: '',
   retention_rate: 0,
   payment_terms: '',
@@ -183,6 +184,15 @@ const INVOICE_COLUMNS: InvoiceListColumn[] = [
     minWidth: 150,
     render: (_: any, inv: any) => getClientDisplayName(inv.client),
     filterRender: (_: any, inv: any) => getClientDisplayName(inv.client),
+  },
+  {
+    key: 'invoice_category',
+    label: '發票分類',
+    sortable: true,
+    className: `${INVOICE_CELL_PADDING} text-gray-700`,
+    minWidth: 110,
+    render: (v: any) => v || '-',
+    filterRender: (v: any) => v || '-',
   },
   {
     key: 'client_contract_no',
@@ -482,6 +492,7 @@ export default function InvoicesPage() {
   const [projects, setProjects] = useState<any[]>([]);
   const [quotations, setQuotations] = useState<any[]>([]);
   const [unitOptions, setUnitOptions] = useState<string[]>([]);
+  const [invoiceCategoryOptions, setInvoiceCategoryOptions] = useState<string[]>([]);
 
   // Create modal
   const [showCreate, setShowCreate] = useState(false);
@@ -683,6 +694,12 @@ export default function InvoicesPage() {
         setUnitOptions((res.data || []).map((o: any) => o.label || o.value)),
       )
       .catch(() => setUnitOptions([]));
+    fieldOptionsApi
+      .getByCategory('invoice_category')
+      .then((res) =>
+        setInvoiceCategoryOptions((res.data || []).map((o: any) => o.label || o.value)),
+      )
+      .catch(() => setInvoiceCategoryOptions([]));
   }, []);
 
   useRefetchOnFocus(() => {
@@ -938,6 +955,7 @@ export default function InvoicesPage() {
         project_id: form.project_id ? Number(form.project_id) : undefined,
         quotation_id: form.quotation_id ? Number(form.quotation_id) : undefined,
         invoice_title: form.invoice_title || undefined,
+        invoice_category: form.invoice_category || undefined,
         client_contract_no: form.client_contract_no || undefined,
         retention_rate: Number(form.retention_rate) || 0,
         payment_terms: form.payment_terms || undefined,
@@ -1671,7 +1689,7 @@ export default function InvoicesPage() {
               </div>
             </div>
 
-            {/* Row 2: Invoice Title, Client Contract No */}
+            {/* Row 2: Invoice Title, Invoice Category */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -1687,6 +1705,27 @@ export default function InvoicesPage() {
                   placeholder="例如：2026年4月工程費用"
                 />
               </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  發票分類
+                </label>
+                <select
+                  value={form.invoice_category}
+                  onChange={(e) =>
+                    setForm({ ...form, invoice_category: e.target.value })
+                  }
+                  className="input-field"
+                >
+                  <option value="">—</option>
+                  {invoiceCategoryOptions.map((opt) => (
+                    <option key={opt} value={opt}>{opt}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* Row 2b: Client Contract No */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   客戶合約

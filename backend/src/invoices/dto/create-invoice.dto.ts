@@ -61,6 +61,7 @@ export class CreateInvoiceDto {
   @IsOptional() @IsBoolean() invoice_show_company_stamp?: boolean;
   @IsOptional() @IsObject() pdf_font_sizes?: Record<string, unknown>;
   @IsOptional() @IsString() remarks?: string;
+  @IsOptional() @IsString() invoice_category?: string;
   @IsOptional()
   @IsArray()
   @ValidateNested({ each: true })
@@ -104,6 +105,7 @@ export class UpdateInvoiceDto {
   @IsOptional() @IsBoolean() invoice_show_company_stamp?: boolean;
   @IsOptional() @IsObject() pdf_font_sizes?: Record<string, unknown>;
   @IsOptional() @IsString() remarks?: string;
+  @IsOptional() @IsString() invoice_category?: string;
   @IsOptional()
   @IsArray()
   @ValidateNested({ each: true })

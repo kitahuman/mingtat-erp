@@ -385,6 +385,7 @@ export class InvoicesService {
       'invoice_no',
       'invoice_title',
       'client_contract_no',
+      'invoice_category',
     ];
     const dateFields = ['date', 'due_date'];
     const amountFields = ['total_amount', 'paid_amount', 'outstanding'];
@@ -567,6 +568,7 @@ export class InvoicesService {
       'id',
       'invoice_no',
       'invoice_title',
+      'invoice_category',
       'date',
       'due_date',
       'client_contract_no',
@@ -705,7 +707,7 @@ export class InvoicesService {
     query: InvoiceListQuery,
   ): Promise<string[]> {
     const where = this.buildBaseWhere(query, column);
-    const stringColumns = ['invoice_no', 'invoice_title', 'client_contract_no'];
+    const stringColumns = ['invoice_no', 'invoice_title', 'client_contract_no', 'invoice_category'];
     const dateColumns = ['date', 'due_date'];
     const amountColumns = ['total_amount', 'paid_amount', 'outstanding'];
 
@@ -971,6 +973,7 @@ export class InvoicesService {
       invoice_show_company_signature?: boolean;
       invoice_show_company_stamp?: boolean;
       remarks?: string;
+      invoice_category?: string;
       items?: {
         item_name?: string;
         description?: string;
@@ -1076,6 +1079,7 @@ export class InvoicesService {
         invoice_show_company_signature: dto.invoice_show_company_signature ?? (systemDefaults.print_invoice_show_company_signature === 'true' ? true : systemDefaults.print_invoice_show_company_signature === 'false' ? false : true),
         invoice_show_company_stamp: dto.invoice_show_company_stamp ?? (systemDefaults.print_invoice_show_company_stamp === 'true' ? true : systemDefaults.print_invoice_show_company_stamp === 'false' ? false : false),
         remarks: dto.remarks || null,
+        invoice_category: dto.invoice_category || null,
         invoice_revision_number: 0,
         invoice_is_active: true,
         items: {
@@ -1353,6 +1357,8 @@ export class InvoicesService {
       data.quotation_id = dto.quotation_id ? Number(dto.quotation_id) : null;
     if (dto.invoice_title !== undefined)
       data.invoice_title = dto.invoice_title || null;
+    if (dto.invoice_category !== undefined)
+      data.invoice_category = dto.invoice_category || null;
     if (dto.display_client_name !== undefined)
       data.display_client_name = dto.display_client_name || null;
     if (dto.client_contract_no !== undefined)

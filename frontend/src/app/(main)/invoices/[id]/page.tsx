@@ -110,6 +110,7 @@ export default function InvoiceDetailPage() {
 
   // Field options
   const [paymentMethodOptions, setPaymentMethodOptions] = useState<any[]>([]);
+  const [invoiceCategoryOptions, setInvoiceCategoryOptions] = useState<string[]>([]);
 
   // Payment modal
   const [showPayment, setShowPayment] = useState(false);
@@ -216,6 +217,12 @@ export default function InvoiceDetailPage() {
         setUnitOptions((res.data || []).map((o: any) => o.label || o.value)),
       )
       .catch(() => setUnitOptions([]));
+    fieldOptionsApi
+      .getByCategory('invoice_category')
+      .then((res) =>
+        setInvoiceCategoryOptions((res.data || []).map((o: any) => o.label || o.value)),
+      )
+      .catch(() => setInvoiceCategoryOptions([]));
   }, [invoiceId]);
 
   useEffect(() => {
@@ -383,6 +390,7 @@ export default function InvoiceDetailPage() {
         project_id: form.project_id ? Number(form.project_id) : null,
         quotation_id: form.quotation_id ? Number(form.quotation_id) : null,
         invoice_title: form.invoice_title || null,
+        invoice_category: form.invoice_category || null,
         client_contract_no: form.client_contract_no || null,
         retention_rate: Number(form.retention_rate) || 0,
         other_charges: form.other_charges || [],
@@ -874,6 +882,23 @@ export default function InvoiceDetailPage() {
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-500 mb-1">
+                發票分類
+              </label>
+              <select
+                value={form.invoice_category || ''}
+                onChange={(e) =>
+                  setForm({ ...form, invoice_category: e.target.value })
+                }
+                className="input-field"
+              >
+                <option value="">—</option>
+                {invoiceCategoryOptions.map((opt) => (
+                  <option key={opt} value={opt}>{opt}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1">
                 發票日期
               </label>
               <DateInput
@@ -1027,6 +1052,9 @@ export default function InvoiceDetailPage() {
             </Field>
             {invoice.invoice_title && (
               <Field label="發票名稱">{invoice.invoice_title}</Field>
+            )}
+            {invoice.invoice_category && (
+              <Field label="發票分類">{invoice.invoice_category}</Field>
             )}
             <Field label="發票日期">{fmtDate(invoice.date)}</Field>
             <Field label="到期日">{fmtDate(invoice.due_date)}</Field>

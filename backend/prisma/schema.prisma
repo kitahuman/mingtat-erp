@@ -2260,6 +2260,7 @@ model Invoice {
   invoice_show_company_signature Boolean @default(true)
   invoice_show_company_stamp   Boolean   @default(false)
   remarks                      String?   @db.Text
+  invoice_category             String?   @db.VarChar // 發票分類（從 field_options invoice_category 選擇）
   invoice_parent_id            Int?
   invoice_revision_number      Int       @default(0)
   invoice_is_active            Boolean   @default(true)
