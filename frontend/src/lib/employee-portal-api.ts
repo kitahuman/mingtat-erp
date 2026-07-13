@@ -168,12 +168,12 @@ export const employeePortalApi = {
     portalApi.get('/employee-portal/attendance/history', { params }),
 
   // Photo upload
-  // 上傳改走 /api/upload-proxy 繞過 Next.js rewrites 的 multipart 緩衝問題
+  // 直接走 /api/employee-portal/upload-photo，Nginx 會直接轉發到後端（繞過 Next.js）
   uploadPhoto: async (file: File) => {
     const formData = new FormData();
     formData.append('file', file);
     const token = Cookies.get('ep_token');
-    const res = await fetch('/api/upload-proxy?path=/employee-portal/upload-photo', {
+    const res = await fetch('/api/employee-portal/upload-photo', {
       method: 'POST',
       headers: token ? { Authorization: `Bearer ${token}` } : {},
       body: formData,
@@ -242,11 +242,12 @@ export const employeePortalApi = {
     portalApi.post(`/employee-portal/daily-reports/${id}`, data),
   deleteDailyReport: (id: number) =>
     portalApi.post(`/employee-portal/daily-reports/${id}/delete`),
+  // 直接走 /api/employee-portal/daily-reports/upload，Nginx 會直接轉發到後端（繞過 Next.js）
   uploadDailyReportFile: async (file: File) => {
     const formData = new FormData();
     formData.append('file', file);
     const token = Cookies.get('ep_token');
-    const res = await fetch('/api/upload-proxy?path=/employee-portal/daily-reports/upload', {
+    const res = await fetch('/api/employee-portal/daily-reports/upload', {
       method: 'POST',
       headers: token ? { Authorization: `Bearer ${token}` } : {},
       body: formData,
