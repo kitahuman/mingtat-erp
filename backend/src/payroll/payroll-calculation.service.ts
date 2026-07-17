@@ -287,8 +287,14 @@ export class PayrollCalculationService {
 
     if (salaryType === 'monthly' && monthlySalaryAmount > 0) {
       const remarksText = `月薪 $${baseSalary} × 12 / ${(new Date(dateFrom).getFullYear() % 4 === 0 && new Date(dateFrom).getFullYear() % 100 !== 0) || new Date(dateFrom).getFullYear() % 400 === 0 ? 366 : 365} = 日薪 $${monthlyDailyRate}`;
-      if (monthlySalaryAmount <= baseSalary) {
-        // 未超過月薪上限：顯示一個項目「基本薪金」= 日薪 × 計糧天數
+      // 應工作天數 = 當月天數 - 星期日天數 - 法定假日天數
+      const daysInMonth = Math.floor((new Date(dateTo).getTime() - new Date(dateFrom).getTime()) / (1000 * 60 * 60 * 24)) + 1;
+      const requiredWorkDays = daysInMonth - sundayCount - holidayDayCount;
+      // 判斷有沒有請假：實際工作天數 < 應工作天數
+      const hasLeave = workLogDayCount < requiredWorkDays;
+
+      if (hasLeave) {
+        // 有請假：基本薪金 = 計糧天數 × 日薪
         items.push({
           item_type: 'base_salary',
           item_name: '基本薪金',
@@ -299,15 +305,7 @@ export class PayrollCalculationService {
           sort_order: sortOrder++,
         });
       } else {
-        // 超過月薪上限：拆分為兩個項目
-        // 應工作天數 = 當月天數 - 星期日天數 - 法定假日天數
-        const daysInMonth = Math.floor((new Date(dateTo).getTime() - new Date(dateFrom).getTime()) / (1000 * 60 * 60 * 24)) + 1;
-        const requiredWorkDays = daysInMonth - sundayCount - holidayDayCount;
-        // 額外天數 = 實際工作天數 - 應工作天數
-        const extraWorkDays = Math.max(0, workLogDayCount - requiredWorkDays);
-        const extraAmount = Math.round(extraWorkDays * monthlyDailyRate * 100) / 100;
-        
-        // 項目一：「基本薪金」= 月薪（封頂）
+        // 沒請假：基本薪金 = 月薪（封頂）
         items.push({
           item_type: 'base_salary',
           item_name: '基本薪金',
@@ -317,15 +315,21 @@ export class PayrollCalculationService {
           remarks: remarksText,
           sort_order: sortOrder++,
         });
-        // 項目二：「額外工作津貼」= (實際工作天數 - 應工作天數) × 日薪
-        if (extraAmount > 0) {
+        // 覆蓋 baseAmount 為月薪（封頂）
+        baseAmount = baseSalary;
+        monthlySalaryAmount = baseSalary;
+        // 額外天數 = 實際工作天數 - 應工作天數
+        const extraWorkDays = workLogDayCount - requiredWorkDays;
+        if (extraWorkDays > 0) {
+          const extraAmount = Math.round(extraWorkDays * monthlyDailyRate * 100) / 100;
+          // 項目二：「額外工作津貼」= (實際工作天數 - 應工作天數) × 日薪
           items.push({
             item_type: 'allowance',
             item_name: '額外工作津貼',
             unit_price: monthlyDailyRate,
             quantity: extraWorkDays,
             amount: extraAmount,
-            remarks: `日薪 $${monthlyDailyRate} × ${extraWorkDays} 天（超出月薪上限 $${baseSalary} 部分）`,
+            remarks: `日薪 $${monthlyDailyRate} × ${extraWorkDays} 天（超出應工作天數 ${requiredWorkDays} 天）`,
             sort_order: sortOrder++,
           });
         }
