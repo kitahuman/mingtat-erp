@@ -206,11 +206,6 @@ export class PayrollCalculationService {
         if (!key || key === 'statutory_holiday' || key.startsWith('excluded_') || key === 'ot_0600_0700' || key === 'ot_0700_0800' || key === 'base_top_up_override') continue;
         const dateStr = toDateStr(day.date);
         if (excluded.has(key) || excluded.has(`${key}_${dateStr}`)) continue;
-        // 檢查同一天的 daily_allowances 是否有對應的 excluded_ 記錄
-        const hasExcludedRecord = (day.daily_allowances || []).some(
-          (other: any) => other.allowance_key === `excluded_${key}`,
-        );
-        if (hasExcludedRecord) continue;
         if (!dailyAllowancesByKey.has(key)) {
           dailyAllowancesByKey.set(key, { count: 0, amount: 0, name: da.allowance_name || key });
         }

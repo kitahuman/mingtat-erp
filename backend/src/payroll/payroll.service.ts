@@ -4089,6 +4089,7 @@ export class PayrollService {
     return this.prisma.payrollDailyAllowance.findMany({
       where: {
         payroll_id: payrollId,
+        NOT: { allowance_key: { startsWith: 'excluded_' } },
       },
       select: {
         allowance_key: true,
