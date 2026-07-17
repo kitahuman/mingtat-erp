@@ -4086,10 +4086,12 @@ export class PayrollService {
   }
 
   private async getCalculationDailyAllowances(payrollId: number) {
+    // 包含 excluded_ 記錄：
+    // - dailyAllowancesByKey 迴圈已在 line 206 跳過 excluded_ prefix
+    // - buildDailyFixedAllowanceDisplay 需要看到 excluded_ 記錄來正確跳過被排除的固定津貼
     return this.prisma.payrollDailyAllowance.findMany({
       where: {
         payroll_id: payrollId,
-        NOT: { allowance_key: { startsWith: 'excluded_' } },
       },
       select: {
         allowance_key: true,
