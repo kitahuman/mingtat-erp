@@ -1192,18 +1192,7 @@ export class PayrollService {
       dateTo,
     );
 
-     // Query excluded badge keys for this payroll
-    const excludedRecordsFinalize = await this.prisma.payrollDailyAllowance.findMany({
-      where: {
-        payroll_id: id,
-        allowance_key: { startsWith: 'excluded_' },
-      },
-      select: { allowance_key: true },
-    });
-    const excludedBadgeKeysFinalize = new Set<string>(
-      excludedRecordsFinalize.map(r => r.allowance_key.replace('excluded_', '')),
-    );
-    const calculationDailyAllowancesFinalize = await this.getCalculationDailyAllowances(id);
+     const calculationDailyAllowancesFinalize = await this.getCalculationDailyAllowances(id);
     const calc = await this.calcService.calculatePayroll(
       emp,
       salarySetting,
@@ -1213,7 +1202,7 @@ export class PayrollService {
       payroll.company_id ?? payroll.company_profile_id ?? null,
       undefined,
       holidayDatesForCalc,
-      excludedBadgeKeysFinalize,
+      new Set<string>(),
       calculationDailyAllowancesFinalize,
     );
     // Update payroll items; preserve manually excluded items by stable item signature.
@@ -2108,17 +2097,6 @@ export class PayrollService {
         ? storedMpfRelevantIncome
         : undefined;
 
-    // Query excluded badge keys for this payroll
-    const excludedRecordsReset = await this.prisma.payrollDailyAllowance.findMany({
-      where: {
-        payroll_id: id,
-        allowance_key: { startsWith: 'excluded_' },
-      },
-      select: { allowance_key: true },
-    });
-    const excludedBadgeKeysReset = new Set<string>(
-      excludedRecordsReset.map(r => r.allowance_key.replace('excluded_', '')),
-    );
     const calculationDailyAllowancesResetPre = await this.getCalculationDailyAllowances(id);
     const calc = await this.calcService.calculatePayroll(
       emp,
@@ -2129,7 +2107,7 @@ export class PayrollService {
       payroll.company_id ?? payroll.company_profile_id ?? null,
       existingMpfRelevantIncome,
       holidayDatesForCalc,
-      excludedBadgeKeysReset,
+      new Set<string>(),
       calculationDailyAllowancesResetPre,
       adjustmentTotal,
     );
@@ -2207,7 +2185,7 @@ export class PayrollService {
       payroll.company_id ?? payroll.company_profile_id ?? null,
       existingMpfRelevantIncome,
       holidayDatesForCalc,
-      excludedBadgeKeysReset,
+      new Set<string>(),
       calculationDailyAllowancesReset,
       adjustmentTotal,
     );
@@ -2462,18 +2440,6 @@ export class PayrollService {
       }));
     }
 
-    // Query excluded badge keys for this payroll
-    const excludedRecords = await this.prisma.payrollDailyAllowance.findMany({
-      where: {
-        payroll_id: id,
-        allowance_key: { startsWith: 'excluded_' },
-      },
-      select: { allowance_key: true },
-    });
-    const excludedBadgeKeys = new Set<string>(
-      excludedRecords.map(r => r.allowance_key.replace('excluded_', '')),
-    );
-
     await this.prisma.payrollDailyAllowance.deleteMany({
       where: { payroll_id: id, is_auto: true },
     });
@@ -2498,7 +2464,7 @@ export class PayrollService {
       companyId ?? cpId,
       existingMpfRelevantIncome,
       recalcHolidayDates,
-      excludedBadgeKeys,
+      new Set<string>(),
       calculationDailyAllowances,
       adjustmentTotal,
       manualDayQuantityMap,
