@@ -668,6 +668,8 @@ export const salaryConfigApi = {
 // Payroll (計糧)
 export const payrollApi = {
   list: (params?: any) => api.get('/payroll', { params }),
+  filterOptions: (column: string, params?: any) =>
+    api.get(`/payroll/filter-options/${column}`, { params }),
   get: (id: number) => api.get(`/payroll/${id}`),
   // 糧單休假統計（自動統計某員工所有糧單中的休假天數）
   leaveSummary: (employeeId: number) =>

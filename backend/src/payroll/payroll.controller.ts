@@ -35,6 +35,12 @@ export class PayrollController {
     return this.payrollService.getSummary(query);
   }
 
+  // 欄頂篩選選項（必須放在 @Get(':id') 之前，否則 'filter-options' 會被當作 :id 參數）
+  @Get('filter-options/:column')
+  getFilterOptions(@Param('column') column: string, @Query() query: any) {
+    return this.payrollService.getFilterOptions(column, query);
+  }
+
   @Get(':id/pdf')
   async exportPdf(
     @Param('id') id: string,

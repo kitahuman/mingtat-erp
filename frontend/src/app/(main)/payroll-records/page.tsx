@@ -1,7 +1,7 @@
 'use client';
 import { usePageState } from '@/hooks/usePageState';
 
-import { useState, useEffect, type MouseEvent } from 'react';
+import { useState, useEffect, useCallback, type MouseEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { payrollApi, companiesApi, employeesApi } from '@/lib/api';
 import DataTable from '@/components/DataTable';
@@ -162,6 +162,9 @@ export default function PayrollRecordsPage() {
   const [companies, setCompanies] = useState<CompanyOption[]>([]);
   const [employees, setEmployees] = useState<EmployeeOption[]>([]);
 
+  // Server-side column filters
+  const [columnFilters, setColumnFilters] = useState<Record<string, Set<string>>>({});
+
   // Selection state
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [selectAll, setSelectAll] = useState(false);
@@ -198,6 +201,14 @@ export default function PayrollRecordsPage() {
       if (statusFilter) params.status = statusFilter;
       if (employeeId) params.employee_id = employeeId;
       if (search) params.search = search;
+      // 欄頂篩選（server-side）
+      Object.entries(columnFilters).forEach(([key, values]) => {
+        if (values.size > 0) {
+          params[`filter_${key}`] = JSON.stringify(Array.from(values));
+        } else {
+          params[`filter_${key}`] = '__NO_MATCH__';
+        }
+      });
 
       const res = await payrollApi.list(params);
       setData(res.data.data);
@@ -231,7 +242,30 @@ export default function PayrollRecordsPage() {
     search,
     sortBy,
     sortOrder,
+    columnFilters,
   ]);
+
+  const handleColumnFilterChange = useCallback((filters: Record<string, Set<string>>) => {
+    setColumnFilters(filters);
+    setPage(1);
+  }, []);
+
+  const handleFetchFilterOptions = useCallback(async (columnKey: string): Promise<string[]> => {
+    const params: Record<string, string | number> = {};
+    if (period) params.period = period;
+    if (companyId) params.company_id = companyId;
+    if (statusFilter) params.status = statusFilter;
+    if (employeeId) params.employee_id = employeeId;
+    if (search) params.search = search;
+    // 加入現有 column filters（排除當前欄位，後端亦會再次排除作雙重保障）
+    Object.entries(columnFilters).forEach(([key, values]) => {
+      if (key !== columnKey && values.size > 0) {
+        params[`filter_${key}`] = JSON.stringify(Array.from(values));
+      }
+    });
+    const res = await payrollApi.filterOptions(columnKey, params);
+    return Array.isArray(res.data) ? res.data : [];
+  }, [period, companyId, statusFilter, employeeId, search, columnFilters]);
 
   const handleSelectAll = (checked: boolean) => {
     setSelectAll(checked);
@@ -676,6 +710,10 @@ export default function PayrollRecordsPage() {
         onColumnConfigReset={handleColumnConfigReset}
         onColumnConfigSavePersonal={handleColumnConfigSavePersonal}
         onColumnConfigSaveDefault={handleColumnConfigSaveDefault}
+        serverSideFilter
+        columnFilters={columnFilters}
+        onColumnFilterChange={handleColumnFilterChange}
+        onFetchFilterOptions={handleFetchFilterOptions}
       />
     </div>
   );

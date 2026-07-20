@@ -82,6 +82,8 @@ export interface PayrollQuery extends PaginationQuery {
   status?: string;
   sortBy?: string;
   sortOrder?: 'asc' | 'desc';
+  // 欄頂篩選 filter_xxx 參數（JSON 陣列字串或逗號分隔）
+  [key: string]: string | number | undefined;
 }
 
 export interface PayrollSummary {

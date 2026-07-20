@@ -16,6 +16,84 @@ import { FleetRateCardsService } from '../fleet-rate-cards/fleet-rate-cards.serv
 import { PettyCashService } from '../petty-cash/petty-cash.service';
 import { PaymentOutAllocationService } from '../payment-out/payment-out-allocation.service';
 import { PayrollQuery } from '../common/types';
+import { formatDateInHongKong } from '../common/date.helper';
+
+type PayrollColumnFilters = Record<string, string[]>;
+
+const PAYROLL_STATUS_LABEL_TO_VALUE: Record<string, string> = {
+  準備中: 'preparing',
+  草稿: 'draft',
+  已確認: 'confirmed',
+  已付款: 'paid',
+  部分付款: 'partially_paid',
+  preparing: 'preparing',
+  draft: 'draft',
+  confirmed: 'confirmed',
+  paid: 'paid',
+  partially_paid: 'partially_paid',
+};
+
+const PAYROLL_STATUS_VALUE_TO_LABEL: Record<string, string> = {
+  preparing: '準備中',
+  draft: '草稿',
+  confirmed: '已確認',
+  paid: '已付款',
+  partially_paid: '部分付款',
+};
+
+// 與前端 payroll-records/page.tsx 的 mpfPlanLabel 一致
+const MPF_PLAN_VALUE_TO_LABEL: Record<string, string> = {
+  industry: '東亞（行業計劃）',
+  exempt_age65: '過65歲, 不用供',
+  manulife: '宏利',
+  aia: 'AIA',
+};
+
+const MPF_PLAN_LABEL_TO_VALUE: Record<string, string> = {
+  '東亞（行業計劃）': 'industry',
+  '過65歲, 不用供': 'exempt_age65',
+  宏利: 'manulife',
+  AIA: 'aia',
+};
+
+// 與前端 payroll-records/page.tsx 的 salary_type 顯示一致（daily → 日薪，其餘 → 月薪）
+const SALARY_TYPE_LABEL_TO_VALUE: Record<string, string> = {
+  日薪: 'daily',
+  月薪: 'monthly',
+};
+
+/** 將 Date 以香港時區格式化為 DD/MM/YYYY（與前端 fmtDate 一致） */
+function formatDisplayDateHK(value: Date | string | null | undefined): string {
+  const hkDate = formatDateInHongKong(value);
+  if (!hkDate) return '-';
+  const [year, month, day] = hkDate.split('-');
+  return `${day}/${month}/${year}`;
+}
+
+/** 解析 DD/MM/YYYY 或 YYYY-MM-DD 為香港時區的 UTC 日期範圍 */
+function parseDisplayDateHK(dateStr: string): { start: Date; end: Date } | null {
+  let day: number;
+  let month: number;
+  let year: number;
+  const displayMatch = dateStr.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  const isoMatch = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (displayMatch) {
+    day = Number(displayMatch[1]);
+    month = Number(displayMatch[2]);
+    year = Number(displayMatch[3]);
+  } else if (isoMatch) {
+    year = Number(isoMatch[1]);
+    month = Number(isoMatch[2]);
+    day = Number(isoMatch[3]);
+  } else {
+    return null;
+  }
+  if (!day || !month || !year) return null;
+  // 香港時區 UTC+8：當地 00:00 = UTC 前一天 16:00
+  const start = new Date(Date.UTC(year, month - 1, day, -8, 0, 0, 0));
+  const end = new Date(Date.UTC(year, month - 1, day + 1, -8, 0, 0, 0));
+  return { start, end };
+}
 
 /** 將 Date 或字串轉換為 YYYY-MM-DD 格式 */
 function toDateStr(d: any): string {
@@ -45,12 +123,174 @@ export class PayrollService {
     private readonly paymentOutAllocationService: PaymentOutAllocationService,
   ) {}
 
-  // ── 列表 ──────────────────────────────────────────────────────
-  async findAll(query: PayrollQuery) {
-    const page = Number(query.page) || 1;
-    const limit = Number(query.limit) || 20;
-    const skip = (page - 1) * limit;
+  // ── 欄頂篩選（filter_ 參數）解析 ────────────────────────
+  private parseColumnFilters(query: PayrollQuery): PayrollColumnFilters {
+    const filters: PayrollColumnFilters = {};
+    for (const key of Object.keys(query)) {
+      const rawValue = (query as Record<string, unknown>)[key];
+      if (!key.startsWith('filter_') || rawValue === undefined || rawValue === '') continue;
+      const field = key.replace('filter_', '');
+      const raw = String(rawValue);
+      let values: string[];
+      try {
+        const parsed = JSON.parse(raw);
+        values = Array.isArray(parsed)
+          ? parsed.map((value) => String(value).trim()).filter(Boolean)
+          : raw.split(',').map((value) => value.trim()).filter(Boolean);
+      } catch {
+        values = raw.split(',').map((value) => value.trim()).filter(Boolean);
+      }
+      if (raw === '__NO_MATCH__') values = ['__NO_MATCH__'];
+      if (values.length > 0) filters[field] = values;
+    }
+    return filters;
+  }
 
+  private addPayrollFieldConditions(
+    target: Prisma.PayrollWhereInput[],
+    fieldConditions: Prisma.PayrollWhereInput[],
+  ) {
+    if (fieldConditions.length === 1) target.push(fieldConditions[0]);
+    if (fieldConditions.length > 1) target.push({ OR: fieldConditions });
+  }
+
+  private buildColumnFilterWhere(filters: PayrollColumnFilters): Prisma.PayrollWhereInput[] {
+    const conditions: Prisma.PayrollWhereInput[] = [];
+
+    for (const [field, values] of Object.entries(filters)) {
+      if (values.includes('__NO_MATCH__')) {
+        conditions.push({ id: -1 });
+        continue;
+      }
+
+      const hasBlank = values.includes('-');
+      const nonBlankValues = values.filter((value) => value !== '-');
+
+      if (field === 'employee') {
+        // 選項格式："姓名 (編號)"，例如 "蘇志雄 (E015)"
+        const fieldConditions: Prisma.PayrollWhereInput[] = [];
+        for (const value of nonBlankValues) {
+          const match = value.match(/^(.*?)\s*\(([^()]*)\)$/);
+          if (match) {
+            const name = match[1].trim();
+            const code = match[2].trim();
+            fieldConditions.push({
+              employee: {
+                is: {
+                  OR: [{ name_zh: name }, { name_en: name }],
+                  emp_code: code || null,
+                },
+              },
+            });
+          } else {
+            fieldConditions.push({
+              employee: { is: { OR: [{ name_zh: value }, { name_en: value }] } },
+            });
+          }
+        }
+        if (hasBlank) fieldConditions.push({ employee: { is: { name_zh: '' } } });
+        this.addPayrollFieldConditions(conditions, fieldConditions);
+      } else if (field === 'mpf_plan') {
+        const rawValues = nonBlankValues.map(
+          (value) => MPF_PLAN_LABEL_TO_VALUE[value] || value,
+        );
+        const fieldConditions: Prisma.PayrollWhereInput[] = [];
+        const knownValues = rawValues.filter((value) => value !== '未設定');
+        if (knownValues.length > 0) {
+          fieldConditions.push({ employee: { is: { mpf_plan: { in: knownValues } } } });
+        }
+        if (rawValues.includes('未設定') || hasBlank) {
+          fieldConditions.push({
+            employee: { is: { OR: [{ mpf_plan: null }, { mpf_plan: '' }] } },
+          });
+        }
+        this.addPayrollFieldConditions(conditions, fieldConditions);
+      } else if (field === 'company') {
+        const fieldConditions: Prisma.PayrollWhereInput[] = [];
+        if (nonBlankValues.length > 0) {
+          fieldConditions.push({
+            employee: {
+              is: {
+                company: {
+                  is: {
+                    OR: [
+                      { internal_prefix: { in: nonBlankValues } },
+                      { name: { in: nonBlankValues } },
+                    ],
+                  },
+                },
+              },
+            },
+          });
+        }
+        if (hasBlank) fieldConditions.push({ employee: { is: { company: null } } });
+        this.addPayrollFieldConditions(conditions, fieldConditions);
+      } else if (field === 'salary_type') {
+        // 前端顯示：daily → 日薪，其餘 → 月薪
+        const fieldConditions: Prisma.PayrollWhereInput[] = [];
+        if (values.includes('日薪')) fieldConditions.push({ salary_type: 'daily' });
+        if (values.includes('月薪')) fieldConditions.push({ salary_type: { not: 'daily' } });
+        this.addPayrollFieldConditions(conditions, fieldConditions);
+      } else if (field === 'status') {
+        const rawValues = [
+          ...new Set(values.map((value) => PAYROLL_STATUS_LABEL_TO_VALUE[value] || value)),
+        ];
+        conditions.push({ status: { in: rawValues } });
+      } else if (field === 'publisher') {
+        const hasAi = nonBlankValues.includes('AI');
+        const names = nonBlankValues.filter((value) => value !== 'AI');
+        const fieldConditions: Prisma.PayrollWhereInput[] = [];
+        if (hasAi) fieldConditions.push({ payroll_ai_generated: true });
+        if (names.length > 0) {
+          fieldConditions.push({
+            payroll_ai_generated: false,
+            created_by_user: {
+              is: { OR: [{ displayName: { in: names } }, { username: { in: names } }] },
+            },
+          });
+        }
+        if (hasBlank) {
+          fieldConditions.push({ payroll_ai_generated: false, created_by_user: null });
+        }
+        this.addPayrollFieldConditions(conditions, fieldConditions);
+      } else if (field === 'period') {
+        conditions.push({ period: { in: nonBlankValues } });
+      } else if (field === 'payment_date' || field === 'created_at') {
+        const dateRanges = nonBlankValues
+          .map((value) => parseDisplayDateHK(value))
+          .filter((range): range is { start: Date; end: Date } => range !== null);
+        const fieldConditions: Prisma.PayrollWhereInput[] = [];
+        if (dateRanges.length > 0) {
+          fieldConditions.push({
+            OR: dateRanges.map(
+              (range) =>
+                ({ [field]: { gte: range.start, lt: range.end } }) as Prisma.PayrollWhereInput,
+            ),
+          });
+        }
+        if (hasBlank && field === 'payment_date') {
+          fieldConditions.push({ payment_date: null });
+        }
+        this.addPayrollFieldConditions(conditions, fieldConditions);
+      } else if (field === 'cheque_number') {
+        const fieldConditions: Prisma.PayrollWhereInput[] = [];
+        if (nonBlankValues.length > 0) {
+          fieldConditions.push({ cheque_number: { in: nonBlankValues } });
+        }
+        if (hasBlank) {
+          fieldConditions.push({ OR: [{ cheque_number: null }, { cheque_number: '' }] });
+        }
+        this.addPayrollFieldConditions(conditions, fieldConditions);
+      }
+    }
+
+    return conditions;
+  }
+
+  private buildPayrollWhere(
+    query: PayrollQuery,
+    excludeFilterColumn?: string,
+  ): Prisma.PayrollWhereInput {
     const payrollWhere: Prisma.PayrollWhereInput = {};
     if (query.period) payrollWhere.period = String(query.period);
     if (query.company_profile_id)
@@ -70,6 +310,29 @@ export class PayrollService {
         ],
       };
     }
+
+    const columnFilters = this.parseColumnFilters(query);
+    if (excludeFilterColumn) delete columnFilters[excludeFilterColumn];
+    const filterConditions = this.buildColumnFilterWhere(columnFilters);
+    if (filterConditions.length > 0) {
+      payrollWhere.AND = [
+        ...(Array.isArray(payrollWhere.AND) ? payrollWhere.AND : []),
+        ...filterConditions,
+      ];
+    }
+
+    return payrollWhere;
+  }
+
+  // ── 列表 ──────────────────────────────────────────────
+  async findAll(query: PayrollQuery) {
+    const page = Number(query.page) || 1;
+    const limit = Number(query.limit) || 20;
+    const skip = (page - 1) * limit;
+
+    const payrollWhere = this.buildPayrollWhere(query);
+    const hasColumnFilters =
+      Object.keys(this.parseColumnFilters(query)).length > 0;
 
     const sortBy = query.sortBy || 'id';
     const sortOrder =
@@ -141,7 +404,9 @@ export class PayrollService {
 
     const normalizedSearch = String(query.search || '').trim().toLowerCase();
     const requestedEmployeeId = query.employee_id ? Number(query.employee_id) : null;
-    const includeAiDrafts = !query.status || query.status === 'draft';
+    // 有欄頂篩選時不顯示 AI 草稿列（AI session 非真實糧單，無法套用欄位篩選）
+    const includeAiDrafts =
+      (!query.status || query.status === 'draft') && !hasColumnFilters;
 
     const payrollRows = payrolls.map((payroll: any) => ({
       ...payroll,
@@ -217,6 +482,139 @@ export class PayrollService {
       sum_adjustment_total: Number(aggregate._sum.adjustment_total) || 0,
       sum_net_amount: Number(aggregate._sum.net_amount) || 0,
     };
+  }
+
+  // ── 欄頂篩選選項（server-side）──────────────────────────
+  // 返回的選項字串必須與前端 filterRender 的輸出格式一致，
+  // 這樣用戶選擇的值才能在 buildColumnFilterWhere 中正確匹配。
+  // 支援 excludeColumnFilter 聯動：取選項時排除該欄位自身的篩選，保留其他篩選條件。
+  async getFilterOptions(column: string, query: PayrollQuery): Promise<string[]> {
+    const where = this.buildPayrollWhere(query, column);
+
+    if (column === 'employee') {
+      const records = await this.prisma.payroll.findMany({
+        where,
+        select: {
+          employee: { select: { name_zh: true, name_en: true, emp_code: true } },
+        },
+        distinct: ['employee_id'],
+      });
+      const values = records.map((record) => {
+        const name = record.employee?.name_zh || record.employee?.name_en;
+        if (!name) return '-';
+        return `${name} (${record.employee?.emp_code || ''})`.replace(' ()', '');
+      });
+      return [...new Set(values)].sort((a, b) => a.localeCompare(b, 'zh-Hant'));
+    }
+
+    if (column === 'mpf_plan') {
+      const records = await this.prisma.payroll.findMany({
+        where,
+        select: { employee: { select: { mpf_plan: true } } },
+        distinct: ['employee_id'],
+      });
+      const values = records.map((record) => {
+        const plan = record.employee?.mpf_plan;
+        if (!plan) return '未設定';
+        return MPF_PLAN_VALUE_TO_LABEL[plan] || plan;
+      });
+      return [...new Set(values)].sort((a, b) => a.localeCompare(b, 'zh-Hant'));
+    }
+
+    if (column === 'company') {
+      const records = await this.prisma.payroll.findMany({
+        where,
+        select: {
+          employee: {
+            select: { company: { select: { internal_prefix: true, name: true } } },
+          },
+        },
+        distinct: ['employee_id'],
+      });
+      const values = records.map(
+        (record) =>
+          record.employee?.company?.internal_prefix ||
+          record.employee?.company?.name ||
+          '-',
+      );
+      return [...new Set(values)].sort((a, b) => a.localeCompare(b, 'zh-Hant'));
+    }
+
+    if (column === 'salary_type') {
+      const records = await this.prisma.payroll.findMany({
+        where,
+        select: { salary_type: true },
+        distinct: ['salary_type'],
+      });
+      const values = records.map((record) =>
+        record.salary_type === 'daily' ? '日薪' : '月薪',
+      );
+      return [...new Set(values)].sort((a, b) => a.localeCompare(b, 'zh-Hant'));
+    }
+
+    if (column === 'status') {
+      const records = await this.prisma.payroll.findMany({
+        where,
+        select: { status: true },
+        distinct: ['status'],
+        orderBy: { status: 'asc' },
+      });
+      const values = records.map(
+        (record) => PAYROLL_STATUS_VALUE_TO_LABEL[record.status] || record.status || '-',
+      );
+      return [...new Set(values)].sort((a, b) => a.localeCompare(b, 'zh-Hant'));
+    }
+
+    if (column === 'publisher') {
+      const records = await this.prisma.payroll.findMany({
+        where,
+        select: {
+          payroll_ai_generated: true,
+          created_by_user: { select: { displayName: true, username: true } },
+        },
+        distinct: ['payroll_created_by', 'payroll_ai_generated'],
+      });
+      const values = records.map((record) =>
+        record.payroll_ai_generated
+          ? 'AI'
+          : this.formatUserDisplayName(record.created_by_user),
+      );
+      return [...new Set(values)].sort((a, b) => a.localeCompare(b, 'zh-Hant'));
+    }
+
+    if (column === 'period') {
+      const records = await this.prisma.payroll.findMany({
+        where,
+        select: { period: true },
+        distinct: ['period'],
+        orderBy: { period: 'desc' },
+      });
+      const values = records.map((record) => record.period || '-');
+      return [...new Set(values)];
+    }
+
+    if (column === 'payment_date' || column === 'created_at') {
+      const records = await this.prisma.payroll.findMany({
+        where,
+        select: { [column]: true } as any,
+        orderBy: { [column]: 'desc' } as any,
+      });
+      const values = records.map((record: any) => formatDisplayDateHK(record[column]));
+      return [...new Set(values)];
+    }
+
+    if (column === 'cheque_number') {
+      const records = await this.prisma.payroll.findMany({
+        where,
+        select: { cheque_number: true },
+        distinct: ['cheque_number'],
+        orderBy: { cheque_number: 'asc' },
+      });
+      const values = records.map((record) => record.cheque_number || '-');
+      return [...new Set(values)].sort((a, b) => a.localeCompare(b, 'zh-Hant'));
+    }
+
+    return [];
   }
 
   private getAiSessionEmployeeIds(value: Prisma.JsonValue): number[] {
