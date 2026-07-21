@@ -1591,6 +1591,14 @@ export class PayrollService {
     );
 
      const calculationDailyAllowancesFinalize = await this.getCalculationDailyAllowances(id);
+    // 從 DB excluded_ 記錄建立 excludedBadgeKeys
+    const excludedRecordsGen = await this.getExcludedDailyAllowanceRecords(id);
+    const excludedBadgeKeysGen = new Set<string>(
+      excludedRecordsGen.map((r) => {
+        const originalKey = r.allowance_key.replace(/^excluded_/, '');
+        return r.date ? `${originalKey}_${toDateStr(r.date)}` : originalKey;
+      }),
+    );
     const calc = await this.calcService.calculatePayroll(
       emp,
       salarySetting,
@@ -1600,7 +1608,7 @@ export class PayrollService {
       payroll.company_id ?? payroll.company_profile_id ?? null,
       undefined,
       holidayDatesForCalc,
-      new Set<string>(),
+      excludedBadgeKeysGen,
       calculationDailyAllowancesFinalize,
     );
     // Update payroll items; preserve manually excluded items by stable item signature.
@@ -1896,6 +1904,13 @@ export class PayrollService {
       date_to,
     );
     const calculationDailyAllowancesGenerate = await this.getCalculationDailyAllowances(saved.id);
+    const excludedRecordsGenerate = await this.getExcludedDailyAllowanceRecords(saved.id);
+    const excludedBadgeKeysGenerate = new Set<string>(
+      excludedRecordsGenerate.map((r) => {
+        const originalKey = r.allowance_key.replace(/^excluded_/, '');
+        return r.date ? `${originalKey}_${toDateStr(r.date)}` : originalKey;
+      }),
+    );
     const finalCalc = await this.calcService.calculatePayroll(
       emp,
       salarySetting,
@@ -1905,7 +1920,7 @@ export class PayrollService {
       actualCompanyId ?? actualCpId,
       undefined,
       holidayDatesForGenerate,
-      new Set<string>(),
+      excludedBadgeKeysGenerate,
       calculationDailyAllowancesGenerate,
     );
 
@@ -2496,6 +2511,13 @@ export class PayrollService {
         : undefined;
 
     const calculationDailyAllowancesResetPre = await this.getCalculationDailyAllowances(id);
+    const excludedRecordsResetPre = await this.getExcludedDailyAllowanceRecords(id);
+    const excludedBadgeKeysResetPre = new Set<string>(
+      excludedRecordsResetPre.map((r) => {
+        const originalKey = r.allowance_key.replace(/^excluded_/, '');
+        return r.date ? `${originalKey}_${toDateStr(r.date)}` : originalKey;
+      }),
+    );
     const calc = await this.calcService.calculatePayroll(
       emp,
       salarySetting,
@@ -2505,7 +2527,7 @@ export class PayrollService {
       payroll.company_id ?? payroll.company_profile_id ?? null,
       existingMpfRelevantIncome,
       holidayDatesForCalc,
-      new Set<string>(),
+      excludedBadgeKeysResetPre,
       calculationDailyAllowancesResetPre,
       adjustmentTotal,
     );
@@ -2574,6 +2596,13 @@ export class PayrollService {
       dateTo,
     );
     const calculationDailyAllowancesReset = await this.getCalculationDailyAllowances(id);
+    const excludedRecordsReset = await this.getExcludedDailyAllowanceRecords(id);
+    const excludedBadgeKeysReset = new Set<string>(
+      excludedRecordsReset.map((r) => {
+        const originalKey = r.allowance_key.replace(/^excluded_/, '');
+        return r.date ? `${originalKey}_${toDateStr(r.date)}` : originalKey;
+      }),
+    );
     const finalResetCalc = await this.calcService.calculatePayroll(
       emp,
       salarySetting,
@@ -2583,7 +2612,7 @@ export class PayrollService {
       payroll.company_id ?? payroll.company_profile_id ?? null,
       existingMpfRelevantIncome,
       holidayDatesForCalc,
-      new Set<string>(),
+      excludedBadgeKeysReset,
       calculationDailyAllowancesReset,
       adjustmentTotal,
     );
@@ -2850,6 +2879,15 @@ export class PayrollService {
     );
     const calculationDailyAllowances = await this.getCalculationDailyAllowances(id);
 
+    // 從 DB excluded_ 記錄建立 excludedBadgeKeys（用於法定假日等排除判斷）
+    const excludedRecords = await this.getExcludedDailyAllowanceRecords(id);
+    const excludedBadgeKeys = new Set<string>(
+      excludedRecords.map((r) => {
+        const originalKey = r.allowance_key.replace(/^excluded_/, '');
+        return r.date ? `${originalKey}_${toDateStr(r.date)}` : originalKey;
+      }),
+    );
+
     // 載入手動覆蓋天數 map（recalculate 時保護 is_manual_day_quantity = true 的天）
     const manualDayQuantityMap = await this.loadManualDayQuantityMap(id);
 
@@ -2862,7 +2900,7 @@ export class PayrollService {
       companyId ?? cpId,
       existingMpfRelevantIncome,
       recalcHolidayDates,
-      new Set<string>(),
+      excludedBadgeKeys,
       calculationDailyAllowances,
       adjustmentTotal,
       manualDayQuantityMap,
