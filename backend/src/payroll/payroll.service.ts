@@ -1596,6 +1596,8 @@ export class PayrollService {
     const excludedBadgeKeysGen = new Set<string>(
       excludedRecordsGen.map((r) => {
         const originalKey = r.allowance_key.replace(/^excluded_/, '');
+        const endsWithDate = /\d{4}-\d{2}-\d{2}$/.test(originalKey);
+        if (endsWithDate) return originalKey;
         return r.date ? `${originalKey}_${toDateStr(r.date)}` : originalKey;
       }),
     );
@@ -1908,6 +1910,8 @@ export class PayrollService {
     const excludedBadgeKeysGenerate = new Set<string>(
       excludedRecordsGenerate.map((r) => {
         const originalKey = r.allowance_key.replace(/^excluded_/, '');
+        const endsWithDate = /\d{4}-\d{2}-\d{2}$/.test(originalKey);
+        if (endsWithDate) return originalKey;
         return r.date ? `${originalKey}_${toDateStr(r.date)}` : originalKey;
       }),
     );
@@ -2515,6 +2519,8 @@ export class PayrollService {
     const excludedBadgeKeysResetPre = new Set<string>(
       excludedRecordsResetPre.map((r) => {
         const originalKey = r.allowance_key.replace(/^excluded_/, '');
+        const endsWithDate = /\d{4}-\d{2}-\d{2}$/.test(originalKey);
+        if (endsWithDate) return originalKey;
         return r.date ? `${originalKey}_${toDateStr(r.date)}` : originalKey;
       }),
     );
@@ -2600,6 +2606,8 @@ export class PayrollService {
     const excludedBadgeKeysReset = new Set<string>(
       excludedRecordsReset.map((r) => {
         const originalKey = r.allowance_key.replace(/^excluded_/, '');
+        const endsWithDate = /\d{4}-\d{2}-\d{2}$/.test(originalKey);
+        if (endsWithDate) return originalKey;
         return r.date ? `${originalKey}_${toDateStr(r.date)}` : originalKey;
       }),
     );
@@ -2884,6 +2892,8 @@ export class PayrollService {
     const excludedBadgeKeys = new Set<string>(
       excludedRecords.map((r) => {
         const originalKey = r.allowance_key.replace(/^excluded_/, '');
+        const endsWithDate = /\d{4}-\d{2}-\d{2}$/.test(originalKey);
+        if (endsWithDate) return originalKey;
         return r.date ? `${originalKey}_${toDateStr(r.date)}` : originalKey;
       }),
     );
