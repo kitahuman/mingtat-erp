@@ -1424,7 +1424,7 @@ export default function PayrollDetailPage() {
               <button onClick={handleDelete} className="text-sm text-red-500 hover:underline ml-2">刪除</button>
             </>
           )}
-	          {payroll.status === 'confirmed' && (
+	          {(payroll.status === 'confirmed' || payroll.status === 'partially_paid') && (
 	            <>
 	              <button onClick={handleUnconfirm} className="btn-secondary text-sm">撤銷確認</button>
 	            </>

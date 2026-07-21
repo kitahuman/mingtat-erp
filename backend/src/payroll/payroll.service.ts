@@ -2070,8 +2070,8 @@ export class PayrollService {
   async unconfirm(id: number) {
     const payroll = await this.prisma.payroll.findUnique({ where: { id } });
     if (!payroll) throw new NotFoundException('Payroll not found');
-    if (payroll.status !== 'confirmed') {
-      throw new BadRequestException('只能撤銷已確認狀態的糧單');
+    if (payroll.status !== 'confirmed' && payroll.status !== 'partially_paid') {
+      throw new BadRequestException('只能撤銷已確認或部分付款狀態的糧單');
     }
 
     // Delete auto-generated expenses
@@ -4441,6 +4441,9 @@ export class PayrollService {
       await this.paymentOutAllocationService.recalculateExpense(expense.id);
     }
 
+    // 6. Recalculate payroll status based on total payments
+    await this.recalculatePayrollPaymentStatus(payrollId);
+
     return saved;
   }
 
@@ -4492,7 +4495,50 @@ export class PayrollService {
       await this.paymentOutAllocationService.recalculateExpense(expenseId);
     }
 
+    // Recalculate payroll status based on remaining payments
+    await this.recalculatePayrollPaymentStatus(payrollId);
+
     return { success: true };
+  }
+
+  // ── 根據付款記錄重算糧單狀態 ──────────────────────────────
+  // 剩餘付款總額 = 0        → confirmed
+  // 0 < 剩餘付款 < 淨薪金   → partially_paid
+  // 剩餘付款 >= 淨薪金      → paid
+  private async recalculatePayrollPaymentStatus(payrollId: number): Promise<void> {
+    const payroll = await this.prisma.payroll.findUnique({
+      where: { id: payrollId },
+      select: { status: true, net_amount: true },
+    });
+    if (!payroll) return;
+    // 只在已確認之後的狀態才重算（draft / preparing 不動）
+    if (!['confirmed', 'partially_paid', 'paid'].includes(payroll.status)) return;
+
+    const payments = await this.prisma.payrollPayment.findMany({
+      where: { payroll_payment_payroll_id: payrollId },
+      select: { payroll_payment_amount: true },
+    });
+    const paidTotal = payments.reduce(
+      (sum, p) => sum + Number(p.payroll_payment_amount),
+      0,
+    );
+    const netAmount = Number(payroll.net_amount) || 0;
+
+    let newStatus: string;
+    if (paidTotal <= 0) {
+      newStatus = 'confirmed';
+    } else if (paidTotal + 0.0001 < netAmount) {
+      newStatus = 'partially_paid';
+    } else {
+      newStatus = 'paid';
+    }
+
+    if (newStatus !== payroll.status) {
+      await this.prisma.payroll.update({
+        where: { id: payrollId },
+        data: { status: newStatus },
+      });
+    }
   }
 
 
