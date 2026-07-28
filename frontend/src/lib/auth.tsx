@@ -181,6 +181,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Match path against allowed pages
     // e.g. /employees/123 should match page key 'employees'
     const cleanPath = path.replace(/^\//, '').split('/')[0];
+    // Path aliases: sub-features that share parent permission
+    const PATH_ALIASES: Record<string, string> = {
+      'invoice-statements': 'invoices',
+    };
+    const pageKey = PATH_ALIASES[cleanPath] || cleanPath;
     // Handle settings sub-pages: /settings/users -> settings-users
     if (path.startsWith('/settings/')) {
       const settingsPage = 'settings-' + path.split('/')[2];
@@ -191,7 +196,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const subPage = 'verification-' + path.split('/')[2];
       return user.allowedPages?.includes(subPage) ?? false;
     }
-    return user.allowedPages?.includes(cleanPath) ?? false;
+    return user.allowedPages?.includes(pageKey) ?? false;
   };
 
   /**
