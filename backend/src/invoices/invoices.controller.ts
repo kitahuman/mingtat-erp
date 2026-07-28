@@ -31,6 +31,7 @@ import {
   SetActiveInvoiceRevisionDto,
   CreateFromQuotationDto,
   PreviewNumberDto,
+  BatchUpdateInvoicesDto,
 } from './dto/create-invoice.dto';
 
 type AuthenticatedInvoiceRequest = ExpressRequest & {
@@ -151,6 +152,12 @@ export class InvoicesController {
   @Post('batch-move-to-statement')
   batchMoveToStatement(@Body() body: InvoiceBatchOperationBody) {
     return this.service.batchMoveToStatement(body.invoice_ids || []);
+  }
+
+  // 必須放在 :id 路由之前，否則會被 :id 攔截
+  @Patch('batch-update')
+  batchUpdate(@Body() dto: BatchUpdateInvoicesDto) {
+    return this.service.batchUpdate(dto);
   }
 
   @Get('filter-options/:column')

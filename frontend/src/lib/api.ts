@@ -1480,6 +1480,7 @@ export const invoicesApi = {
     api.post('/invoices/batch-void', { invoice_ids: invoiceIds }),
   batchMoveToStatement: (invoiceIds: number[]) =>
     api.post('/invoices/batch-move-to-statement', { invoice_ids: invoiceIds }),
+  batchUpdate: (data: any) => api.patch('/invoices/batch-update', data),
   recordPayment: (id: number, data: any) =>
     api.post(`/invoices/${id}/record-payment`, data),
   deletePayment: (id: number, paymentId: number) =>

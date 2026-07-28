@@ -18,6 +18,7 @@ import {
   UpdateInvoiceDto,
   InvoiceItemInputDto,
   InvoiceOtherChargeDto,
+  BatchUpdateInvoicesDto,
 } from './dto/create-invoice.dto';
 
 type InvoiceRateContext = {
@@ -640,6 +641,107 @@ export class InvoicesService {
     });
 
     return { success_count: result.count };
+  }
+
+  async batchUpdate(dto: BatchUpdateInvoicesDto) {
+    const ids = (Array.isArray(dto?.invoice_ids) ? dto.invoice_ids : [])
+      .map((id) => Number(id))
+      .filter((id) => Number.isInteger(id) && id > 0);
+
+    if (ids.length === 0) {
+      throw new BadRequestException('請選擇要修改的發票');
+    }
+
+    const data: Prisma.InvoiceUncheckedUpdateManyInput = {};
+
+    if (dto.invoice_category !== undefined) {
+      data.invoice_category = dto.invoice_category || null;
+    }
+    if (dto.status !== undefined) {
+      if (!dto.status) throw new BadRequestException('狀態不能為空');
+      data.status = dto.status;
+    }
+    if (dto.client_id !== undefined) {
+      data.client_id =
+        dto.client_id === null || dto.client_id === ''
+          ? null
+          : Number(dto.client_id);
+    }
+    if (dto.project_id !== undefined) {
+      data.project_id =
+        dto.project_id === null || dto.project_id === ''
+          ? null
+          : Number(dto.project_id);
+    }
+    if (dto.company_id !== undefined) {
+      const companyId = Number(dto.company_id);
+      if (!companyId) throw new BadRequestException('請選擇公司');
+      data.company_id = companyId;
+    }
+    if (dto.quotation_id !== undefined) {
+      data.quotation_id =
+        dto.quotation_id === null || dto.quotation_id === ''
+          ? null
+          : Number(dto.quotation_id);
+    }
+    if (dto.payment_terms !== undefined) {
+      data.payment_terms = dto.payment_terms || null;
+    }
+    if (dto.client_contract_no !== undefined) {
+      data.client_contract_no = dto.client_contract_no || null;
+    }
+    if (dto.date !== undefined) {
+      const parsed = new Date(dto.date);
+      if (!dto.date || Number.isNaN(parsed.getTime())) {
+        throw new BadRequestException('日期格式無效');
+      }
+      data.date = parsed;
+    }
+
+    const hasTitleReplace =
+      dto.title_find !== undefined &&
+      dto.title_find !== null &&
+      dto.title_find !== '';
+
+    if (Object.keys(data).length === 0 && !hasTitleReplace) {
+      throw new BadRequestException('未提供任何需修改的欄位');
+    }
+
+    let updatedCount = 0;
+
+    if (Object.keys(data).length > 0) {
+      const result = await this.prisma.invoice.updateMany({
+        where: { id: { in: ids }, deleted_at: null },
+        data,
+      });
+      updatedCount = result.count;
+    }
+
+    // 發票名稱搜尋並替換
+    if (hasTitleReplace) {
+      const findText = String(dto.title_find);
+      const replaceText = dto.title_replace === undefined || dto.title_replace === null
+        ? ''
+        : String(dto.title_replace);
+      const invoices = await this.prisma.invoice.findMany({
+        where: { id: { in: ids }, deleted_at: null },
+        select: { id: true, invoice_title: true },
+      });
+      let titleUpdated = 0;
+      for (const invoice of invoices) {
+        const currentTitle = invoice.invoice_title || '';
+        if (!currentTitle.includes(findText)) continue;
+        const newTitle = currentTitle.split(findText).join(replaceText);
+        await this.prisma.invoice.update({
+          where: { id: invoice.id },
+          data: { invoice_title: newTitle || null },
+        });
+        titleUpdated += 1;
+      }
+      updatedCount = Math.max(updatedCount, titleUpdated);
+    }
+
+    return { success_count: updatedCount, ids };
   }
 
   async batchMoveToStatement(invoiceIds: number[]) {

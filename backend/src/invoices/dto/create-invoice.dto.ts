@@ -217,6 +217,21 @@ export class UpdateInvoiceItemsDto {
   items: UpdateInvoiceItemDto[];
 }
 
+export class BatchUpdateInvoicesDto {
+  @IsArray() invoice_ids: number[];
+  @IsOptional() @IsString() invoice_category?: string;
+  @IsOptional() @IsString() status?: string;
+  @IsOptional() client_id?: number | string | null;
+  @IsOptional() project_id?: number | string | null;
+  @IsOptional() company_id?: number | string | null;
+  @IsOptional() quotation_id?: number | string | null;
+  @IsOptional() @IsString() payment_terms?: string;
+  @IsOptional() @IsString() client_contract_no?: string;
+  @IsOptional() @IsString() date?: string;
+  @IsOptional() @IsString() title_find?: string;
+  @IsOptional() @IsString() title_replace?: string;
+}
+
 export class PreviewNumberDto {
   @Type(() => Number) @IsNumber() company_id: number;
   // client_id 可選；date 必填

@@ -505,6 +505,37 @@ export default function InvoicesPage() {
   const selectAllInvoicesRef = useRef<HTMLInputElement>(null);
   const [selectedInvoiceRows, setSelectedInvoiceRows] = useState<Record<number, any>>({});
   const [showStatementCreate, setShowStatementCreate] = useState(false);
+
+  // Batch edit modal state
+  const defaultBatchEditFields = {
+    invoice_category: false,
+    status: false,
+    client_id: false,
+    project_id: false,
+    company_id: false,
+    quotation_id: false,
+    payment_terms: false,
+    client_contract_no: false,
+    date: false,
+    invoice_title: false,
+  };
+  const defaultBatchEditForm = {
+    invoice_category: '',
+    status: '',
+    client_id: '',
+    project_id: '',
+    company_id: '',
+    quotation_id: '',
+    payment_terms: '',
+    client_contract_no: '',
+    date: '',
+    title_find: '',
+    title_replace: '',
+  };
+  const [showBatchEdit, setShowBatchEdit] = useState(false);
+  const [batchEditSubmitting, setBatchEditSubmitting] = useState(false);
+  const [batchEditFields, setBatchEditFields] = useState<Record<string, boolean>>({ ...defaultBatchEditFields });
+  const [batchEditForm, setBatchEditForm] = useState<Record<string, string>>({ ...defaultBatchEditForm });
   const [creatingStatement, setCreatingStatement] = useState(false);
   const [statementForm, setStatementForm] = useState({
     statement_title: '',
@@ -911,6 +942,79 @@ export default function InvoicesPage() {
     }
   };
 
+  const openBatchEdit = () => {
+    if (selectedInvoiceIds.length === 0) {
+      alert('請先選擇發票');
+      return;
+    }
+    setBatchEditFields({ ...defaultBatchEditFields });
+    setBatchEditForm({ ...defaultBatchEditForm });
+    setShowBatchEdit(true);
+  };
+
+  const toggleBatchEditField = (key: string, checked: boolean) => {
+    setBatchEditFields((prev) => ({ ...prev, [key]: checked }));
+  };
+
+  const updateBatchEditForm = (key: string, value: string) => {
+    setBatchEditForm((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const handleBatchEdit = async () => {
+    if (selectedInvoiceIds.length === 0) {
+      alert('請先選擇發票');
+      return;
+    }
+    const payload: Record<string, any> = { invoice_ids: selectedInvoiceIds };
+    if (batchEditFields.invoice_category) payload.invoice_category = batchEditForm.invoice_category;
+    if (batchEditFields.status) payload.status = batchEditForm.status;
+    if (batchEditFields.client_id) payload.client_id = batchEditForm.client_id ? Number(batchEditForm.client_id) : null;
+    if (batchEditFields.project_id) payload.project_id = batchEditForm.project_id ? Number(batchEditForm.project_id) : null;
+    if (batchEditFields.company_id) payload.company_id = batchEditForm.company_id ? Number(batchEditForm.company_id) : null;
+    if (batchEditFields.quotation_id) payload.quotation_id = batchEditForm.quotation_id ? Number(batchEditForm.quotation_id) : null;
+    if (batchEditFields.payment_terms) payload.payment_terms = batchEditForm.payment_terms;
+    if (batchEditFields.client_contract_no) payload.client_contract_no = batchEditForm.client_contract_no;
+    if (batchEditFields.date) payload.date = batchEditForm.date;
+    if (batchEditFields.invoice_title) {
+      payload.title_find = batchEditForm.title_find;
+      payload.title_replace = batchEditForm.title_replace;
+    }
+
+    const enabledCount = Object.values(batchEditFields).filter(Boolean).length;
+    if (enabledCount === 0) {
+      alert('請至少勾選一個要修改的欄位');
+      return;
+    }
+    if (batchEditFields.status && !batchEditForm.status) {
+      alert('請選擇狀態');
+      return;
+    }
+    if (batchEditFields.company_id && !batchEditForm.company_id) {
+      alert('請選擇公司');
+      return;
+    }
+    if (batchEditFields.date && !batchEditForm.date) {
+      alert('請選擇日期');
+      return;
+    }
+    if (batchEditFields.invoice_title && !batchEditForm.title_find) {
+      alert('請輸入要搜尋的名稱文字');
+      return;
+    }
+
+    setBatchEditSubmitting(true);
+    try {
+      await invoicesApi.batchUpdate(payload);
+      setShowBatchEdit(false);
+      setSelectedInvoiceRows({});
+      await fetchData();
+    } catch (err: any) {
+      alert(err.response?.data?.message || '批量修改失敗');
+    } finally {
+      setBatchEditSubmitting(false);
+    }
+  };
+
   const handleCreateStatement = async () => {
     if (selectedInvoiceIds.length === 0) {
       alert('請先選擇發票');
@@ -1159,6 +1263,9 @@ export default function InvoicesPage() {
               </button>
               <button onClick={handleBatchVoid} className="btn-secondary">
                 批量作廢
+              </button>
+              <button onClick={openBatchEdit} className="btn-secondary">
+                批量修改
               </button>
               <button onClick={openStatementCreate} className="btn-secondary">
                 新增發票清單
@@ -1525,6 +1632,284 @@ export default function InvoicesPage() {
           }}
         />
       </div>
+      )}
+
+      {/* Batch Edit Modal */}
+      {showBatchEdit && (
+        <Modal
+          isOpen={showBatchEdit}
+          title="批量修改發票"
+          onClose={() => !batchEditSubmitting && setShowBatchEdit(false)}
+          size="lg"
+        >
+          <div className="space-y-4">
+            <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-700">
+              已選擇 <strong>{selectedInvoiceIds.length}</strong> 張發票；只會修改下方勾選的欄位，其他欄位維持不變。
+            </div>
+
+            {/* 分類 */}
+            <div className="space-y-1">
+              <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                <input
+                  type="checkbox"
+                  checked={batchEditFields.invoice_category}
+                  onChange={(e) => toggleBatchEditField('invoice_category', e.target.checked)}
+                />
+                修改分類
+              </label>
+              {batchEditFields.invoice_category && (
+                <select
+                  value={batchEditForm.invoice_category}
+                  onChange={(e) => updateBatchEditForm('invoice_category', e.target.value)}
+                  className="input-field text-sm"
+                >
+                  <option value="">—（留空清除）</option>
+                  {invoiceCategoryOptions.map((opt) => (
+                    <option key={opt} value={opt}>{opt}</option>
+                  ))}
+                </select>
+              )}
+            </div>
+
+            {/* 狀態 */}
+            <div className="space-y-1">
+              <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                <input
+                  type="checkbox"
+                  checked={batchEditFields.status}
+                  onChange={(e) => toggleBatchEditField('status', e.target.checked)}
+                />
+                修改狀態
+              </label>
+              {batchEditFields.status && (
+                <select
+                  value={batchEditForm.status}
+                  onChange={(e) => updateBatchEditForm('status', e.target.value)}
+                  className="input-field text-sm"
+                >
+                  <option value="">請選擇</option>
+                  <option value="draft">草稿</option>
+                  <option value="confirmed">已確認</option>
+                  <option value="sent">已發送</option>
+                  <option value="paid">已收清</option>
+                  <option value="overdue">已逾期</option>
+                  <option value="void">已作廢</option>
+                  <option value="partially_paid">部分收款</option>
+                </select>
+              )}
+            </div>
+
+            {/* 客戶 */}
+            <div className="space-y-1">
+              <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                <input
+                  type="checkbox"
+                  checked={batchEditFields.client_id}
+                  onChange={(e) => toggleBatchEditField('client_id', e.target.checked)}
+                />
+                修改客戶
+              </label>
+              {batchEditFields.client_id && (
+                <SearchableSelect
+                  value={batchEditForm.client_id}
+                  onChange={(val) => updateBatchEditForm('client_id', val ? String(val) : '')}
+                  options={clientPartners.map((p: any) => ({
+                    value: String(p.id),
+                    label: p.code ? `${p.code} - ${p.name}` : p.name,
+                  }))}
+                  placeholder="搜尋客戶（或留空清除）"
+                  className="text-sm"
+                />
+              )}
+            </div>
+
+            {/* 項目 */}
+            <div className="space-y-1">
+              <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                <input
+                  type="checkbox"
+                  checked={batchEditFields.project_id}
+                  onChange={(e) => toggleBatchEditField('project_id', e.target.checked)}
+                />
+                修改項目
+              </label>
+              {batchEditFields.project_id && (
+                <SearchableSelect
+                  value={batchEditForm.project_id}
+                  onChange={(val) => updateBatchEditForm('project_id', val ? String(val) : '')}
+                  options={projects.map((p: any) => ({
+                    value: String(p.id),
+                    label: p.project_no ? `${p.project_no} - ${p.project_name}` : p.project_name,
+                  }))}
+                  placeholder="搜尋項目（或留空清除）"
+                  className="text-sm"
+                />
+              )}
+            </div>
+
+            {/* 公司 */}
+            <div className="space-y-1">
+              <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                <input
+                  type="checkbox"
+                  checked={batchEditFields.company_id}
+                  onChange={(e) => toggleBatchEditField('company_id', e.target.checked)}
+                />
+                修改公司
+              </label>
+              {batchEditFields.company_id && (
+                <select
+                  value={batchEditForm.company_id}
+                  onChange={(e) => updateBatchEditForm('company_id', e.target.value)}
+                  className="input-field text-sm"
+                >
+                  <option value="">請選擇</option>
+                  {companies.map((c: any) => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
+              )}
+            </div>
+
+            {/* 報價單 */}
+            <div className="space-y-1">
+              <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                <input
+                  type="checkbox"
+                  checked={batchEditFields.quotation_id}
+                  onChange={(e) => toggleBatchEditField('quotation_id', e.target.checked)}
+                />
+                修改報價單
+              </label>
+              {batchEditFields.quotation_id && (
+                <SearchableSelect
+                  value={batchEditForm.quotation_id}
+                  onChange={(val) => updateBatchEditForm('quotation_id', val ? String(val) : '')}
+                  options={quotations.map((q: any) => ({
+                    value: String(q.id),
+                    label: q.quotation_title ? `${q.quotation_no} - ${q.quotation_title}` : q.quotation_no,
+                  }))}
+                  placeholder="搜尋報價單（或留空清除）"
+                  className="text-sm"
+                />
+              )}
+            </div>
+
+            {/* 付款條件 */}
+            <div className="space-y-1">
+              <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                <input
+                  type="checkbox"
+                  checked={batchEditFields.payment_terms}
+                  onChange={(e) => toggleBatchEditField('payment_terms', e.target.checked)}
+                />
+                修改付款條件
+              </label>
+              {batchEditFields.payment_terms && (
+                <input
+                  type="text"
+                  value={batchEditForm.payment_terms}
+                  onChange={(e) => updateBatchEditForm('payment_terms', e.target.value)}
+                  placeholder="輸入付款條件（或留空清除）"
+                  className="input-field text-sm"
+                />
+              )}
+            </div>
+
+            {/* 合約 */}
+            <div className="space-y-1">
+              <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                <input
+                  type="checkbox"
+                  checked={batchEditFields.client_contract_no}
+                  onChange={(e) => toggleBatchEditField('client_contract_no', e.target.checked)}
+                />
+                修改合約
+              </label>
+              {batchEditFields.client_contract_no && (
+                <input
+                  type="text"
+                  value={batchEditForm.client_contract_no}
+                  onChange={(e) => updateBatchEditForm('client_contract_no', e.target.value)}
+                  placeholder="輸入合約編號（或留空清除）"
+                  className="input-field text-sm"
+                />
+              )}
+            </div>
+
+            {/* 日期 */}
+            <div className="space-y-1">
+              <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                <input
+                  type="checkbox"
+                  checked={batchEditFields.date}
+                  onChange={(e) => toggleBatchEditField('date', e.target.checked)}
+                />
+                修改日期
+              </label>
+              {batchEditFields.date && (
+                <DateInput
+                  value={batchEditForm.date}
+                  onChange={(value) => updateBatchEditForm('date', value)}
+                  className="input-field text-sm"
+                />
+              )}
+            </div>
+
+            {/* 名稱（搜尋並替換） */}
+            <div className="space-y-1">
+              <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                <input
+                  type="checkbox"
+                  checked={batchEditFields.invoice_title}
+                  onChange={(e) => toggleBatchEditField('invoice_title', e.target.checked)}
+                />
+                修改名稱（搜尋並替換）
+              </label>
+              {batchEditFields.invoice_title && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">搜尋</label>
+                    <input
+                      type="text"
+                      value={batchEditForm.title_find}
+                      onChange={(e) => updateBatchEditForm('title_find', e.target.value)}
+                      placeholder="要搜尋的文字"
+                      className="input-field text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">替換為</label>
+                    <input
+                      type="text"
+                      value={batchEditForm.title_replace}
+                      onChange={(e) => updateBatchEditForm('title_replace', e.target.value)}
+                      placeholder="替換後的文字（可留空）"
+                      className="input-field text-sm"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="flex justify-end gap-2 border-t pt-4">
+              <button
+                onClick={() => setShowBatchEdit(false)}
+                disabled={batchEditSubmitting}
+                className="btn-secondary disabled:opacity-50"
+              >
+                取消
+              </button>
+              <button
+                onClick={handleBatchEdit}
+                disabled={batchEditSubmitting}
+                className="btn-primary disabled:opacity-50"
+              >
+                {batchEditSubmitting ? '修改中...' : '確認修改'}
+              </button>
+            </div>
+          </div>
+        </Modal>
       )}
 
       {/* Create Statement Modal */}
