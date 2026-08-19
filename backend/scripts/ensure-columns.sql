@@ -3166,3 +3166,6 @@ WHERE vs.id = vr.record_source_id
   AND (vr.record_vehicle_no IS NULL OR vr.record_vehicle_no = '')
   AND vr.record_raw_data->>'machine_code' IS NOT NULL
   AND vr.record_raw_data->>'machine_code' != '';
+-- ===== 20260819000000: other_deduction_timing on payment_in_allocations =====
+-- 其他扣款相對扣留金的計算時序：'before_retention' | 'after_retention'（NULL 視為 before_retention）
+ALTER TABLE "payment_in_allocations" ADD COLUMN IF NOT EXISTS "other_deduction_timing" VARCHAR(20);

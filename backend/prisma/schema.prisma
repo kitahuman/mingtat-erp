@@ -2148,6 +2148,8 @@ model PaymentInAllocation {
   payment_in_allocation_invoice_id    Int?
   payment_in_allocation_amount        Decimal  @db.Decimal(14, 2)
   payment_in_allocation_remarks       String?  @db.Text
+  // 其他扣款相對扣留金的計算時序：before_retention（扣留金前）| after_retention（扣留金後）
+  other_deduction_timing              String?  @db.VarChar(20)
   created_at                          DateTime @default(now())
   updated_at                          DateTime @default(now()) @updatedAt
 

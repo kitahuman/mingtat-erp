@@ -160,6 +160,11 @@ export class PaymentInAllocationService {
         payment_in_allocation_amount: dto.payment_in_allocation_amount,
         payment_in_allocation_remarks:
           dto.payment_in_allocation_remarks ?? null,
+        // 其他扣款相對扣留金的時序（僅在有其他扣款時記錄）
+        other_deduction_timing:
+          Number(dto.other_deduction_amount ?? 0) > 0
+            ? (dto.other_deduction_timing ?? 'before_retention')
+            : null,
       },
       include: this.allocationInclude,
     });
@@ -212,7 +217,10 @@ export class PaymentInAllocationService {
           payment_in_deduction_type: 'Other',
           payment_in_deduction_amount: otherDeduction,
           payment_in_deduction_remarks:
-            dto.other_deduction_remarks || 'Other deduction',
+            dto.other_deduction_remarks ||
+            (dto.other_deduction_timing === 'after_retention'
+              ? '其他扣款（扣留金後）'
+              : 'Other deduction'),
         },
       });
     }

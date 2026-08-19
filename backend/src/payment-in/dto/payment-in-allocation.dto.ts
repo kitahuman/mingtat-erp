@@ -1,4 +1,5 @@
 import {
+  IsIn,
   IsInt,
   IsNumber,
   IsOptional,
@@ -61,6 +62,17 @@ export class CreatePaymentInAllocationDto {
   @IsOptional()
   @IsString()
   other_deduction_remarks?: string;
+
+  /**
+   * When the other deduction is applied relative to the retention calculation:
+   *   'before_retention'（扣留金前）- base → minus other deductions → retention % on remainder
+   *   'after_retention'（扣留金後）- base → retention % on base → minus other deductions
+   * Stored on the allocation row so existing records display correctly.
+   */
+  @IsOptional()
+  @IsString()
+  @IsIn(['before_retention', 'after_retention'])
+  other_deduction_timing?: 'before_retention' | 'after_retention';
 }
 
 export class UpdatePaymentInAllocationDto {

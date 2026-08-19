@@ -12,11 +12,19 @@ const fmt$ = (v: unknown) =>
     maximumFractionDigits: 2,
   })}`;
 
+type OtherDeductionTiming = 'before_retention' | 'after_retention';
+
+const OTHER_DEDUCTION_TIMING_LABEL: Record<OtherDeductionTiming, string> = {
+  before_retention: '扣留金前',
+  after_retention: '扣留金後',
+};
+
 interface AllocationRow {
   id: number;
   payment_in_allocation_amount: number | string;
   payment_in_allocation_remarks: string | null;
   payment_in_allocation_invoice_id: number | null;
+  other_deduction_timing?: string | null;
   invoice?: {
     id: number;
     invoice_no: string;
@@ -124,6 +132,9 @@ export default function AllocationsCard({
   const [otherDeductionEnabled, setOtherDeductionEnabled] = useState(false);
   const [otherDeductionAmount, setOtherDeductionAmount] = useState<string>('');
   const [otherDeductionRemarks, setOtherDeductionRemarks] = useState<string>('');
+  // Whether other deductions are applied before or after the retention calculation.
+  const [otherDeductionTiming, setOtherDeductionTiming] =
+    useState<OtherDeductionTiming>('before_retention');
 
   useEffect(() => {
     setAllocations(initialAllocations || []);
@@ -244,6 +255,7 @@ export default function AllocationsCard({
     setOtherDeductionEnabled(false);
     setOtherDeductionAmount('');
     setOtherDeductionRemarks('');
+    setOtherDeductionTiming('before_retention');
   };
 
   const resetAllDeductions = () => {
@@ -274,29 +286,42 @@ export default function AllocationsCard({
   };
 
   // ── Calculation breakdown ────────────────────────────────────────
-  // Order: base → minus other deductions → minus retention % on remainder
-  // 本次分配金額 → 扣其他扣款 → 在剩餘金額上計算扣留金%
+  // Two supported orders, controlled by `otherDeductionTiming`:
+  //   before_retention: base → minus other deductions → retention % on remainder
+  //   after_retention:  base → retention % on base → minus other deductions on remainder
+  const round2 = (v: number) => Math.round(v * 100) / 100;
+
   const allocAmountNum = parseFloat(allocAmount) || 0;
   const otherDeductNum =
     otherDeductionEnabled ? parseFloat(otherDeductionAmount) || 0 : 0;
-  const amountAfterOtherDeduct = Math.round(
-    (allocAmountNum - otherDeductNum) * 100,
-  ) / 100;
+  const isOtherDeductionAfterRetention =
+    otherDeductionEnabled && otherDeductionTiming === 'after_retention';
+
+  // 其他扣款在扣留金前：扣款後金額；其他扣款在扣留金後：仍為原金額
+  const amountAfterOtherDeduct = isOtherDeductionAfterRetention
+    ? allocAmountNum
+    : round2(allocAmountNum - otherDeductNum);
+  // Base used for the retention percentage calculation.
+  const retentionBaseNum = isOtherDeductionAfterRetention
+    ? allocAmountNum
+    : amountAfterOtherDeduct;
   const retentionAmountNum =
     retentionEnabled ? parseFloat(retentionAmount) || 0 : 0;
-  const netPaymentNum = Math.round(
-    (amountAfterOtherDeduct - retentionAmountNum) * 100,
-  ) / 100;
+  // 扣留金後金額（僅 after_retention 模式顯示）
+  const amountAfterRetention = round2(allocAmountNum - retentionAmountNum);
+  const netPaymentNum = isOtherDeductionAfterRetention
+    ? round2(allocAmountNum - retentionAmountNum - otherDeductNum)
+    : round2(amountAfterOtherDeduct - retentionAmountNum);
 
-  // Auto-calculate retention amount from percentage on the amount AFTER other deductions,
-  // unless the user has manually edited the retention amount field.
+  // Auto-calculate retention amount from percentage on the applicable base
+  // (amount after other deductions, or the full amount when other deductions
+  // are applied after retention), unless the user manually edited the field.
   useEffect(() => {
     if (!retentionEnabled || retentionAmountTouched) return;
-    const base = amountAfterOtherDeduct; // Use amount after other deductions
     const pct = parseFloat(retentionPct) || 0;
-    const calc = Math.round(base * (pct / 100) * 100) / 100;
+    const calc = Math.round(retentionBaseNum * (pct / 100) * 100) / 100;
     setRetentionAmount(calc > 0 ? calc.toFixed(2) : '');
-  }, [retentionEnabled, retentionPct, amountAfterOtherDeduct, retentionAmountTouched]);
+  }, [retentionEnabled, retentionPct, retentionBaseNum, retentionAmountTouched]);
 
   const handleCreate = async () => {
     if (!selected) return;
@@ -320,10 +345,20 @@ export default function AllocationsCard({
       }
     }
 
-    // Calculate: base - other deductions = amount after other deductions
-    const amountAfterOther = Math.round((amount - otherDeduct) * 100) / 100;
+    // Timing of the other deduction relative to retention.
+    const timing: OtherDeductionTiming = useOtherDeduction
+      ? otherDeductionTiming
+      : 'before_retention';
+    const afterRetention = useOtherDeduction && timing === 'after_retention';
 
-    // Retention deduction (calculated on amount AFTER other deductions).
+    // before_retention: base - other deductions = amount after other deductions
+    // after_retention:  other deductions are taken from the post-retention amount
+    const amountAfterOther = afterRetention
+      ? amount
+      : Math.round((amount - otherDeduct) * 100) / 100;
+
+    // Retention deduction: calculated on the amount after other deductions
+    // (before_retention) or on the full amount (after_retention).
     const useRetention = !isRetentionRelease && retentionEnabled;
     const retention = useRetention ? parseFloat(retentionAmount) || 0 : 0;
     if (useRetention) {
@@ -332,13 +367,21 @@ export default function AllocationsCard({
         return;
       }
       if (retention >= amountAfterOther) {
-        alert('扣留金不可大於或等於扣款後金額');
+        alert(
+          afterRetention
+            ? '扣留金不可大於或等於本次分配金額'
+            : '扣留金不可大於或等於扣款後金額',
+        );
         return;
       }
     }
 
-    // Final payment = amount - other deductions - retention
-    const netAmount = Math.round((amountAfterOther - retention) * 100) / 100;
+    // Final payment:
+    //   before_retention: amount - other deductions - retention
+    //   after_retention:  amount - retention - other deductions
+    const netAmount = afterRetention
+      ? Math.round((amount - retention - otherDeduct) * 100) / 100
+      : Math.round((amountAfterOther - retention) * 100) / 100;
     if (netAmount <= 0) {
       alert('扣除所有扣款後的實際付款金額必須大於 0');
       return;
@@ -359,6 +402,8 @@ export default function AllocationsCard({
           useOtherDeduction && otherDeduct > 0 ? otherDeduct : undefined,
         other_deduction_remarks:
           useOtherDeduction && otherDeduct > 0 ? otherDeductionRemarks || undefined : undefined,
+        other_deduction_timing:
+          useOtherDeduction && otherDeduct > 0 ? timing : undefined,
       });
       setPickerOpen(false);
       await reload();
@@ -794,6 +839,7 @@ export default function AllocationsCard({
                             if (!e.target.checked) {
                               setOtherDeductionAmount('');
                               setOtherDeductionRemarks('');
+                              setOtherDeductionTiming('before_retention');
                             }
                           }}
                           className="w-4 h-4"
@@ -801,31 +847,61 @@ export default function AllocationsCard({
                         <span className="text-sm font-medium text-gray-700">其他扣款</span>
                       </label>
                       {otherDeductionEnabled && (
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2 ml-6">
+                        <div className="space-y-2 ml-6">
                           <div>
                             <label className="block text-xs font-medium text-gray-600 mb-1">
-                              金額
+                              扣款時序
                             </label>
-                            <input
-                              type="number"
-                              step="0.01"
-                              value={otherDeductionAmount}
-                              onChange={(e) => setOtherDeductionAmount(e.target.value)}
+                            <select
+                              value={otherDeductionTiming}
+                              onChange={(e) => {
+                                setOtherDeductionTiming(
+                                  e.target.value as OtherDeductionTiming,
+                                );
+                                // 改變時序會改變扣留金計算基準，重新自動計算
+                                setRetentionAmountTouched(false);
+                              }}
                               className="input-field text-sm"
-                              placeholder="0.00"
-                            />
+                            >
+                              <option value="before_retention">
+                                {OTHER_DEDUCTION_TIMING_LABEL.before_retention}
+                              </option>
+                              <option value="after_retention">
+                                {OTHER_DEDUCTION_TIMING_LABEL.after_retention}
+                              </option>
+                            </select>
+                            <p className="text-xs text-gray-500 mt-1">
+                              {otherDeductionTiming === 'before_retention'
+                                ? '先扣其他扣款，再以扣款後金額計算扣留金'
+                                : '先以全額計算扣留金，再從餘額扣其他扣款'}
+                            </p>
                           </div>
-                          <div>
-                            <label className="block text-xs font-medium text-gray-600 mb-1">
-                              備註
-                            </label>
-                            <input
-                              type="text"
-                              value={otherDeductionRemarks}
-                              onChange={(e) => setOtherDeductionRemarks(e.target.value)}
-                              className="input-field text-sm"
-                              placeholder="如：銀行手續費"
-                            />
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                            <div>
+                              <label className="block text-xs font-medium text-gray-600 mb-1">
+                                金額
+                              </label>
+                              <input
+                                type="number"
+                                step="0.01"
+                                value={otherDeductionAmount}
+                                onChange={(e) => setOtherDeductionAmount(e.target.value)}
+                                className="input-field text-sm"
+                                placeholder="0.00"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-xs font-medium text-gray-600 mb-1">
+                                備註
+                              </label>
+                              <input
+                                type="text"
+                                value={otherDeductionRemarks}
+                                onChange={(e) => setOtherDeductionRemarks(e.target.value)}
+                                className="input-field text-sm"
+                                placeholder="如：銀行手續費"
+                              />
+                            </div>
                           </div>
                         </div>
                       )}
@@ -893,23 +969,48 @@ export default function AllocationsCard({
                           <span className="text-gray-600">發票金額：</span>
                           <span className="font-mono font-semibold">{fmt$(allocAmountNum)}</span>
                         </div>
-                        {otherDeductionEnabled && otherDeductNum > 0 && (
+                        {isOtherDeductionAfterRetention ? (
                           <>
-                            <div className="flex justify-between text-orange-700">
-                              <span>其他扣款：</span>
-                              <span className="font-mono">- {fmt$(otherDeductNum)}</span>
-                            </div>
-                            <div className="flex justify-between border-t pt-1">
-                              <span className="text-gray-600">扣款後金額：</span>
-                              <span className="font-mono font-semibold">{fmt$(amountAfterOtherDeduct)}</span>
-                            </div>
+                            {retentionEnabled && retentionAmountNum > 0 && (
+                              <>
+                                <div className="flex justify-between text-amber-700">
+                                  <span>扣留金 ({retentionPct}%)：</span>
+                                  <span className="font-mono">- {fmt$(retentionAmountNum)}</span>
+                                </div>
+                                <div className="flex justify-between border-t pt-1">
+                                  <span className="text-gray-600">扣留金後金額：</span>
+                                  <span className="font-mono font-semibold">{fmt$(amountAfterRetention)}</span>
+                                </div>
+                              </>
+                            )}
+                            {otherDeductNum > 0 && (
+                              <div className="flex justify-between text-orange-700">
+                                <span>其他扣款（扣留金後）：</span>
+                                <span className="font-mono">- {fmt$(otherDeductNum)}</span>
+                              </div>
+                            )}
                           </>
-                        )}
-                        {retentionEnabled && retentionAmountNum > 0 && (
-                          <div className="flex justify-between text-amber-700">
-                            <span>扣留金 ({retentionPct}%)：</span>
-                            <span className="font-mono">- {fmt$(retentionAmountNum)}</span>
-                          </div>
+                        ) : (
+                          <>
+                            {otherDeductionEnabled && otherDeductNum > 0 && (
+                              <>
+                                <div className="flex justify-between text-orange-700">
+                                  <span>其他扣款（扣留金前）：</span>
+                                  <span className="font-mono">- {fmt$(otherDeductNum)}</span>
+                                </div>
+                                <div className="flex justify-between border-t pt-1">
+                                  <span className="text-gray-600">扣款後金額：</span>
+                                  <span className="font-mono font-semibold">{fmt$(amountAfterOtherDeduct)}</span>
+                                </div>
+                              </>
+                            )}
+                            {retentionEnabled && retentionAmountNum > 0 && (
+                              <div className="flex justify-between text-amber-700">
+                                <span>扣留金 ({retentionPct}%)：</span>
+                                <span className="font-mono">- {fmt$(retentionAmountNum)}</span>
+                              </div>
+                            )}
+                          </>
                         )}
                         {(otherDeductionEnabled || retentionEnabled) && (
                           <div className="flex justify-between border-t pt-1 bg-indigo-50 -mx-3 -mb-3 px-3 py-2 rounded-b">

@@ -1376,6 +1376,11 @@ export interface CreatePaymentInAllocationPayload {
   other_deduction_amount?: number;
   /** Remarks for the other deduction. */
   other_deduction_remarks?: string;
+  /**
+   * When the other deduction is applied relative to the retention calculation.
+   * 'before_retention'（扣留金前）| 'after_retention'（扣留金後）
+   */
+  other_deduction_timing?: 'before_retention' | 'after_retention';
 }
 
 // Payment Term Templates
