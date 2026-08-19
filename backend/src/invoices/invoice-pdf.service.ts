@@ -329,7 +329,7 @@ export class InvoicePdfService {
         <tr>
           <td class="center">${idx + 1}</td>
           <td>
-            <div class="item-title">${this.escapeHtml(name)}</div>
+            <div class="item-title">${this.escapeMultiline(name)}</div>
             ${description ? `<div class="sub-lines">${this.escapeMultiline(description)}</div>` : ''}
           </td>
           <td class="right">${this.formatQuantity(item.quantity)}</td>
