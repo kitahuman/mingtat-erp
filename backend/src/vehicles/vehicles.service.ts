@@ -209,18 +209,12 @@ export class VehiclesService {
       if (vehicle.status === 'scrapped') throw new BadRequestException('已劏車的車輛不能換牌');
       if (vehicle.current_plate?.plate_number === newPlateNumber || vehicle.plate_number === newPlateNumber) return;
 
-      let targetPlate = await tx.vehiclePlate.findUnique({ where: { plate_number: newPlateNumber } });
-      if (targetPlate && targetPlate.current_vehicle_id && targetPlate.current_vehicle_id !== id) {
-        throw new BadRequestException('此車牌已套用在其他車輛');
-      }
+      const targetPlate = await tx.vehiclePlate.findUnique({ where: { plate_number: newPlateNumber } });
       if (!targetPlate) {
-        targetPlate = await tx.vehiclePlate.create({
-          data: {
-            plate_number: newPlateNumber,
-            owner_company_id: vehicle.owner_company_id,
-            status: 'idle',
-          },
-        });
+        throw new BadRequestException('車牌不存在，請先在車牌列表新增');
+      }
+      if (targetPlate.status !== 'idle' || targetPlate.current_vehicle_id) {
+        throw new BadRequestException('只能選擇閒置車牌');
       }
 
       if (vehicle.current_plate_id && vehicle.current_plate_id !== targetPlate.id) {

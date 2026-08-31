@@ -61,7 +61,12 @@ export default function SearchableSelect({
   }, [open, filtered.length]);
 
   useEffect(() => {
-    if (open) updateDropdownPosition();
+    if (!open) return;
+    updateDropdownPosition();
+    const focusTimer = window.setTimeout(() => {
+      searchInputRef.current?.focus({ preventScroll: true });
+    }, 0);
+    return () => window.clearTimeout(focusTimer);
   }, [open, updateDropdownPosition]);
 
   useEffect(() => {

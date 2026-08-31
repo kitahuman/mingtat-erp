@@ -2,14 +2,14 @@
 import { useState, useEffect } from 'react';
 import DateInput from '@/components/DateInput';
 import { useParams, useRouter } from 'next/navigation';
-import { vehiclesApi, companiesApi, fieldOptionsApi } from '@/lib/api';
-import SearchableSelect from '@/components/SearchableSelect';
+import { vehiclesApi, vehiclePlatesApi, companiesApi, fieldOptionsApi } from '@/lib/api';
 import DocumentUpload from '@/components/DocumentUpload';
 import CustomFieldsBlock from '@/components/CustomFieldsBlock';
 import Link from 'next/link';
 import Modal from '@/components/Modal';
 import { fmtDate } from '@/lib/dateUtils';
 import { useAuth } from '@/lib/auth';
+import SearchableSelect from '@/components/SearchableSelect';
 
 // Fallback vehicle types
 const DEFAULT_VEHICLE_TYPES = ['泥頭車', '夾車', '勾斗車', '吊車', '拖架', '拖頭', '輕型貨車', '領航車'];
@@ -32,6 +32,8 @@ export default function VehicleDetailPage() {
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState<any>({});
   const [companies, setCompanies] = useState<any[]>([]);
+  const [idlePlates, setIdlePlates] = useState<any[]>([]);
+  const [loadingIdlePlates, setLoadingIdlePlates] = useState(false);
   const [loading, setLoading] = useState(true);
   const [vehicleTypes, setVehicleTypes] = useState<string[]>(DEFAULT_VEHICLE_TYPES);
   const [tonnageOptions, setTonnageOptions] = useState<{ value: string; label: string }[]>([]);
@@ -72,8 +74,28 @@ export default function VehicleDetailPage() {
     } catch (err: any) { alert(err.response?.data?.message || '更新失敗'); }
   };
 
+  const openPlateModal = async () => {
+    setPlateForm(prev => ({ ...prev, new_plate: '' }));
+    setShowPlateModal(true);
+    setLoadingIdlePlates(true);
+    try {
+      const res = await vehiclePlatesApi.list({ status: 'idle' });
+      const rows = Array.isArray(res.data) ? res.data : res.data?.data || [];
+      setIdlePlates(rows);
+    } catch (err: any) {
+      setIdlePlates([]);
+      alert(err.response?.data?.message || '載入閒置車牌失敗');
+    } finally {
+      setLoadingIdlePlates(false);
+    }
+  };
+
   const handleChangePlate = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!plateForm.new_plate) {
+      alert('請選擇閒置車牌');
+      return;
+    }
     try {
       await vehiclesApi.changePlate(vehicle.id, plateForm);
       setShowPlateModal(false);
@@ -175,7 +197,7 @@ export default function VehicleDetailPage() {
             <button onClick={handleRestore} className="btn-primary">復原</button>
           ) : (
             <>
-              <button onClick={() => setShowPlateModal(true)} className="btn-secondary">更換車牌</button>
+              <button onClick={openPlateModal} className="btn-secondary">更換車牌</button>
               {(vehicle?.current_plate_id || vehicle?.current_plate || vehicle?.plate_number) && <button onClick={() => setShowRemovePlateModal(true)} className="btn-secondary">移除車牌</button>}
               <button onClick={() => setShowTransferModal(true)} className="btn-secondary">過戶</button>
               <button onClick={handleScrap} className="px-4 py-2 rounded-lg bg-red-600 text-white hover:bg-red-700">劏車</button>
@@ -289,7 +311,7 @@ export default function VehicleDetailPage() {
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-bold text-gray-900">車輛歷史時間線</h2>
           <div className="flex gap-3 text-sm flex-wrap justify-end">
-            {vehicle?.status !== 'scrapped' && <button onClick={() => setShowPlateModal(true)} className="text-primary-600 hover:underline">更換車牌</button>}
+            {vehicle?.status !== 'scrapped' && <button onClick={openPlateModal} className="text-primary-600 hover:underline">更換車牌</button>}
             {vehicle?.status !== 'scrapped' && (vehicle?.current_plate_id || vehicle?.current_plate || vehicle?.plate_number) && <button onClick={() => setShowRemovePlateModal(true)} className="text-primary-600 hover:underline">移除車牌</button>}
             {vehicle?.status !== 'scrapped' && <button onClick={() => setShowTransferModal(true)} className="text-primary-600 hover:underline">過戶</button>}
             <button onClick={() => setShowManualTransferModal(true)} className="text-primary-600 hover:underline">新增過戶歷史</button>
@@ -327,10 +349,29 @@ export default function VehicleDetailPage() {
       <Modal isOpen={showPlateModal} onClose={() => setShowPlateModal(false)} title="更換車牌">
         <form onSubmit={handleChangePlate} className="space-y-4">
           <div><label className="block text-sm font-medium text-gray-700 mb-1">目前車牌</label><input value={vehicle?.plate_number} className="input-field bg-gray-50 font-mono" disabled /></div>
-          <div><label className="block text-sm font-medium text-gray-700 mb-1">新車牌 *</label><input value={plateForm.new_plate} onChange={e => setPlateForm({...plateForm, new_plate: e.target.value})} className="input-field" required /></div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">閒置車牌 *</label>
+            <SearchableSelect
+              value={plateForm.new_plate}
+              onChange={value => setPlateForm({ ...plateForm, new_plate: value ? String(value) : '' })}
+              options={idlePlates.map(plate => ({
+                value: plate.plate_number,
+                label: plate.owner_company_label && plate.owner_company_label !== '-'
+                  ? `${plate.plate_number}（${plate.owner_company_label}）`
+                  : plate.plate_number,
+              }))}
+              placeholder={loadingIdlePlates ? '載入閒置車牌中...' : idlePlates.length > 0 ? '請選擇閒置車牌' : '沒有可用的閒置車牌'}
+              disabled={loadingIdlePlates || idlePlates.length === 0}
+              clearable={false}
+              className="w-full"
+            />
+            {!loadingIdlePlates && idlePlates.length === 0 && (
+              <p className="text-xs text-amber-600 mt-1">請先在車牌列表新增車牌，再返回此處更換。</p>
+            )}
+          </div>
           <div><label className="block text-sm font-medium text-gray-700 mb-1">變更日期 *</label><DateInput value={plateForm.change_date} onChange={value => setPlateForm({...plateForm, change_date: value})} className="input-field" required /></div>
           <div><label className="block text-sm font-medium text-gray-700 mb-1">備註</label><textarea value={plateForm.notes} onChange={e => setPlateForm({...plateForm, notes: e.target.value})} className="input-field" rows={2} /></div>
-          <div className="flex justify-end gap-3 pt-4 border-t"><button type="button" onClick={() => setShowPlateModal(false)} className="btn-secondary">取消</button><button type="submit" className="btn-primary">確認更換</button></div>
+          <div className="flex justify-end gap-3 pt-4 border-t"><button type="button" onClick={() => setShowPlateModal(false)} className="btn-secondary">取消</button><button type="submit" className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed" disabled={loadingIdlePlates || !plateForm.new_plate}>確認更換</button></div>
         </form>
       </Modal>
 
