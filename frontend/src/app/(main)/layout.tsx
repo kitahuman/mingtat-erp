@@ -6,6 +6,7 @@ import Sidebar from '@/components/Sidebar';
 import { ChatWidget } from '@/components/ChatWidget';
 import { useAuth } from '@/lib/auth';
 import WhatsAppAlertModal from '@/components/WhatsAppAlertModal';
+import { WorkspaceTabsProvider } from '@/components/WorkspaceTabs';
 
 // Path to Chinese page name mapping for browser tab title
 const PAGE_TITLES: Record<string, string> = {
@@ -171,7 +172,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
               </div>
             </div>
           ) : (
-            children
+            <WorkspaceTabsProvider>{children}</WorkspaceTabsProvider>
           )}
         </div>
       </main>

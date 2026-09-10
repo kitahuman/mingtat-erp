@@ -29,7 +29,7 @@ interface DataTableProps {
   onSearch?: (search: string) => void;
   searchPlaceholder?: string;
   searchInputClassName?: string;
-  onRowClick?: (row: any) => void;
+  onRowClick?: (row: any, event: React.MouseEvent<HTMLTableRowElement>) => void;
   filters?: React.ReactNode;
   actions?: React.ReactNode;
   loading?: boolean;
@@ -560,7 +560,13 @@ export default function DataTable({
               filteredData.map((row, i) => (
                 <tr
                   key={row.id || i}
-                  onClick={() => onRowClick?.(row)}
+                  onClick={(event) => onRowClick?.(row, event)}
+                  onMouseDown={(event) => {
+                    if (event.button === 1) {
+                      event.preventDefault();
+                      onRowClick?.(row, event);
+                    }
+                  }}
                   className={`border-b border-gray-100 hover:bg-blue-50 transition-colors ${onRowClick ? 'cursor-pointer' : ''}`}
                 >
                   {columns.map((col) => {

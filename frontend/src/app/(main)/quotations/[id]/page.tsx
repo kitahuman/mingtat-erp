@@ -7,6 +7,7 @@ import Link from 'next/link';
 import Modal from '@/components/Modal';
 import { fmtDate, toInputDate } from '@/lib/dateUtils';
 import { useAuth } from '@/lib/auth';
+import { useWorkspaceTabTitle } from '@/components/WorkspaceTabs';
 import DateInput from '@/components/DateInput';
 import AttachmentUpload from '@/components/AttachmentUpload';
 import SearchableSelect from '@/components/SearchableSelect';
@@ -95,7 +96,11 @@ export default function QuotationDetailPage() {
   const params = useParams();
   const router = useRouter();
   const [quotation, setQuotation] = useState<any>(null);
-  const quotationId = Number(params.id);
+  const [quotationId] = useState(() => Number(params.id));
+  useWorkspaceTabTitle(
+    quotation?.quotation_no || `報價單 #${quotationId}`,
+    `/quotations/${quotationId}`,
+  );
   const currentQuotationId = Number(quotation?.id || quotationId);
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState<any>({});

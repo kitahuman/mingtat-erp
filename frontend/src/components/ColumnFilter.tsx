@@ -48,6 +48,13 @@ export default function ColumnFilter({
     setMounted(true);
   }, []);
 
+  useEffect(() => {
+    const closeOnWorkspaceTabChange = () => setIsOpen(false);
+    window.addEventListener('workspace-tab-change', closeOnWorkspaceTabChange);
+    return () =>
+      window.removeEventListener('workspace-tab-change', closeOnWorkspaceTabChange);
+  }, []);
+
   // Get all unique values for this column from the raw data (client-side mode)
   const clientUniqueValues = useMemo(() => {
     if (serverSide) return [];

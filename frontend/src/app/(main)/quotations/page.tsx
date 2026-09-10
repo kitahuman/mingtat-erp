@@ -1,7 +1,6 @@
 'use client';
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { usePageState } from '@/hooks/usePageState';
-import { useRouter } from 'next/navigation';
 import { quotationsApi, companiesApi, partnersApi } from '@/lib/api';
 import ClientContractCombobox from '@/components/ClientContractCombobox';
 import DataTable from '@/components/DataTable';
@@ -13,6 +12,7 @@ import DateInput from '@/components/DateInput';
 import { useRefetchOnFocus } from '@/hooks/useRefetchOnFocus';
 import { useColumnConfig } from '@/hooks/useColumnConfig';
 import { useMultiFieldOptions } from '@/hooks/useFieldOptions';
+import { useWorkspaceTabs } from '@/components/WorkspaceTabs';
 
 const statusLabels: Record<string, string> = {
   draft: '草稿',
@@ -187,7 +187,7 @@ function ClientSearchSelect({
 }
 
 export default function QuotationsPage() {
-  const router = useRouter();
+  const { openTab } = useWorkspaceTabs();
   const { isReadOnly } = useAuth();
   const [data, setData] = useState<any[]>([]);
   const [total, setTotal] = useState(0);
@@ -599,7 +599,13 @@ export default function QuotationsPage() {
             setPage(1);
           }}
           searchPlaceholder="搜尋報價單號、工程名稱、客戶..."
-          onRowClick={(row) => window.open(`/quotations/${row.id}`, '_blank')}
+          onRowClick={(row, event) =>
+            openTab(
+              `/quotations/${row.id}`,
+              row.quotation_no || `報價單 #${row.id}`,
+              event,
+            )
+          }
           loading={loading}
           sortBy={sortBy}
           sortOrder={sortOrder}

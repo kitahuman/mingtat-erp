@@ -59,6 +59,13 @@ export default function ColumnCustomizer({ columns, onChange, onReset, onSavePer
     setIsOpen(prev => !prev);
   };
 
+  useEffect(() => {
+    const closeOnWorkspaceTabChange = () => setIsOpen(false);
+    window.addEventListener('workspace-tab-change', closeOnWorkspaceTabChange);
+    return () =>
+      window.removeEventListener('workspace-tab-change', closeOnWorkspaceTabChange);
+  }, []);
+
   // Close on outside click
   useEffect(() => {
     if (!isOpen) return;

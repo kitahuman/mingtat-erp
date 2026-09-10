@@ -36,6 +36,13 @@ export default function SearchableSelect({
   useEffect(() => { setMounted(true); }, []);
 
   useEffect(() => {
+    const closeOnWorkspaceTabChange = () => setOpen(false);
+    window.addEventListener('workspace-tab-change', closeOnWorkspaceTabChange);
+    return () =>
+      window.removeEventListener('workspace-tab-change', closeOnWorkspaceTabChange);
+  }, []);
+
+  useEffect(() => {
     if (open) {
       setTimeout(() => {
         searchInputRef.current?.focus({ preventScroll: true });

@@ -20,6 +20,10 @@ import Modal from '@/components/Modal';
 import { useAuth } from '@/lib/auth';
 import AttachmentUpload from '@/components/AttachmentUpload';
 import RetentionDeductionsCard from './RetentionDeductionsCard';
+import {
+  useWorkspaceTabs,
+  useWorkspaceTabTitle,
+} from '@/components/WorkspaceTabs';
 
 const fmt$ = (v: any) =>
   `$${Number(v || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -81,13 +85,18 @@ function Field({
 }
 
 export default function InvoiceDetailPage() {
-  const { id } = useParams<{ id: string }>();
+  const params = useParams<{ id: string }>();
   const router = useRouter();
-  const invoiceId = Number(id);
+  const [invoiceId] = useState(() => Number(params.id));
 
   const { isReadOnly } = useAuth();
+  const { closeTab } = useWorkspaceTabs();
   const [invoice, setInvoice] = useState<any>(null);
   const currentInvoiceId = Number(invoice?.id || invoiceId);
+  useWorkspaceTabTitle(
+    invoice?.invoice_no || `發票 #${invoiceId}`,
+    `/invoices/${invoiceId}`,
+  );
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -494,7 +503,7 @@ export default function InvoiceDetailPage() {
     if (!confirm('確定要刪除此發票吗？此操作無法復原。')) return;
     try {
       await invoicesApi.delete(currentInvoiceId);
-      router.push('/invoices');
+      closeTab(`/invoices/${invoiceId}`);
     } catch (err: any) {
       alert(err.response?.data?.message || '刪除失敗');
     }

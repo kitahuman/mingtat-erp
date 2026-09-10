@@ -3,7 +3,6 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { usePageState } from '@/hooks/usePageState';
 import DateInput from '@/components/DateInput';
 import DataTable from '@/components/DataTable';
-import { useRouter } from 'next/navigation';
 import {
   invoicesApi,
   invoiceStatementsApi,
@@ -22,6 +21,7 @@ import { useAuth } from '@/lib/auth';
 import { useRefetchOnFocus } from '@/hooks/useRefetchOnFocus';
 import { useColumnConfig } from '@/hooks/useColumnConfig';
 import { usePageRefresh } from '@/hooks/usePageRefresh';
+import { useWorkspaceTabs } from '@/components/WorkspaceTabs';
 
 const fmt$ = (v: any) =>
   `$${Number(v || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -124,6 +124,7 @@ type InvoiceListColumn = {
 };
 
 const INVOICE_CELL_PADDING = 'px-4';
+const INVOICE_SELECTION_STORAGE_KEY = 'mingtat-invoices-selected-rows';
 
 const getClientDisplayName = (client?: any) => {
   if (!client) return '-';
@@ -414,7 +415,7 @@ const STATEMENT_COLUMNS: StatementListColumn[] = [
 ];
 
 export default function InvoicesPage() {
-  const router = useRouter();
+  const { openTab } = useWorkspaceTabs();
   const { isReadOnly } = useAuth();
   const [data, setData] = useState<any[]>([]);
   const [total, setTotal] = useState(0);
@@ -504,6 +505,7 @@ export default function InvoicesPage() {
   // Invoice statement selection flow
   const selectAllInvoicesRef = useRef<HTMLInputElement>(null);
   const [selectedInvoiceRows, setSelectedInvoiceRows] = useState<Record<number, any>>({});
+  const [invoiceSelectionReady, setInvoiceSelectionReady] = useState(false);
   const [showStatementCreate, setShowStatementCreate] = useState(false);
 
   // Batch edit modal state
@@ -544,6 +546,30 @@ export default function InvoicesPage() {
     period_start: '',
     period_end: '',
   });
+
+  useEffect(() => {
+    try {
+      const stored = sessionStorage.getItem(INVOICE_SELECTION_STORAGE_KEY);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+          setSelectedInvoiceRows(parsed);
+        }
+      }
+    } catch {
+      sessionStorage.removeItem(INVOICE_SELECTION_STORAGE_KEY);
+    } finally {
+      setInvoiceSelectionReady(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!invoiceSelectionReady) return;
+    sessionStorage.setItem(
+      INVOICE_SELECTION_STORAGE_KEY,
+      JSON.stringify(selectedInvoiceRows),
+    );
+  }, [invoiceSelectionReady, selectedInvoiceRows]);
 
   const buildColumnFilterParams = useCallback(
     (filters: Record<string, string[]> = columnFilters) => {
@@ -1083,7 +1109,7 @@ export default function InvoicesPage() {
       setShowCreate(false);
       autoInvoiceTitleRef.current = '';
       setForm({ ...defaultForm });
-      router.push(`/invoices/${res.data.id}`);
+      openTab(`/invoices/${res.data.id}`, res.data.invoice_no || `發票 #${res.data.id}`);
     } catch (err: any) {
       alert(err.response?.data?.message || '建立失敗');
     } finally {
@@ -1617,7 +1643,13 @@ export default function InvoicesPage() {
           page={page}
           limit={50}
           onPageChange={setPage}
-          onRowClick={(row) => window.open(`/invoices/${row.id}`, '_blank')}
+          onRowClick={(row, event) =>
+            openTab(
+              `/invoices/${row.id}`,
+              row.invoice_no || `發票 #${row.id}`,
+              event,
+            )
+          }
           loading={loading}
           serverSideFilter
           columnFilters={activeColumnFilters}
