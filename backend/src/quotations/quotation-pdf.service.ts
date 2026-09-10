@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { PdfUtilService } from '../common/pdf-util.service';
+import { DOCUMENT_TAIL_PAGINATION_CSS } from '../common/document-pdf-layout';
 import { existsSync, readFileSync } from 'fs';
 import { extname, join, normalize } from 'path';
 
@@ -211,13 +212,14 @@ export class QuotationPdfService {
     const isRateOnlyItem = (item: any) => Boolean(item?.rate_only) || !item?.quantity || Number(item.quantity) === 0;
     const isRateOnlyTotal = (quotation.items || []).length > 0 && (quotation.items || []).every(isRateOnlyItem);
 
-    const itemRows = (quotation.items || [])
+    const quotationItems = quotation.items || [];
+    const itemRows = quotationItems
       .map((item: any, idx: number) => {
         const name = item.item_name || '';
         const description = item.item_description || '';
         const rateOnly = isRateOnlyItem(item);
         return `
-        <tr>
+        <tr${idx === quotationItems.length - 1 ? ' class="keep-with-tail"' : ''}>
           <td class="center">${idx + 1}</td>
           <td>
             <div class="item-title">${this.escapeHtml(name)}</div>
@@ -292,6 +294,7 @@ export class QuotationPdfService {
     .items tbody td.totals-label { text-align: right; font-weight: 800; color: #243b53; white-space: nowrap; word-break: keep-all; overflow-wrap: normal; }
     .items tbody td.totals-value { white-space: nowrap; word-break: keep-all; overflow-wrap: normal; }
     .grand-total td { background: ${themeLightBg} !important; border-top: 1.5px solid ${themeLightBg}; border-bottom: 1.5px solid ${themeLightBg} !important; font-size: 12px; font-weight: 900; color: ${theme}; }
+${DOCUMENT_TAIL_PAGINATION_CSS}
     .after-table { margin-top: 9px; page-break-inside: avoid; display: flex; flex-direction: column; }
     .terms-section { width: 100%; }
     .terms-box { border: 1px solid ${themeLightBorder}; background: ${themeLightBg}; padding: 8px 10px; min-height: 52px; white-space: pre-wrap; overflow-wrap: anywhere; font-size: ${(options as any).fontSizes.paymentTerms}px; }
@@ -349,41 +352,43 @@ export class QuotationPdfService {
         </tr>
       </thead>
       <tbody>
-        ${itemRows || `<tr><td colspan="6" class="center muted">${labels.noItems}</td></tr>`}
+        ${itemRows || `<tr class="keep-with-tail"><td colspan="6" class="center muted">${labels.noItems}</td></tr>`}
         ${totalsRows}
       </tbody>
     </table>
 
-    <div class="after-table">
-      <div class="terms-section">
-        <div class="section-label">${labels.paymentTerms}</div>
-        <div class="terms-box">${this.escapeMultiline(paymentTerms)}</div>
+    <div class="document-tail">
+      <div class="after-table">
+        <div class="terms-section">
+          <div class="section-label">${labels.paymentTerms}</div>
+          <div class="terms-box">${this.escapeMultiline(paymentTerms)}</div>
+        </div>
       </div>
-    </div>
 
-    <div class="footer-row">
-      ${options.showClientSignature || options.showCompanySignature ? `
-      <table class="signature-table">
-        <tr>
-          <td>
-            ${options.showClientSignature ? `
-            <div class="signature-block">
-              <div class="signature-stamp-space empty"></div>
-              <div class="signature-line"></div>
-              <div class="signature-company-name">${this.escapeHtml(clientDisplayName)}</div>
-            </div>` : ''}
-          </td>
-          <td>
-            ${options.showCompanySignature ? `
-            <div class="signature-block">
-              <div class="signature-stamp-space${stampDataUri ? '' : ' empty'}">${stampDataUri ? `<img class="stamp-img" src="${stampDataUri}" />` : ''}</div>
-              <div class="signature-line"></div>
-              <div class="signature-company-name">${this.escapeHtml(cp.chinese_name || company.name || '')}</div>
-            </div>` : ''}
-          </td>
-        </tr>
-      </table>
-      ` : ''}
+      <div class="footer-row">
+        ${options.showClientSignature || options.showCompanySignature ? `
+        <table class="signature-table">
+          <tr>
+            <td>
+              ${options.showClientSignature ? `
+              <div class="signature-block">
+                <div class="signature-stamp-space empty"></div>
+                <div class="signature-line"></div>
+                <div class="signature-company-name">${this.escapeHtml(clientDisplayName)}</div>
+              </div>` : ''}
+            </td>
+            <td>
+              ${options.showCompanySignature ? `
+              <div class="signature-block">
+                <div class="signature-stamp-space${stampDataUri ? '' : ' empty'}">${stampDataUri ? `<img class="stamp-img" src="${stampDataUri}" />` : ''}</div>
+                <div class="signature-line"></div>
+                <div class="signature-company-name">${this.escapeHtml(cp.chinese_name || company.name || '')}</div>
+              </div>` : ''}
+            </td>
+          </tr>
+        </table>
+        ` : ''}
+      </div>
     </div>
   </div>
 </body>
@@ -392,7 +397,7 @@ export class QuotationPdfService {
 
   private totalRow(label: string, value: string, grand: boolean) {
     return `
-      <tr class="${grand ? 'grand-total' : 'totals-row'}">
+      <tr class="${grand ? 'grand-total' : 'totals-row'} keep-with-tail">
         <td colspan="3"></td>
         <td colspan="2" class="totals-label">${this.escapeHtml(label)}</td>
         <td class="right totals-value"><strong>${this.escapeHtml(value)}</strong></td>

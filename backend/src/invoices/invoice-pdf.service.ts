@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { PdfUtilService } from '../common/pdf-util.service';
+import { DOCUMENT_TAIL_PAGINATION_CSS } from '../common/document-pdf-layout';
 import { existsSync, readFileSync } from 'fs';
 import { extname, join, normalize } from 'path';
 
@@ -320,13 +321,14 @@ export class InvoicePdfService {
         : '',
     ].join('');
 
-    const itemRows = (invoice.items || [])
+    const invoiceItems = invoice.items || [];
+    const itemRows = invoiceItems
       .map((item: any, idx: number) => {
         const name = item.item_name || item.description || '';
         const description =
           item.item_name && item.description ? item.description : '';
         return `
-        <tr>
+        <tr${idx === invoiceItems.length - 1 ? ' class="keep-with-tail"' : ''}>
           <td class="center">${idx + 1}</td>
           <td>
             <div class="item-title">${this.escapeMultiline(name)}</div>
@@ -428,7 +430,7 @@ export class InvoicePdfService {
     .items tbody td.totals-label { text-align: right; font-weight: 800; color: #243b53; white-space: nowrap; word-break: keep-all; overflow-wrap: normal; }
     .items tbody td.totals-value { white-space: nowrap; word-break: keep-all; overflow-wrap: normal; }
     .grand-total td { background: ${themeLightBg} !important; border-top: 1.5px solid ${themeLightBg}; border-bottom: 1.5px solid ${themeLightBg} !important; font-size: 12px; font-weight: 900; color: ${theme}; }
-    .avoid-break { page-break-inside: avoid; }
+${DOCUMENT_TAIL_PAGINATION_CSS}
     .after-table { margin-top: 9px; display: flex; flex-direction: column; }
     .terms-section { width: 100%; padding-right: 0; margin-bottom: 10px; }
     .payment-section { width: 100%; }
@@ -493,11 +495,11 @@ export class InvoicePdfService {
         </tr>
       </thead>
       <tbody>
-        ${itemRows || `<tr><td colspan="6" class="center muted">${labels.noItems}</td></tr>`}
+        ${itemRows || `<tr class="keep-with-tail"><td colspan="6" class="center muted">${labels.noItems}</td></tr>`}
         ${totalsRows}
       </tbody>
     </table>
-    <div class="avoid-break">
+    <div class="document-tail">
       <div class="after-table">
         <div class="terms-section">
           <div class="section-label">${labels.paymentTerms}</div>
@@ -547,7 +549,7 @@ export class InvoicePdfService {
 
   private totalRow(label: string, value: string, grand: boolean) {
     return `
-      <tr class="${grand ? 'grand-total' : 'totals-row'}">
+      <tr class="${grand ? 'grand-total' : 'totals-row'} keep-with-tail">
         <td colspan="3"></td>
         <td colspan="2" class="totals-label">${this.escapeHtml(label)}</td>
         <td class="right totals-value"><strong>${this.escapeHtml(value)}</strong></td>
