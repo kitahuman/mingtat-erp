@@ -52,7 +52,7 @@ const describePath = (path: string): WorkspacePath | null => {
   if (path === '/invoices') {
     return { path, title: '發票列表', group: 'invoices' };
   }
-  const invoiceMatch = path.match(/^\/invoices\/(\d+)(?:\/.*)?$/);
+  const invoiceMatch = path.match(/^\/invoices\/(\d+)$/);
   if (invoiceMatch) {
     return {
       path,
@@ -63,7 +63,7 @@ const describePath = (path: string): WorkspacePath | null => {
   if (path === '/quotations') {
     return { path, title: '報價單列表', group: 'quotations' };
   }
-  const quotationMatch = path.match(/^\/quotations\/(\d+)(?:\/.*)?$/);
+  const quotationMatch = path.match(/^\/quotations\/(\d+)$/);
   if (quotationMatch) {
     return {
       path,

@@ -586,7 +586,7 @@ export default function InvoiceDetailPage() {
         <div className="flex gap-2 flex-wrap justify-end">
           <button
             onClick={() =>
-              router.push(`/invoices/${currentInvoiceId}/pdf-preview`)
+              openTab(`/invoices/${currentInvoiceId}/pdf-preview`)
             }
             className="btn-primary"
           >
@@ -1445,7 +1445,7 @@ export default function InvoiceDetailPage() {
             <button
               type="button"
               onClick={() =>
-                router.push(`/invoices/${currentInvoiceId}/prepare`)
+                openTab(`/invoices/${currentInvoiceId}/prepare`)
               }
               disabled={linkedWorkLogs.length === 0}
               className="rounded bg-purple-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-purple-700 disabled:cursor-not-allowed disabled:opacity-50"
