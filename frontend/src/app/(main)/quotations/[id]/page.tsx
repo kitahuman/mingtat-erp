@@ -7,7 +7,10 @@ import Link from 'next/link';
 import Modal from '@/components/Modal';
 import { fmtDate, toInputDate } from '@/lib/dateUtils';
 import { useAuth } from '@/lib/auth';
-import { useWorkspaceTabTitle } from '@/components/WorkspaceTabs';
+import {
+  useWorkspaceTabs,
+  useWorkspaceTabTitle,
+} from '@/components/WorkspaceTabs';
 import DateInput from '@/components/DateInput';
 import AttachmentUpload from '@/components/AttachmentUpload';
 import SearchableSelect from '@/components/SearchableSelect';
@@ -95,8 +98,9 @@ export default function QuotationDetailPage() {
   const readOnly = isReadOnly('quotations');
   const params = useParams();
   const router = useRouter();
+  const { closeTab, openTab } = useWorkspaceTabs();
   const [quotation, setQuotation] = useState<any>(null);
-  const [quotationId] = useState(() => Number(params.id));
+  const quotationId = Number(params.id);
   useWorkspaceTabTitle(
     quotation?.quotation_no || `報價單 #${quotationId}`,
     `/quotations/${quotationId}`,
@@ -166,7 +170,7 @@ export default function QuotationDetailPage() {
       await loadRevisions(Number(data.id));
       setLoading(false);
     } catch {
-      router.push('/quotations');
+      closeTab(`/quotations/${quotationId}`);
     }
   };
 
@@ -179,7 +183,7 @@ export default function QuotationDetailPage() {
   const handleSwitchRevision = (revisionId: number) => {
     if (revisionId === currentQuotationId) return;
     if (editing && !confirm('切換版本會放棄尚未儲存的修改，是否繼續？')) return;
-    router.push(`/quotations/${revisionId}`);
+    openTab(`/quotations/${revisionId}`);
   };
 
   const handleCreateRevision = async () => {
@@ -191,7 +195,7 @@ export default function QuotationDetailPage() {
       const newRevisionId = Number(res.data?.id);
       await loadRevisions(currentQuotationId);
       if (newRevisionId) {
-        router.push(`/quotations/${newRevisionId}`);
+        openTab(`/quotations/${newRevisionId}`);
       }
     } catch (err: any) {
       alert(err.response?.data?.message || '建立修訂版失敗');
@@ -210,7 +214,7 @@ export default function QuotationDetailPage() {
       if (revisionId === currentQuotationId) {
         await loadData();
       } else {
-        router.push(`/quotations/${revisionId}`);
+        openTab(`/quotations/${revisionId}`);
       }
     } catch (err: any) {
       alert(err.response?.data?.message || '設為正式版失敗');
@@ -301,7 +305,10 @@ export default function QuotationDetailPage() {
         remarks: invoiceForm.remarks || undefined,
       });
       setShowInvoiceModal(false);
-      router.push(`/invoices/${res.data.id}`);
+      openTab(
+        `/invoices/${res.data.id}`,
+        res.data.invoice_no || `發票 #${res.data.id}`,
+      );
     } catch (err: any) {
       alert(err.response?.data?.message || '轉換失敗');
     } finally { setCreatingInvoice(false); }

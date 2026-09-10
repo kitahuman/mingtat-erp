@@ -1,6 +1,6 @@
 'use client';
-import { useEffect, useState } from 'react';
-import { useRouter, usePathname } from 'next/navigation';
+import { Suspense, useEffect, useState } from 'react';
+import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import Cookies from 'js-cookie';
 import Sidebar from '@/components/Sidebar';
 import { ChatWidget } from '@/components/ChatWidget';
@@ -90,8 +90,24 @@ function getPageTitle(pathname: string): string {
 // We use a custom event instead to avoid refactoring the entire auth context.
 
 export default function MainLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600" />
+        </div>
+      }
+    >
+      <MainLayoutContent>{children}</MainLayoutContent>
+    </Suspense>
+  );
+}
+
+function MainLayoutContent({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const isWorkspaceFrame = searchParams.get('workspace_frame') === '1';
   const { user, loading, canAccessPath } = useAuth();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [accessDenied, setAccessDenied] = useState(false);
@@ -141,6 +157,23 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
       <div className="min-h-screen flex items-center justify-center">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
       </div>
+    );
+  }
+
+  if (isWorkspaceFrame) {
+    return (
+      <main className="min-h-screen bg-white">
+        {accessDenied ? (
+          <div className="min-h-screen flex items-center justify-center">
+            <div className="text-center">
+              <h2 className="text-2xl font-bold text-gray-800 mb-2">無權限訪問</h2>
+              <p className="text-gray-500">您沒有權限查看此頁面，請聯繫管理員。</p>
+            </div>
+          </div>
+        ) : (
+          <WorkspaceTabsProvider>{children}</WorkspaceTabsProvider>
+        )}
+      </main>
     );
   }
 

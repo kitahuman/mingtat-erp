@@ -87,10 +87,10 @@ function Field({
 export default function InvoiceDetailPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
-  const [invoiceId] = useState(() => Number(params.id));
+  const invoiceId = Number(params.id);
 
   const { isReadOnly } = useAuth();
-  const { closeTab } = useWorkspaceTabs();
+  const { closeTab, openTab } = useWorkspaceTabs();
   const [invoice, setInvoice] = useState<any>(null);
   const currentInvoiceId = Number(invoice?.id || invoiceId);
   useWorkspaceTabTitle(
@@ -173,7 +173,7 @@ export default function InvoiceDetailPage() {
       });
       await loadRevisions(Number(data.id));
     } catch {
-      router.push('/invoices');
+      closeTab(`/invoices/${invoiceId}`);
     } finally {
       setLoading(false);
     }
@@ -332,7 +332,7 @@ export default function InvoiceDetailPage() {
   const handleSwitchRevision = (revisionId: number) => {
     if (revisionId === currentInvoiceId) return;
     if (editing && !confirm('切換版本會放棄尚未儲存的修改，是否繼續？')) return;
-    router.push(`/invoices/${revisionId}`);
+    openTab(`/invoices/${revisionId}`);
   };
 
   const handleCreateRevision = async () => {
@@ -344,7 +344,7 @@ export default function InvoiceDetailPage() {
       const newRevisionId = Number(res.data?.id);
       await loadRevisions(currentInvoiceId);
       if (newRevisionId) {
-        router.push(`/invoices/${newRevisionId}`);
+        openTab(`/invoices/${newRevisionId}`);
       }
     } catch (err: any) {
       alert(err.response?.data?.message || '建立修訂版失敗');
@@ -364,7 +364,7 @@ export default function InvoiceDetailPage() {
       if (revisionId === currentInvoiceId) {
         await loadInvoice();
       } else {
-        router.push(`/invoices/${revisionId}`);
+        openTab(`/invoices/${revisionId}`);
       }
     } catch (err: any) {
       alert(err.response?.data?.message || '設為正式版失敗');
@@ -515,7 +515,7 @@ export default function InvoiceDetailPage() {
       const res = await invoicesApi.duplicate(currentInvoiceId);
       const newInvoiceId = Number(res.data?.id);
       if (newInvoiceId) {
-        router.push(`/invoices/${newInvoiceId}`);
+        openTab(`/invoices/${newInvoiceId}`);
       }
     } catch (err: any) {
       alert(err.response?.data?.message || '複製發票失敗');

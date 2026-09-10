@@ -9,12 +9,22 @@ import {
   useRef,
   useState,
 } from 'react';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+
+type WorkspaceGroup = 'invoices' | 'quotations';
 
 type WorkspaceTab = {
+  id: string;
+  path: string;
+  initialPath: string;
+  title: string;
+  group: WorkspaceGroup;
+};
+
+type WorkspacePath = {
   path: string;
   title: string;
-  group: 'invoices' | 'quotations';
+  group: WorkspaceGroup;
 };
 
 type OpenTabEvent = {
@@ -31,16 +41,18 @@ type WorkspaceTabsContextValue = {
 };
 
 const MAX_TABS = 12;
+const MESSAGE_SOURCE = 'mingtat-workspace';
+let tabSequence = 0;
 
 const WorkspaceTabsContext = createContext<WorkspaceTabsContextValue | null>(
   null,
 );
 
-const describePath = (path: string): WorkspaceTab | null => {
+const describePath = (path: string): WorkspacePath | null => {
   if (path === '/invoices') {
     return { path, title: '發票列表', group: 'invoices' };
   }
-  const invoiceMatch = path.match(/^\/invoices\/(\d+)$/);
+  const invoiceMatch = path.match(/^\/invoices\/(\d+)(?:\/.*)?$/);
   if (invoiceMatch) {
     return {
       path,
@@ -51,7 +63,7 @@ const describePath = (path: string): WorkspaceTab | null => {
   if (path === '/quotations') {
     return { path, title: '報價單列表', group: 'quotations' };
   }
-  const quotationMatch = path.match(/^\/quotations\/(\d+)$/);
+  const quotationMatch = path.match(/^\/quotations\/(\d+)(?:\/.*)?$/);
   if (quotationMatch) {
     return {
       path,
@@ -62,6 +74,19 @@ const describePath = (path: string): WorkspaceTab | null => {
   return null;
 };
 
+const createWorkspaceTab = (descriptor: WorkspacePath, title?: string): WorkspaceTab => ({
+  id: `workspace-tab-${Date.now()}-${++tabSequence}`,
+  path: descriptor.path,
+  initialPath: descriptor.path,
+  title: title || descriptor.title,
+  group: descriptor.group,
+});
+
+const addFrameFlag = (path: string) => {
+  const separator = path.includes('?') ? '&' : '?';
+  return `${path}${separator}workspace_frame=1`;
+};
+
 const fallbackPathFor = (tab: WorkspaceTab) => {
   if (tab.path === '/invoices' || tab.path === '/quotations') {
     return '/dashboard';
@@ -69,63 +94,57 @@ const fallbackPathFor = (tab: WorkspaceTab) => {
   return tab.group === 'invoices' ? '/invoices' : '/quotations';
 };
 
+const postToParent = (message: Record<string, unknown>) => {
+  if (typeof window === 'undefined' || window.parent === window) return;
+  window.parent.postMessage(
+    { source: MESSAGE_SOURCE, ...message },
+    window.location.origin,
+  );
+};
+
 export function WorkspaceTabsProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname() || '/';
+  const searchParams = useSearchParams();
+  const [isWorkspaceFrame] = useState(
+    () => searchParams.get('workspace_frame') === '1',
+  );
   const currentDescriptor = useMemo(() => describePath(pathname), [pathname]);
   const [tabs, setTabs] = useState<WorkspaceTab[]>(() =>
-    currentDescriptor ? [currentDescriptor] : [],
+    !isWorkspaceFrame && currentDescriptor
+      ? [createWorkspaceTab(currentDescriptor)]
+      : [],
   );
-  const [cachedPages, setCachedPages] = useState<Record<string, React.ReactNode>>(
-    {},
-  );
-  const scrollPositions = useRef<Record<string, number>>({});
   const previousPath = useRef(pathname);
+  const tabsRef = useRef(tabs);
 
   useEffect(() => {
-    const previous = previousPath.current;
-    if (previous !== pathname) {
-      window.dispatchEvent(new Event('workspace-tab-change'));
-      scrollPositions.current[previous] = window.scrollY;
-      previousPath.current = pathname;
-      requestAnimationFrame(() => {
-        window.scrollTo({
-          top: scrollPositions.current[pathname] || 0,
-          behavior: 'auto',
-        });
-        const hasVisibleModal = Array.from(
-          document.querySelectorAll('[data-erp-modal-root]'),
-        ).some((element) => !element.closest('[hidden]'));
-        document.body.style.overflow = hasVisibleModal ? 'hidden' : '';
+    tabsRef.current = tabs;
+  }, [tabs]);
+
+  const activateParentTab = useCallback(
+    (path: string, title?: string) => {
+      const descriptor = describePath(path);
+      if (!descriptor) {
+        router.push(path);
+        return;
+      }
+
+      setTabs((current) => {
+        const existing = current.find((tab) => tab.path === path);
+        if (existing) {
+          return title
+            ? current.map((tab) =>
+                tab.id === existing.id ? { ...tab, title } : tab,
+              )
+            : current;
+        }
+        return [...current, createWorkspaceTab(descriptor, title)].slice(-MAX_TABS);
       });
-    }
-
-    if (!currentDescriptor) return;
-
-    setTabs((current) => {
-      const existing = current.find((tab) => tab.path === pathname);
-      if (existing) return current;
-      return [...current, currentDescriptor].slice(-MAX_TABS);
-    });
-
-    // Once a managed page is mounted, retain that exact React tree. Re-visiting
-    // the URL only reveals the cached tree, so checkbox/form/filter state survives.
-    setCachedPages((current) =>
-      current[pathname] ? current : { ...current, [pathname]: children },
-    );
-  }, [pathname, currentDescriptor, children]);
-
-  useEffect(() => {
-    const retainedPaths = new Set(tabs.map((tab) => tab.path));
-    if (currentDescriptor) retainedPaths.add(pathname);
-    setCachedPages((current) => {
-      const entries = Object.entries(current).filter(([path]) =>
-        retainedPaths.has(path),
-      );
-      if (entries.length === Object.keys(current).length) return current;
-      return Object.fromEntries(entries);
-    });
-  }, [currentDescriptor, pathname, tabs]);
+      router.push(path);
+    },
+    [router],
+  );
 
   const openTab = useCallback(
     (path: string, title?: string, event?: OpenTabEvent) => {
@@ -139,98 +158,206 @@ export function WorkspaceTabsProvider({ children }: { children: React.ReactNode 
         return;
       }
 
-      const descriptor = describePath(path);
-      if (descriptor) {
-        setTabs((current) => {
-          const existing = current.find((tab) => tab.path === path);
-          if (existing) {
-            return current.map((tab) =>
-              tab.path === path && title ? { ...tab, title } : tab,
-            );
-          }
-          return [
-            ...current,
-            { ...descriptor, title: title || descriptor.title },
-          ].slice(-MAX_TABS);
-        });
+      if (isWorkspaceFrame) {
+        postToParent({ action: 'open', path, title });
+        return;
       }
-      router.push(path);
+      activateParentTab(path, title);
     },
-    [router],
+    [activateParentTab, isWorkspaceFrame],
   );
 
-  const setTabTitle = useCallback((path: string, title: string) => {
-    if (!title.trim()) return;
-    setTabs((current) =>
-      current.map((tab) =>
-        tab.path === path ? { ...tab, title: title.trim() } : tab,
-      ),
-    );
-  }, []);
+  const setTabTitle = useCallback(
+    (path: string, title: string) => {
+      if (!title.trim()) return;
+      if (isWorkspaceFrame) {
+        postToParent({ action: 'set-title', path, title: title.trim() });
+        return;
+      }
+      setTabs((current) =>
+        current.map((tab) =>
+          tab.path === path ? { ...tab, title: title.trim() } : tab,
+        ),
+      );
+    },
+    [isWorkspaceFrame],
+  );
 
-  const closeTab = useCallback(
-    (path: string) => {
-      const index = tabs.findIndex((tab) => tab.path === path);
+  const closeParentTabById = useCallback(
+    (tabId: string) => {
+      const current = tabsRef.current;
+      const index = current.findIndex((tab) => tab.id === tabId);
       if (index < 0) return;
 
-      const closing = tabs[index];
-      const nextTabs = tabs.filter((tab) => tab.path !== path);
+      const closing = current[index];
+      const nextTabs = current.filter((tab) => tab.id !== tabId);
       setTabs(nextTabs);
-      setCachedPages((current) => {
-        const next = { ...current };
-        delete next[path];
-        return next;
-      });
-      delete scrollPositions.current[path];
 
-      if (pathname === path) {
+      if (pathname === closing.path) {
         const adjacent = nextTabs[Math.min(index, nextTabs.length - 1)];
         router.push(adjacent?.path || fallbackPathFor(closing));
       }
     },
-    [pathname, router, tabs],
+    [pathname, router],
   );
 
-  const closeOtherTabs = useCallback(() => {
-    const descriptor = describePath(pathname);
-    if (!descriptor) return;
-    setTabs((current) => current.filter((tab) => tab.path === pathname));
-    setCachedPages((current) => {
-      const activePage = current[pathname];
-      return activePage ? { [pathname]: activePage } : {};
-    });
-    scrollPositions.current = {
-      [pathname]: scrollPositions.current[pathname] || 0,
-    };
-  }, [pathname]);
+  const closeTab = useCallback(
+    (path: string) => {
+      if (isWorkspaceFrame) {
+        postToParent({ action: 'close', path });
+        return;
+      }
+      const tab = tabsRef.current.find((item) => item.path === path);
+      if (tab) closeParentTabById(tab.id);
+    },
+    [closeParentTabById, isWorkspaceFrame],
+  );
 
-  const pagesToRender = useMemo(() => {
-    if (!currentDescriptor || cachedPages[pathname]) return cachedPages;
-    return { ...cachedPages, [pathname]: children };
-  }, [cachedPages, children, currentDescriptor, pathname]);
+  useEffect(() => {
+    if (isWorkspaceFrame) {
+      postToParent({ action: 'frame-navigate', path: pathname });
+      return;
+    }
+
+    if (!currentDescriptor) return;
+    setTabs((current) => {
+      if (current.some((tab) => tab.path === pathname)) return current;
+      return [...current, createWorkspaceTab(currentDescriptor)].slice(-MAX_TABS);
+    });
+  }, [currentDescriptor, isWorkspaceFrame, pathname]);
+
+  // Links rendered inside a workspace frame are delegated to the parent. This
+  // prevents the iframe from destroying its current page instance when users
+  // click 「返回列表」 or another invoice/quotation link.
+  useEffect(() => {
+    if (!isWorkspaceFrame) return;
+
+    const interceptLink = (event: MouseEvent) => {
+      if (
+        event.defaultPrevented ||
+        event.button !== 0 ||
+        event.ctrlKey ||
+        event.metaKey ||
+        event.shiftKey ||
+        event.altKey
+      ) {
+        return;
+      }
+      const target = event.target as Element | null;
+      const anchor = target?.closest('a[href]') as HTMLAnchorElement | null;
+      if (
+        !anchor ||
+        anchor.target === '_blank' ||
+        anchor.hasAttribute('download')
+      ) {
+        return;
+      }
+
+      const url = new URL(anchor.href, window.location.href);
+      if (url.origin !== window.location.origin) return;
+
+      event.preventDefault();
+      const targetPath = `${url.pathname}${url.search}${url.hash}`;
+      if (describePath(url.pathname)) {
+        postToParent({ action: 'open', path: targetPath });
+      } else {
+        postToParent({ action: 'navigate-outside', path: targetPath });
+      }
+    };
+
+    document.addEventListener('click', interceptLink, true);
+    return () => document.removeEventListener('click', interceptLink, true);
+  }, [isWorkspaceFrame]);
+
+  // Parent receives navigation/title/resize requests from its persistent frames.
+  useEffect(() => {
+    if (isWorkspaceFrame) return;
+
+    const handleFrameMessage = (event: MessageEvent) => {
+      if (
+        event.origin !== window.location.origin ||
+        event.data?.source !== MESSAGE_SOURCE
+      ) {
+        return;
+      }
+
+      const frame = Array.from(
+        document.querySelectorAll<HTMLIFrameElement>('iframe[data-workspace-tab-id]'),
+      ).find((item) => item.contentWindow === event.source);
+      const tabId = frame?.dataset.workspaceTabId;
+      const action = event.data?.action;
+
+      if (action === 'open' && typeof event.data.path === 'string') {
+        activateParentTab(event.data.path, event.data.title);
+        return;
+      }
+      if (action === 'navigate-outside' && typeof event.data.path === 'string') {
+        router.push(event.data.path);
+        return;
+      }
+      if (!tabId) return;
+
+      if (action === 'set-title' && typeof event.data.title === 'string') {
+        setTabs((current) =>
+          current.map((tab) =>
+            tab.id === tabId ? { ...tab, title: event.data.title } : tab,
+          ),
+        );
+        return;
+      }
+      if (action === 'close') {
+        closeParentTabById(tabId);
+        return;
+      }
+      if (
+        action === 'frame-navigate' &&
+        typeof event.data.path === 'string' &&
+        event.data.path !== pathname
+      ) {
+        const descriptor = describePath(event.data.path);
+        if (!descriptor) {
+          router.push(event.data.path);
+          return;
+        }
+        setTabs((current) =>
+          current.map((tab) =>
+            tab.id === tabId
+              ? {
+                  ...tab,
+                  path: descriptor.path,
+                  group: descriptor.group,
+                  title: descriptor.title,
+                }
+              : tab,
+          ),
+        );
+        router.replace(descriptor.path);
+      }
+    };
+
+    window.addEventListener('message', handleFrameMessage);
+    return () => window.removeEventListener('message', handleFrameMessage);
+  }, [activateParentTab, closeParentTabById, isWorkspaceFrame, pathname, router]);
+
+  useEffect(() => {
+    if (isWorkspaceFrame || previousPath.current === pathname) return;
+    previousPath.current = pathname;
+    window.dispatchEvent(new Event('workspace-tab-change'));
+  }, [isWorkspaceFrame, pathname]);
+
+  const closeOtherTabs = useCallback(() => {
+    const active = tabsRef.current.find((tab) => tab.path === pathname);
+    if (active) setTabs([active]);
+  }, [pathname]);
 
   const contextValue = useMemo(
     () => ({ openTab, setTabTitle, closeTab }),
-    [openTab, setTabTitle, closeTab],
+    [closeTab, openTab, setTabTitle],
   );
 
-  if (!currentDescriptor) {
+  if (isWorkspaceFrame) {
     return (
       <WorkspaceTabsContext.Provider value={contextValue}>
-        {tabs.length > 0 && (
-          <WorkspaceTabBar
-            tabs={tabs}
-            activePath={pathname}
-            onOpen={(path) => router.push(path)}
-            onClose={closeTab}
-            onCloseOthers={closeOtherTabs}
-          />
-        )}
-        {Object.entries(cachedPages).map(([path, page]) => (
-          <div key={path} hidden aria-hidden="true">
-            {page}
-          </div>
-        ))}
         {children}
       </WorkspaceTabsContext.Provider>
     );
@@ -238,23 +365,29 @@ export function WorkspaceTabsProvider({ children }: { children: React.ReactNode 
 
   return (
     <WorkspaceTabsContext.Provider value={contextValue}>
-      <WorkspaceTabBar
-        tabs={tabs}
-        activePath={pathname}
-        onOpen={(path) => router.push(path)}
-        onClose={closeTab}
-        onCloseOthers={closeOtherTabs}
-      />
-      {Object.entries(pagesToRender).map(([path, page]) => (
-        <div
-          key={path}
-          data-workspace-page={path}
-          hidden={path !== pathname}
-          aria-hidden={path !== pathname}
-        >
-          {page}
-        </div>
+      {tabs.length > 0 && (
+        <WorkspaceTabBar
+          tabs={tabs}
+          activePath={pathname}
+          onOpen={(path) => router.push(path)}
+          onClose={closeParentTabById}
+          onCloseOthers={closeOtherTabs}
+        />
+      )}
+
+      {tabs.map((tab) => (
+        <iframe
+          key={tab.id}
+          data-workspace-tab-id={tab.id}
+          src={addFrameFlag(tab.initialPath)}
+          title={tab.title}
+          hidden={tab.path !== pathname}
+          aria-hidden={tab.path !== pathname}
+          className="block h-[calc(100vh-8rem)] min-h-[480px] w-full border-0 bg-white"
+        />
       ))}
+
+      {!currentDescriptor && children}
     </WorkspaceTabsContext.Provider>
   );
 }
@@ -269,19 +402,17 @@ function WorkspaceTabBar({
   tabs: WorkspaceTab[];
   activePath: string;
   onOpen: (path: string) => void;
-  onClose: (path: string) => void;
+  onClose: (id: string) => void;
   onCloseOthers: () => void;
 }) {
-  if (tabs.length === 0) return null;
-
   return (
-    <div className="mb-4 flex items-center gap-2 border-b border-gray-200 bg-white">
+    <div className="mb-3 flex items-center gap-2 border-b border-gray-200 bg-white">
       <div className="flex min-w-0 flex-1 items-end gap-1 overflow-x-auto px-1 pt-1">
         {tabs.map((tab) => {
           const active = tab.path === activePath;
           return (
             <div
-              key={tab.path}
+              key={tab.id}
               className={`group flex max-w-[240px] shrink-0 items-center rounded-t-lg border border-b-0 text-sm transition-colors ${
                 active
                   ? 'border-gray-300 bg-white text-primary-700 shadow-sm'
@@ -312,7 +443,7 @@ function WorkspaceTabBar({
                 type="button"
                 onClick={(event) => {
                   event.stopPropagation();
-                  onClose(tab.path);
+                  onClose(tab.id);
                 }}
                 className="mr-1 rounded px-1.5 py-1 text-gray-400 hover:bg-gray-300 hover:text-gray-700"
                 aria-label={`關閉 ${tab.title}`}
