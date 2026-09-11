@@ -52,6 +52,16 @@ const describePath = (path: string): WorkspacePath | null => {
   if (path === '/invoices') {
     return { path, title: '發票列表', group: 'invoices' };
   }
+  const invoicePdfPreviewMatch = path.match(
+    /^\/invoices\/(\d+)\/pdf-preview$/,
+  );
+  if (invoicePdfPreviewMatch) {
+    return {
+      path,
+      title: `發票 #${invoicePdfPreviewMatch[1]} · PDF`,
+      group: 'invoices',
+    };
+  }
   const invoiceMatch = path.match(/^\/invoices\/(\d+)$/);
   if (invoiceMatch) {
     return {

@@ -586,7 +586,7 @@ export default function InvoiceDetailPage() {
         <div className="flex gap-2 flex-wrap justify-end">
           <button
             onClick={() =>
-              openTab(`/invoices/${currentInvoiceId}/pdf-preview`)
+              router.push(`/invoices/${currentInvoiceId}/pdf-preview`)
             }
             className="btn-primary"
           >
