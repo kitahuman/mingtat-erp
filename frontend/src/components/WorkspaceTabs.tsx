@@ -383,7 +383,7 @@ export function WorkspaceTabsProvider({ children }: { children: React.ReactNode 
           title={tab.title}
           hidden={tab.path !== pathname}
           aria-hidden={tab.path !== pathname}
-          className="block h-[calc(100vh-8rem)] min-h-[480px] w-full border-0 bg-white"
+          className={`${tab.path === pathname ? 'block' : 'hidden'} h-[calc(100vh-8rem)] min-h-[480px] w-full border-0 bg-white`}
         />
       ))}
 
