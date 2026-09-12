@@ -1,6 +1,6 @@
 'use client';
 import { useState, useEffect, useRef } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams } from 'next/navigation';
 import { quotationsApi, companiesApi, partnersApi, invoicesApi } from '@/lib/api';
 import ClientContractCombobox from '@/components/ClientContractCombobox';
 import Link from 'next/link';
@@ -9,6 +9,7 @@ import { fmtDate, toInputDate } from '@/lib/dateUtils';
 import { useAuth } from '@/lib/auth';
 import {
   useWorkspaceTabs,
+  useWorkspaceTabDirty,
   useWorkspaceTabTitle,
 } from '@/components/WorkspaceTabs';
 import DateInput from '@/components/DateInput';
@@ -97,7 +98,6 @@ export default function QuotationDetailPage() {
   const { isReadOnly } = useAuth();
   const readOnly = isReadOnly('quotations');
   const params = useParams();
-  const router = useRouter();
   const { closeTab, openTab } = useWorkspaceTabs();
   const [quotation, setQuotation] = useState<any>(null);
   const quotationId = Number(params.id);
@@ -107,6 +107,11 @@ export default function QuotationDetailPage() {
   );
   const currentQuotationId = Number(quotation?.id || quotationId);
   const [editing, setEditing] = useState(false);
+  useWorkspaceTabDirty(
+    editing,
+    '報價單資料正在編輯，尚未儲存',
+    `/quotations/${quotationId}`,
+  );
   const [form, setForm] = useState<any>({});
   const [companies, setCompanies] = useState<any[]>([]);
   const [partners, setPartners] = useState<any[]>([]);

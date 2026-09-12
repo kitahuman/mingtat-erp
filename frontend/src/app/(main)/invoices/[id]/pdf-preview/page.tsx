@@ -1,9 +1,14 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams } from 'next/navigation';
 import { invoicesApi, paymentTermTemplatesApi, systemSettingsApi } from '@/lib/api';
 import PaymentTermsSelector from '@/components/PaymentTermsSelector';
+import {
+  useWorkspaceTabDirty,
+  useWorkspaceTabTitle,
+  useWorkspaceTabs,
+} from '@/components/WorkspaceTabs';
 import Cookies from 'js-cookie';
 
 type InvoicePdfLanguage = 'zh' | 'en' | 'bilingual';
@@ -52,10 +57,14 @@ let SYSTEM_DEFAULTS: PdfPreviewOptions = { ...DEFAULT_OPTIONS };
 
 export default function InvoicePdfPreviewPage() {
   const { id } = useParams<{ id: string }>();
-  const router = useRouter();
   const invoiceId = Number(id);
+  const { closeTab, openTab, setTabDirty } = useWorkspaceTabs();
 
   const [invoice, setInvoice] = useState<any>(null);
+  useWorkspaceTabTitle(
+    invoice?.invoice_no || `發票 #${invoiceId}`,
+    `/invoices/${invoiceId}`,
+  );
   const [options, setOptions] = useState<PdfPreviewOptions>(SYSTEM_DEFAULTS);
   const [pdfUrl, setPdfUrl] = useState('');
   const [loadingPreview, setLoadingPreview] = useState(true);
@@ -65,6 +74,16 @@ export default function InvoicePdfPreviewPage() {
   const [error, setError] = useState('');
   const latestOptionsRef = useRef<PdfPreviewOptions>(DEFAULT_OPTIONS);
   const lastSavedSignatureRef = useRef('');
+  const discardOnWorkspaceCloseRef = useRef(false);
+
+  useEffect(() => {
+    const handleWorkspaceDiscard = () => {
+      discardOnWorkspaceCloseRef.current = true;
+    };
+    window.addEventListener('workspace-discard', handleWorkspaceDiscard);
+    return () =>
+      window.removeEventListener('workspace-discard', handleWorkspaceDiscard);
+  }, []);
 
   useEffect(() => {
     latestOptionsRef.current = options;
@@ -92,6 +111,12 @@ export default function InvoicePdfPreviewPage() {
   const getOptionsSignature = useCallback(
     (current: PdfPreviewOptions) => JSON.stringify(buildSavePayload(current)),
     [buildSavePayload],
+  );
+  useWorkspaceTabDirty(
+    lastSavedSignatureRef.current !== '' &&
+      getOptionsSignature(options) !== lastSavedSignatureRef.current,
+    '發票 PDF 設定尚未儲存',
+    `/invoices/${invoiceId}`,
   );
 
   const requestParams = useMemo(
@@ -218,8 +243,8 @@ export default function InvoicePdfPreviewPage() {
           return loadedOptions;
         });
       })
-      .catch(() => router.push('/invoices'));
-  }, [invoiceId, router, getOptionsSignature]);
+      .catch(() => closeTab(`/invoices/${invoiceId}`));
+  }, [closeTab, getOptionsSignature, invoiceId]);
 
   useEffect(() => {
     if (!Number.isFinite(invoiceId)) return;
@@ -291,6 +316,7 @@ export default function InvoicePdfPreviewPage() {
 
   const savePdfPreviewOptionsKeepalive = useCallback(() => {
     if (!Number.isFinite(invoiceId)) return;
+    if (discardOnWorkspaceCloseRef.current) return;
 
     const currentOptions = latestOptionsRef.current;
     const payload = buildSavePayload(currentOptions);
@@ -323,7 +349,10 @@ export default function InvoicePdfPreviewPage() {
 
   const handleBack = async () => {
     const saved = await savePdfPreviewOptions();
-    if (saved) router.push(`/invoices/${invoiceId}`);
+    if (saved) {
+      setTabDirty(`/invoices/${invoiceId}`, false);
+      openTab(`/invoices/${invoiceId}`);
+    }
   };
 
   const handleDownloadPdf = async () => {

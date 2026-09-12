@@ -35,6 +35,10 @@ export function useRefetchOnFocus(
     };
 
     window.addEventListener('focus', handleFocus);
-    return () => window.removeEventListener('focus', handleFocus);
+    window.addEventListener('workspace-activated', handleFocus);
+    return () => {
+      window.removeEventListener('focus', handleFocus);
+      window.removeEventListener('workspace-activated', handleFocus);
+    };
   }, [enabled, minIntervalMs]);
 }

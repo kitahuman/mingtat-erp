@@ -1,7 +1,7 @@
 'use client';
 import { useState, useEffect, useRef } from 'react';
 import DateInput from '@/components/DateInput';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import {
   invoicesApi,
@@ -22,6 +22,7 @@ import AttachmentUpload from '@/components/AttachmentUpload';
 import RetentionDeductionsCard from './RetentionDeductionsCard';
 import {
   useWorkspaceTabs,
+  useWorkspaceTabDirty,
   useWorkspaceTabTitle,
 } from '@/components/WorkspaceTabs';
 
@@ -86,7 +87,6 @@ function Field({
 
 export default function InvoiceDetailPage() {
   const params = useParams<{ id: string }>();
-  const router = useRouter();
   const invoiceId = Number(params.id);
 
   const { isReadOnly } = useAuth();
@@ -100,6 +100,11 @@ export default function InvoiceDetailPage() {
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
+  useWorkspaceTabDirty(
+    editing,
+    '發票資料正在編輯，尚未儲存',
+    `/invoices/${invoiceId}`,
+  );
   const [form, setForm] = useState<any>({});
   const autoInvoiceTitleRef = useRef('');
   const [revisions, setRevisions] = useState<InvoiceRevisionSummary[]>([]);
@@ -586,7 +591,7 @@ export default function InvoiceDetailPage() {
         <div className="flex gap-2 flex-wrap justify-end">
           <button
             onClick={() =>
-              router.push(`/invoices/${currentInvoiceId}/pdf-preview`)
+              openTab(`/invoices/${currentInvoiceId}/pdf-preview`)
             }
             className="btn-primary"
           >
@@ -811,7 +816,7 @@ export default function InvoiceDetailPage() {
                           <button
                             type="button"
                             onClick={() =>
-                              router.push(
+                              openTab(
                                 `/invoices/${revision.id}/pdf-preview`,
                               )
                             }

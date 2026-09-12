@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams } from 'next/navigation';
 import {
   companiesApi,
   contractsApi,
@@ -18,6 +18,11 @@ import {
 } from '@/lib/api';
 import ColumnFilter from '@/components/ColumnFilter';
 import ColumnCustomizer from '@/components/ColumnCustomizer';
+import {
+  useWorkspaceTabDirty,
+  useWorkspaceTabTitle,
+  useWorkspaceTabs,
+} from '@/components/WorkspaceTabs';
 import { useColumnConfig } from '@/hooks/useColumnConfig';
 import { fmtDate } from '@/lib/dateUtils';
 import EditableCell from '../../../work-logs/EditableCell';
@@ -123,16 +128,43 @@ const normalizeComparable = (value: any): any => {
   return value;
 };
 
+const getDraftsSignature = (
+  drafts: Map<number, Record<string, any>>,
+): string =>
+  JSON.stringify(
+    Array.from(drafts.entries())
+      .sort(([left], [right]) => left - right)
+      .map(([id, fields]) => [
+        id,
+        Object.entries(fields).sort(([left], [right]) =>
+          left.localeCompare(right),
+        ),
+      ]),
+  );
+
 export default function InvoicePreparePage() {
   const { id } = useParams<{ id: string }>();
-  const router = useRouter();
   const invoiceId = Number(id);
+  const { openTab } = useWorkspaceTabs();
 
   const [invoice, setInvoice] = useState<any>(null);
+  useWorkspaceTabTitle(
+    invoice?.invoice_no || `發票 #${invoiceId}`,
+    `/invoices/${invoiceId}`,
+  );
   const [baseRows, setBaseRows] = useState<any[]>([]);
   const [drafts, setDrafts] = useState<Map<number, Record<string, any>>>(new Map());
   const [savedDraftIds, setSavedDraftIds] = useState<Set<number>>(new Set());
   const [loading, setLoading] = useState(true);
+  const savedDraftSignatureRef = useRef(getDraftsSignature(new Map()));
+  const draftSignature = useMemo(() => getDraftsSignature(drafts), [drafts]);
+  const hasUnsavedDrafts =
+    !loading && draftSignature !== savedDraftSignatureRef.current;
+  useWorkspaceTabDirty(
+    hasUnsavedDrafts,
+    '發票整理草稿尚未儲存',
+    `/invoices/${invoiceId}`,
+  );
   const [saving, setSaving] = useState(false);
   const [resetting, setResetting] = useState(false);
   const [sortBy, setSortBy] = useState('scheduled_date');
@@ -218,15 +250,16 @@ export default function InvoicePreparePage() {
           nextDrafts.set(workLogId, { ...draft.draft_data });
         }
       }
+      savedDraftSignatureRef.current = getDraftsSignature(nextDrafts);
       setDrafts(nextDrafts);
       setSavedDraftIds(nextSavedIds);
     } catch (err: any) {
       showToast(err.response?.data?.message || '載入整理視窗失敗', 'error');
-      router.push(`/invoices/${invoiceId}`);
+      openTab(`/invoices/${invoiceId}`);
     } finally {
       setLoading(false);
     }
-  }, [invoiceId, router, showToast]);
+  }, [invoiceId, openTab, showToast]);
 
   useEffect(() => {
     void loadReferenceData();
@@ -317,14 +350,14 @@ export default function InvoicePreparePage() {
   }, [findBaseRow, getBaseCellValue]);
 
   useEffect(() => {
-    if (drafts.size === 0) return;
+    if (!hasUnsavedDrafts) return;
     const handler = (e: BeforeUnloadEvent) => {
       e.preventDefault();
       e.returnValue = '';
     };
     window.addEventListener('beforeunload', handler);
     return () => window.removeEventListener('beforeunload', handler);
-  }, [drafts]);
+  }, [hasUnsavedDrafts]);
 
   const findOptionByValue = (options: Option[], value: string | number | null | undefined): Option | undefined => {
     if (value === null || value === undefined || value === '') return undefined;

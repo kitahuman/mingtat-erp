@@ -6,13 +6,18 @@
   "scripts": {
     "dev": "next dev -p 3000",
     "build": "next build",
-    "start": "node .next/standalone/server.js"
+    "start": "node .next/standalone/server.js",
+    "test:workspace": "tsx --test src/lib/workspaceRoutes.test.ts",
+    "test:workspace:integration": "playwright test --config=playwright.workspace.config.ts",
+    "test:workspace:all": "npm run test:workspace && npm run test:workspace:integration",
+    "typecheck": "tsc --noEmit --incremental false"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "packageManager": "pnpm@10.33.0",
   "dependencies": {
+    "@radix-ui/react-tabs": "^1.1.13",
     "@types/js-cookie": "^3.0.6",
     "@types/leaflet": "^1.9.21",
     "@types/node": "^25.5.0",
@@ -30,11 +35,13 @@
     "react-dom": "^18.3.1",
     "react-signature-canvas": "1.1.0-alpha.2",
     "socket.io-client": "^4.8.3",
-    "tailwindcss": "^3.4.19",
-    "@radix-ui/react-tabs": "^1.1.13"
+    "tailwindcss": "^3.4.19"
   },
   "devDependencies": {
+    "@playwright/test": "^1.63.0",
     "@types/react-signature-canvas": "^1.0.7",
+    "esbuild": "^0.28.2",
+    "tsx": "^4.23.13",
     "typescript": "~5.5.4"
   }
 }

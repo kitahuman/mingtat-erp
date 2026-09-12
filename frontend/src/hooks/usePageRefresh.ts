@@ -43,8 +43,10 @@ export function usePageRefresh({
 
   useEffect(() => {
     window.addEventListener('page-refresh', handlePageRefresh as EventListener);
+    window.addEventListener('workspace-activated', handlePageRefresh as EventListener);
     return () => {
       window.removeEventListener('page-refresh', handlePageRefresh as EventListener);
+      window.removeEventListener('workspace-activated', handlePageRefresh as EventListener);
     };
   }, [handlePageRefresh]);
 }

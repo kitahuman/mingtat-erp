@@ -27,8 +27,9 @@ COPY . .
 ARG BACKEND_URL=http://backend:3001
 ENV BACKEND_URL=${BACKEND_URL}
 
-# Build Next.js (standalone output)
-RUN npm run build
+# Run deterministic Workspace rules before building the standalone application.
+# This is executed by the GitHub Actions Docker build and blocks deployment on failure.
+RUN npm run test:workspace && npm run build
 
 # ============================================
 # Stage 3: Production runtime

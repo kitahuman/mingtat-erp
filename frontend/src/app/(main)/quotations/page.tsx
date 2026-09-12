@@ -10,6 +10,7 @@ import { fmtDate } from '@/lib/dateUtils';
 import { useAuth } from '@/lib/auth';
 import DateInput from '@/components/DateInput';
 import { useRefetchOnFocus } from '@/hooks/useRefetchOnFocus';
+import { usePageRefresh } from '@/hooks/usePageRefresh';
 import { useColumnConfig } from '@/hooks/useColumnConfig';
 import { useMultiFieldOptions } from '@/hooks/useFieldOptions';
 import { useWorkspaceTabs } from '@/components/WorkspaceTabs';
@@ -307,6 +308,8 @@ export default function QuotationsPage() {
     sortOrder,
     columnFilters,
   ]);
+
+  usePageRefresh({ onRefresh: load });
 
   const handleColumnFilterChange = (filters: Record<string, Set<string>>) => {
     setColumnFiltersFromSets(filters);

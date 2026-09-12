@@ -1,9 +1,14 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams } from 'next/navigation';
 import { quotationsApi, paymentTermTemplatesApi, systemSettingsApi } from '@/lib/api';
 import PaymentTermsSelector from '@/components/PaymentTermsSelector';
+import {
+  useWorkspaceTabDirty,
+  useWorkspaceTabTitle,
+  useWorkspaceTabs,
+} from '@/components/WorkspaceTabs';
 import Cookies from 'js-cookie';
 
 type QuotationPdfLanguage = 'zh' | 'en' | 'bilingual';
@@ -50,10 +55,14 @@ let SYSTEM_DEFAULTS: PdfPreviewOptions = { ...DEFAULT_OPTIONS };
 
 export default function QuotationPdfPreviewPage() {
   const { id } = useParams<{ id: string }>();
-  const router = useRouter();
   const quotationId = Number(id);
+  const { closeTab, openTab, setTabDirty } = useWorkspaceTabs();
 
   const [quotation, setQuotation] = useState<any>(null);
+  useWorkspaceTabTitle(
+    quotation?.quotation_no || `報價單 #${quotationId}`,
+    `/quotations/${quotationId}`,
+  );
   const [options, setOptions] = useState<PdfPreviewOptions>(SYSTEM_DEFAULTS);
   const [pdfUrl, setPdfUrl] = useState('');
   const [loadingPreview, setLoadingPreview] = useState(true);
@@ -63,6 +72,16 @@ export default function QuotationPdfPreviewPage() {
   const [error, setError] = useState('');
   const latestOptionsRef = useRef<PdfPreviewOptions>(DEFAULT_OPTIONS);
   const lastSavedSignatureRef = useRef('');
+  const discardOnWorkspaceCloseRef = useRef(false);
+
+  useEffect(() => {
+    const handleWorkspaceDiscard = () => {
+      discardOnWorkspaceCloseRef.current = true;
+    };
+    window.addEventListener('workspace-discard', handleWorkspaceDiscard);
+    return () =>
+      window.removeEventListener('workspace-discard', handleWorkspaceDiscard);
+  }, []);
 
   useEffect(() => {
     // Load system defaults on mount
@@ -115,6 +134,12 @@ export default function QuotationPdfPreviewPage() {
   const getOptionsSignature = useCallback(
     (current: PdfPreviewOptions) => JSON.stringify(buildSavePayload(current)),
     [buildSavePayload],
+  );
+  useWorkspaceTabDirty(
+    lastSavedSignatureRef.current !== '' &&
+      getOptionsSignature(options) !== lastSavedSignatureRef.current,
+    '報價單 PDF 設定尚未儲存',
+    `/quotations/${quotationId}`,
   );
 
   const requestParams = useMemo(
@@ -188,8 +213,8 @@ export default function QuotationPdfPreviewPage() {
           return loadedOptions;
         });
       })
-      .catch(() => router.push('/quotations'));
-  }, [quotationId, router, getOptionsSignature]);
+      .catch(() => closeTab(`/quotations/${quotationId}`));
+  }, [closeTab, getOptionsSignature, quotationId]);
 
   useEffect(() => {
     if (!Number.isFinite(quotationId)) return;
@@ -261,6 +286,7 @@ export default function QuotationPdfPreviewPage() {
 
   const savePdfPreviewOptionsKeepalive = useCallback(() => {
     if (!Number.isFinite(quotationId)) return;
+    if (discardOnWorkspaceCloseRef.current) return;
 
     const currentOptions = latestOptionsRef.current;
     const payload = buildSavePayload(currentOptions);
@@ -293,7 +319,10 @@ export default function QuotationPdfPreviewPage() {
 
   const handleBack = async () => {
     const saved = await savePdfPreviewOptions();
-    if (saved) router.push(`/quotations/${quotationId}`);
+    if (saved) {
+      setTabDirty(`/quotations/${quotationId}`, false);
+      openTab(`/quotations/${quotationId}`);
+    }
   };
 
   const handleDownloadPdf = async () => {

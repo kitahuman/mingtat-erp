@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 import Link from 'next/link';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams } from 'next/navigation';
 import DateInput from '@/components/DateInput';
 import {
   fieldOptionsApi,
@@ -20,6 +20,11 @@ import {
 import { useAuth } from '@/lib/auth';
 import ColumnFilter from '@/components/ColumnFilter';
 import ColumnCustomizer from '@/components/ColumnCustomizer';
+import {
+  useWorkspaceTabDirty,
+  useWorkspaceTabTitle,
+  useWorkspaceTabs,
+} from '@/components/WorkspaceTabs';
 import { useColumnConfig } from '@/hooks/useColumnConfig';
 import { fmtDate } from '@/lib/dateUtils';
 import EditableCell from '../../../work-logs/EditableCell';
@@ -29,6 +34,31 @@ const fmtMoney = (value: unknown) =>
   `$${Number(value || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const BLANK = '(空白)';
 const EMPTY_METRIC: PivotMetric = { value: 0, unit: '' };
+
+const normalizeForWorkspaceSignature = (value: any): any => {
+  if (value instanceof Map) {
+    return Array.from(value.entries())
+      .sort(([left], [right]) => String(left).localeCompare(String(right)))
+      .map(([key, item]) => [key, normalizeForWorkspaceSignature(item)]);
+  }
+  if (value instanceof Set) {
+    return Array.from(value).sort();
+  }
+  if (Array.isArray(value)) {
+    return value.map(normalizeForWorkspaceSignature);
+  }
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value)
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([key, item]) => [key, normalizeForWorkspaceSignature(item)]),
+    );
+  }
+  return value;
+};
+
+const getWorkspacePricingSignature = (value: Record<string, any>): string =>
+  JSON.stringify(normalizeForWorkspaceSignature(value));
 
 type PivotDimension =
   | 'none'
@@ -1507,12 +1537,16 @@ function MultiSelectComboBox({
 
 export default function InvoicePricingPage() {
   const params = useParams<{ id: string }>();
-  const router = useRouter();
   const invoiceId = Number(params.id);
+  const { openTab, setTabDirty } = useWorkspaceTabs();
   const { isReadOnly } = useAuth();
   const readOnly = isReadOnly('invoices');
   const [loading, setLoading] = useState(true);
   const [invoice, setInvoice] = useState<any>(null);
+  useWorkspaceTabTitle(
+    invoice?.invoice_no || `發票 #${invoiceId}`,
+    `/invoices/${invoiceId}`,
+  );
   const [workLogs, setWorkLogs] = useState<any[]>([]);
   const [items, setItems] = useState<InvoiceItemDraft[]>([]);
   const [unitOptions, setUnitOptions] = useState<Option[]>([]);
@@ -1793,7 +1827,7 @@ export default function InvoicePricingPage() {
       setCollapsedCols(new Set());
     } catch (err: any) {
       alert(err.response?.data?.message || '讀取計價資料失敗');
-      router.push(`/invoices/${invoiceId}/prepare`);
+      openTab(`/invoices/${invoiceId}/prepare`);
     } finally {
       setLoading(false);
     }
@@ -1877,6 +1911,86 @@ export default function InvoicePricingPage() {
     );
     syncFilterOptions('statuses', STATUS_OPTIONS, setSelectedStatuses);
   }, [filterOptions]);
+
+  const pricingWorkspaceSignature = useMemo(
+    () =>
+      getWorkspacePricingSignature({
+        rowFields,
+        colFields,
+        valueTypes,
+        leftViewMode,
+        listNewRows,
+        dateFrom,
+        dateTo,
+        companyIds,
+        clientIds,
+        employeeIds,
+        equipmentNumbers,
+        selectedMachineTypes,
+        startLocations,
+        endLocations,
+        selectedContracts,
+        selectedQuotations,
+        selectedDayNights,
+        selectedServiceTypes,
+        selectedStatuses,
+        rowPrices,
+        items,
+        listDrafts,
+      }),
+    [
+      clientIds,
+      colFields,
+      companyIds,
+      dateFrom,
+      dateTo,
+      employeeIds,
+      endLocations,
+      equipmentNumbers,
+      items,
+      leftViewMode,
+      listDrafts,
+      listNewRows,
+      rowFields,
+      rowPrices,
+      selectedContracts,
+      selectedDayNights,
+      selectedMachineTypes,
+      selectedQuotations,
+      selectedServiceTypes,
+      selectedStatuses,
+      startLocations,
+      valueTypes,
+    ],
+  );
+  const latestPricingSignatureRef = useRef(pricingWorkspaceSignature);
+  const savedPricingSignatureRef = useRef<string | null>(null);
+  const [, setPricingSignatureRevision] = useState(0);
+  latestPricingSignatureRef.current = pricingWorkspaceSignature;
+
+  useEffect(() => {
+    if (loading) {
+      savedPricingSignatureRef.current = null;
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      if (savedPricingSignatureRef.current !== null) return;
+      savedPricingSignatureRef.current = latestPricingSignatureRef.current;
+      setPricingSignatureRevision((revision) => revision + 1);
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [invoiceId, loading]);
+
+  const hasUnsavedPricingChanges =
+    !loading &&
+    savedPricingSignatureRef.current !== null &&
+    pricingWorkspaceSignature !== savedPricingSignatureRef.current;
+  useWorkspaceTabDirty(
+    hasUnsavedPricingChanges,
+    '發票定價草稿尚未儲存',
+    `/invoices/${invoiceId}`,
+  );
 
   const filteredWorkLogs = useMemo(
     () =>
@@ -2410,6 +2524,8 @@ export default function InvoicePricingPage() {
       if (prepareDrafts.length > 0) {
         await invoicesApi.savePrepare(invoiceId, { drafts: prepareDrafts });
       }
+      savedPricingSignatureRef.current = pricingWorkspaceSignature;
+      setPricingSignatureRevision((revision) => revision + 1);
       alert('Step B 草稿已儲存');
     } catch (err: any) {
       alert(err.response?.data?.message || '儲存 Step B 草稿失敗');
@@ -2434,7 +2550,10 @@ export default function InvoicePricingPage() {
         })),
       });
       alert('Invoice Items 已更新');
-      router.push(`/invoices/${invoiceId}`);
+      savedPricingSignatureRef.current = pricingWorkspaceSignature;
+      setPricingSignatureRevision((revision) => revision + 1);
+      setTabDirty(`/invoices/${invoiceId}`, false);
+      openTab(`/invoices/${invoiceId}`);
     } catch (err: any) {
       alert(err.response?.data?.message || '確認生成失敗');
     } finally {

@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>WorkspaceTabs integration harness</title>
+    <style>
+      * { box-sizing: border-box; }
+      body { margin: 0; font-family: system-ui, sans-serif; color: #18212f; }
+      [hidden], .hidden { display: none !important; }
+      iframe { display: block; width: 100%; height: 560px; border: 1px solid #cbd5e1; }
+      button, a { margin: 0.25rem; padding: 0.4rem 0.65rem; }
+      section { padding: 1rem; }
+      input { display: block; margin: 0.5rem 0; padding: 0.4rem; }
+      output { display: block; margin: 0.5rem 0; font-family: monospace; }
+      [role="dialog"] { border: 2px solid #334155; background: white; padding: 1rem; }
+      .fixed { position: fixed; inset: 0; z-index: 100; background: rgba(15, 23, 42, 0.3); }
+      .flex { display: flex; }
+      .items-center { align-items: center; }
+      .justify-center { justify-content: center; }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script src="/bundle.js"></script>
+  </body>
+</html>
