@@ -2,6 +2,8 @@
 
 > **重要：所有開發和維護工作必須先閱讀此文件，確認連接正確的資料庫和伺服器。**
 
+> **Git push、GitHub Actions 與正式環境排障：** 必須同時閱讀 [`SOUL.md`](SOUL.md)。該文件保存已驗證的安全 push 渠道、推送前門檻、CI 失敗分流與正式環境核對順序；不得以 EC2 手動 build、restart 或 deploy 取代 GitHub Actions。
+
 ## 正式環境資料庫（Production Database）
 
 | 項目 | 值 |
