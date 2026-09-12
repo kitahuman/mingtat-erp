@@ -2,6 +2,20 @@ import { expect, test, type Page } from '@playwright/test';
 
 const activeFrame = (page: Page) => page.frameLocator('iframe:not([hidden])');
 
+const answerNextDialog = (page: Page, answer: 'accept' | 'dismiss') =>
+  new Promise<string>((resolve, reject) => {
+    page.once('dialog', async (dialog) => {
+      const message = dialog.message();
+      try {
+        if (answer === 'accept') await dialog.accept();
+        else await dialog.dismiss();
+        resolve(message);
+      } catch (error) {
+        reject(error);
+      }
+    });
+  });
+
 const openInvoice = async (page: Page, id: number) => {
   await activeFrame(page).getByTestId(`open-invoice-${id}`).click();
   await expect(page).toHaveURL(new RegExp(`/invoices/${id}$`));
@@ -64,15 +78,21 @@ test('dirty close is fail-closed on cancel and closes only after explicit confir
   await activeFrame(page).getByRole('textbox', { name: 'Draft' }).fill('unsaved');
   await expect(page.getByLabel('有未儲存修改')).toBeVisible();
 
-  page.once('dialog', (dialog) => dialog.dismiss());
-  await page.getByRole('button', { name: '關閉 Invoice 1' }).click();
+  const dismissed = answerNextDialog(page, 'dismiss');
+  await Promise.all([
+    page.getByRole('button', { name: '關閉 Invoice 1' }).click(),
+    dismissed,
+  ]);
   await expect(page.getByRole('tab', { name: /Invoice 1/ })).toBeVisible();
   await expect(activeFrame(page).getByRole('textbox', { name: 'Draft' })).toHaveValue(
     'unsaved',
   );
 
-  page.once('dialog', (dialog) => dialog.accept());
-  await page.getByRole('button', { name: '關閉 Invoice 1' }).click();
+  const accepted = answerNextDialog(page, 'accept');
+  await Promise.all([
+    page.getByRole('button', { name: '關閉 Invoice 1' }).click(),
+    accepted,
+  ]);
   await expect(page.getByRole('tab', { name: /Invoice 1/ })).toHaveCount(0);
   await expect(page).toHaveURL(/\/invoices$/);
   await expect(
@@ -90,8 +110,11 @@ test('dirty browser Back cancellation restores the original history entry withou
   );
   await activeFrame(page).getByRole('textbox', { name: 'Draft' }).fill('keep me');
 
-  page.once('dialog', (dialog) => dialog.dismiss());
-  await page.evaluate(() => window.history.back());
+  const dismissed = answerNextDialog(page, 'dismiss');
+  await Promise.all([
+    page.evaluate(() => window.history.back()),
+    dismissed,
+  ]);
   await page.waitForTimeout(250);
   await expect(page).toHaveURL(
     /\/invoices\/1\/prepare\?mode=compact#totals$/,
@@ -100,8 +123,11 @@ test('dirty browser Back cancellation restores the original history entry withou
     'keep me',
   );
 
-  page.once('dialog', (dialog) => dialog.accept());
-  await page.evaluate(() => window.history.back());
+  const accepted = answerNextDialog(page, 'accept');
+  await Promise.all([
+    page.evaluate(() => window.history.back()),
+    accepted,
+  ]);
   await expect(page).toHaveURL(/\/invoices\/1$/);
   await expect(activeFrame(page).getByTestId('frame-path')).toContainText(
     '/invoices/1?workspace_frame=1',
