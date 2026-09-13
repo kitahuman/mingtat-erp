@@ -1,4 +1,5 @@
 'use client';
+import { openWorkspacePath, useWorkspaceTabDirty, useWorkspaceTabTitle } from '@/components/WorkspaceTabs';
 
 import { useState, useEffect } from 'react';
 import DateInput from '@/components/DateInput';
@@ -79,6 +80,14 @@ export default function EquipmentProfitDetailPage() {
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState('');
 
+  useWorkspaceTabTitle(
+    data?.equipment_code || `${type === 'machinery' ? '機械' : '車輛'} #${id}`,
+  );
+  useWorkspaceTabDirty(
+    Boolean(data) && (commission !== String(data?.commission_percentage) || saving),
+    '分成比例有未儲存的修改',
+  );
+
   useEffect(() => {
     loadData();
   }, [type, id, dateFrom, dateTo]);
@@ -133,7 +142,7 @@ export default function EquipmentProfitDetailPage() {
       {/* Header with back button */}
       <div className="flex items-center gap-4">
         <button
-          onClick={() => router.push(`/equipment-profit?date_from=${dateFrom}&date_to=${dateTo}`)}
+          onClick={() => openWorkspacePath(`/equipment-profit?date_from=${dateFrom}&date_to=${dateTo}`)}
           className="text-gray-500 hover:text-gray-700 transition-colors"
         >
           <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">

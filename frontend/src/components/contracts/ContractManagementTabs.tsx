@@ -12,6 +12,7 @@ import { useAuth } from '@/lib/auth';
 import AttachmentUpload from '@/components/AttachmentUpload';
 import SearchableSelect from '@/components/SearchableSelect';
 import BqFileImportModal from '@/components/contracts/BqFileImportModal';
+import { openWorkspacePath } from '@/components/WorkspaceTabs';
 
 // ── Status labels ──
 const statusLabels: Record<string, string> = { active: '進行中', completed: '已完成', cancelled: '已取消' };
@@ -732,8 +733,14 @@ export default function ContractManagementTabs({
             <div
               role="button"
               tabIndex={0}
-              onClick={() => router.push(`/expenses?contract_id=${contractId}`)}
-              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); router.push(`/expenses?contract_id=${contractId}`); } }}
+              onClick={(event) =>
+                openWorkspacePath(
+                  `/expenses?contract_id=${contractId}`,
+                  undefined,
+                  event,
+                )
+              }
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openWorkspacePath(`/expenses?contract_id=${contractId}`); } }}
               className="card text-center cursor-pointer hover:shadow-md hover:border-orange-200 transition"
             >
               <p className="text-sm text-gray-500">關聯支出</p>
@@ -770,7 +777,7 @@ export default function ContractManagementTabs({
                   </thead>
                   <tbody>
                     {linkedProjects.map((p: any) => (
-                      <tr key={p.id} className="border-b hover:bg-gray-50 cursor-pointer" onClick={() => router.push(`/projects/${p.id}`)}>
+                      <tr key={p.id} className="border-b hover:bg-gray-50 cursor-pointer" onClick={(event) => openWorkspacePath(`/projects/${p.id}`, undefined, event)} onMouseDown={(event) => { if (event.button === 1) { event.preventDefault(); openWorkspacePath(`/projects/${p.id}`, undefined, event); } }}>
                         <td className="px-3 py-2 font-mono font-bold text-primary-600">{p.project_no}</td>
                         <td className="px-3 py-2">{p.project_name || '-'}</td>
                         <td className="px-3 py-2">{p.company?.internal_prefix || p.company?.name || '-'}</td>

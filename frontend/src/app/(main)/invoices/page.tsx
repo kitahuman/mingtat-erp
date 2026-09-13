@@ -1,4 +1,5 @@
 'use client';
+import { openWorkspacePath } from '@/components/WorkspaceTabs';
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { usePageState } from '@/hooks/usePageState';
 import DateInput from '@/components/DateInput';
@@ -22,6 +23,7 @@ import { useRefetchOnFocus } from '@/hooks/useRefetchOnFocus';
 import { useColumnConfig } from '@/hooks/useColumnConfig';
 import { usePageRefresh } from '@/hooks/usePageRefresh';
 import { useWorkspaceTabs } from '@/components/WorkspaceTabs';
+import { useSearchParams } from 'next/navigation';
 
 const fmt$ = (v: any) =>
   `$${Number(v || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -417,10 +419,31 @@ const STATEMENT_COLUMNS: StatementListColumn[] = [
 export default function InvoicesPage() {
   const { openTab } = useWorkspaceTabs();
   const { isReadOnly } = useAuth();
+  const searchParams = useSearchParams();
   const [data, setData] = useState<any[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [invoiceTab, setInvoiceTab] = useState<'invoices' | 'void' | 'statements' | 'billing-reminders'>('invoices');
+  const [invoiceTab, setInvoiceTab] = useState<
+    'invoices' | 'void' | 'statements' | 'billing-reminders'
+  >(() => {
+    const requestedTab = searchParams.get('tab');
+    return requestedTab === 'void' ||
+      requestedTab === 'statements' ||
+      requestedTab === 'billing-reminders'
+      ? requestedTab
+      : 'invoices';
+  });
+
+  useEffect(() => {
+    const requestedTab = searchParams.get('tab');
+    setInvoiceTab(
+      requestedTab === 'void' ||
+        requestedTab === 'statements' ||
+        requestedTab === 'billing-reminders'
+        ? requestedTab
+        : 'invoices',
+    );
+  }, [searchParams]);
 
   // Billing reminders tab state
   const [billingMonth, setBillingMonth] = useState(() => {
@@ -1062,7 +1085,7 @@ export default function InvoicesPage() {
       // 建立後重新加載發票清單 tab
       setStatementListPage(1);
       // 可選：也可以打開詳情頁
-      // window.open(`/invoice-statements/${res.data.id}`, '_blank');
+      // openWorkspacePath(`/invoice-statements/${res.data.id}`);
     } catch (err: any) {
       alert(err.response?.data?.message || '建立發票清單失敗');
     } finally {
@@ -1418,7 +1441,7 @@ export default function InvoicesPage() {
               setStatementListPage(1);
             }}
             searchPlaceholder="搜尋清單編號、標題、客戶..."
-            onRowClick={(row) => window.open(`/invoice-statements/${row.id}`, '_blank')}
+            onRowClick={(row, event) => openWorkspacePath(`/invoice-statements/${row.id}`, undefined, event)}
             loading={statementRecordsLoading}
             sortBy={statementListSortBy}
             sortOrder={statementListSortOrder}

@@ -1,4 +1,9 @@
 'use client';
+import {
+  openWorkspacePath,
+  useWorkspaceTabDirty,
+  useWorkspaceTabTitle,
+} from '@/components/WorkspaceTabs';
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { subconFleetDriversApi, partnersApi } from '@/lib/api';
@@ -159,6 +164,16 @@ export default function SubconFleetDriverDetailPage() {
   const [nicknameForm, setNicknameForm] = useState<NicknameMappingForm>({
     nickname_value: '', nickname_employee_name: '', nickname_vehicle_no: '', nickname_is_active: true,
   });
+  const driverId = Number(params.id);
+  useWorkspaceTabTitle(
+    driver?.name_zh || driver?.plate_no || `街車司機 #${driverId}`,
+    `/subcon-fleet-drivers/${driverId}`,
+  );
+  useWorkspaceTabDirty(
+    editing || showNicknameModal,
+    '街車司機資料或花名對應正在編輯，尚未儲存',
+    `/subcon-fleet-drivers/${driverId}`,
+  );
 
   const loadData = useCallback(() => {
     const id = Number(params.id);
@@ -183,7 +198,7 @@ export default function SubconFleetDriverDetailPage() {
         status: data.status,
       });
       setLoading(false);
-    }).catch(() => router.push('/subcon-fleet-drivers'));
+    }).catch(() => openWorkspacePath('/subcon-fleet-drivers'));
   }, [params.id, router]);
 
   useEffect(() => {

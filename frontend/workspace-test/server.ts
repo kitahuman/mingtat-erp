@@ -21,7 +21,7 @@ const main = async () => {
     },
     define: {
       'process.env.NEXT_PUBLIC_WORKSPACE_TABS_MODULES': JSON.stringify(
-        'invoices,quotations',
+        'all',
       ),
     },
     sourcemap: 'inline',

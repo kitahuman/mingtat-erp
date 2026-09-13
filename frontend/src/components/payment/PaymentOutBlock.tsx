@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { paymentOutApi, bankAccountsApi } from '@/lib/api';
 import { fmtDate } from '@/lib/dateUtils';
 import SearchableSelect from '@/app/(main)/work-logs/SearchableSelect';
@@ -15,6 +15,8 @@ interface PaymentOutBlockProps {
   totalAmount: number;
   /** Callback when payment status changes (parent can reload) */
   onStatusChange?: () => void;
+  /** Reports unsaved payment-form edits to a containing detail page. */
+  onDirtyChange?: (dirty: boolean) => void;
 }
 
 const STATUS_MAP: Record<string, { label: string; color: string }> = {
@@ -33,6 +35,7 @@ export default function PaymentOutBlock({
   sourceRefId,
   totalAmount,
   onStatusChange,
+  onDirtyChange,
 }: PaymentOutBlockProps) {
   const [payments, setPayments] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -49,6 +52,22 @@ export default function PaymentOutBlock({
     remarks: '',
   };
   const [form, setForm] = useState(defaultForm);
+  const initialFormDateRef = useRef(defaultForm.date);
+  const hasFormDraft =
+    form.date !== initialFormDateRef.current ||
+    Boolean(
+      form.amount ||
+        form.bank_account_id ||
+        form.reference_no ||
+        form.payment_out_description ||
+        form.remarks,
+    );
+
+  useEffect(() => {
+    onDirtyChange?.(hasFormDraft || saving);
+  }, [hasFormDraft, onDirtyChange, saving]);
+
+  useEffect(() => () => onDirtyChange?.(false), [onDirtyChange]);
 
   const queryParam = sourceType === 'expense' ? 'expense_id' : 'subcon_payroll_id';
 

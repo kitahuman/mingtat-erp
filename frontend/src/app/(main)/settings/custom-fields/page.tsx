@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { customFieldsApi } from '@/lib/api';
 import RoleGuard from '@/components/RoleGuard';
 import { useAuth } from '@/lib/auth';
+import { useWorkspaceTabDirty, useWorkspaceTabTitle } from '@/components/WorkspaceTabs';
 
 const MODULES = [
   { value: 'company', label: '公司資料' },
@@ -33,6 +34,7 @@ const emptyForm = {
 };
 
 function CustomFieldsPageContent() {
+  useWorkspaceTabTitle('自定義欄位', '/settings/custom-fields');
   const { isReadOnly } = useAuth();
   const [fields, setFields] = useState<any[]>([]);
   const [selectedModule, setSelectedModule] = useState('company');
@@ -40,6 +42,12 @@ function CustomFieldsPageContent() {
   const [showModal, setShowModal] = useState(false);
   const [editingField, setEditingField] = useState<any>(null);
   const [form, setForm] = useState<any>({ ...emptyForm });
+
+  useWorkspaceTabDirty(
+    showModal,
+    '自定義欄位有未儲存的表單修改',
+    '/settings/custom-fields',
+  );
 
   const load = useCallback(async () => {
     setLoading(true);

@@ -1,4 +1,9 @@
 'use client';
+import {
+  openWorkspacePath,
+  useWorkspaceTabDirty,
+  useWorkspaceTabTitle,
+} from '@/components/WorkspaceTabs';
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { companyProfilesApi } from '@/lib/api';
@@ -17,13 +22,23 @@ export default function CompanyProfileDetailPage() {
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState<any>({});
   const [loading, setLoading] = useState(true);
+  const profileId = Number(params.id);
+  useWorkspaceTabTitle(
+    profile?.chinese_name || profile?.code || `公司資料 #${profileId}`,
+    `/company-profiles/${profileId}`,
+  );
+  useWorkspaceTabDirty(
+    editing,
+    '公司資料正在編輯，尚未儲存',
+    `/company-profiles/${profileId}`,
+  );
 
   const loadData = () => {
     companyProfilesApi.get(Number(params.id)).then(res => {
       setProfile(res.data);
       setForm(res.data);
       setLoading(false);
-    }).catch(() => router.push('/company-profiles'));
+    }).catch(() => openWorkspacePath('/company-profiles'));
   };
 
   useEffect(() => { loadData(); }, [params.id]);

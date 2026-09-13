@@ -1,6 +1,11 @@
 'use client';
+import {
+  openWorkspacePath,
+  useWorkspaceTabDirty,
+  useWorkspaceTabTitle,
+} from '@/components/WorkspaceTabs';
 import { Fragment, useState, useEffect, useRef, useCallback, type ReactNode } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams } from 'next/navigation';
 import { payrollApi, fieldOptionsApi, pettyCashApi, bankAccountsApi, companiesApi, attachmentsApi } from '@/lib/api';
 import Link from 'next/link';
 import Modal from '@/components/Modal';
@@ -886,7 +891,6 @@ function PrintGroupedSettlement({ groups }: { groups: any[] }) {
 
 export default function PayrollDetailPage() {
   const params = useParams();
-  const router = useRouter();
   const { isReadOnly } = useAuth();
   const [payroll, setPayroll] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -933,7 +937,7 @@ export default function PayrollDetailPage() {
         setPettyCashRecords([]);
       }
     } catch {
-      router.push('/payroll');
+      openWorkspacePath('/payroll');
     }
     setLoading(false);
   };
@@ -1049,7 +1053,7 @@ export default function PayrollDetailPage() {
     if (!confirm('確定要刪除此糧單？')) return;
     try {
       await payrollApi.remove(payroll.id);
-      router.push('/payroll');
+      openWorkspacePath('/payroll');
     } catch (err: any) {
       alert(err.response?.data?.message || '刪除失敗');
     }
@@ -1142,6 +1146,56 @@ export default function PayrollDetailPage() {
   const [companies, setCompanies] = useState<any[]>([]);
   const [paymentSaving, setPaymentSaving] = useState(false);
   const [paymentFileUploading, setPaymentFileUploading] = useState(false);
+  const [payrollTabsDirty, setPayrollTabsDirty] = useState(false);
+
+  const payrollTabPath = `/payroll/${params.id}`;
+  const payrollTitle = payroll
+    ? `糧單 #${payroll.id}${payroll.employee?.name_zh || payroll.employee?.name_en ? ` — ${payroll.employee?.name_zh || payroll.employee?.name_en}` : ''}`
+    : `糧單 #${params.id}`;
+  const hasPaymentFormDraft = Boolean(
+    newPaymentDate ||
+      newPaymentAmount ||
+      newPaymentRef ||
+      newPaymentMethod ||
+      newPaymentBank ||
+      newPaymentRemarks ||
+      paymentFiles.length,
+  );
+  const hasAdjustmentDraft = Boolean(adjName || adjAmount || adjRemarks);
+  const hasMarkPaidDraft = Boolean(
+    showPayment &&
+      (paymentDate !== (payroll?.payment_date || '') ||
+        chequeNumber !== (payroll?.cheque_number || '')),
+  );
+  const hasWorkLogDraft = Boolean(
+    editingPwl &&
+      (editForm.service_type !== (editingPwl.service_type || '') ||
+        editForm.scheduled_date !== (editingPwl.scheduled_date || '') ||
+        editForm.day_night !== (editingPwl.day_night || '日') ||
+        editForm.start_location !== (editingPwl.start_location || '') ||
+        editForm.end_location !== (editingPwl.end_location || '') ||
+        String(editForm.quantity ?? '') !== String(editingPwl.quantity ?? '') ||
+        String(editForm.ot_quantity ?? '') !== String(editingPwl.ot_quantity ?? '') ||
+        editForm.remarks !== (editingPwl.remarks || '')),
+  );
+  const hasUnsavedChanges =
+    hasPaymentFormDraft ||
+    hasAdjustmentDraft ||
+    hasMarkPaidDraft ||
+    hasWorkLogDraft ||
+    selectedExpenseIds.length > 0 ||
+    payrollTabsDirty ||
+    paymentSaving ||
+    paymentFileUploading ||
+    adjSaving ||
+    editSaving ||
+    reimbursementLoading;
+  useWorkspaceTabTitle(payrollTitle, payrollTabPath);
+  useWorkspaceTabDirty(
+    hasUnsavedChanges,
+    '糧單有未儲存的編輯、付款或報銷選擇',
+    payrollTabPath,
+  );
 
   const handleAddPayrollPayment = async () => {
     if (!newPaymentDate || !newPaymentAmount) return;
@@ -1498,6 +1552,7 @@ export default function PayrollDetailPage() {
         </div>
         <PayrollTabs
           payrollId={payroll.id}
+          onDirtyChange={setPayrollTabsDirty}
           workLogs={pwls}
           groupedSettlement={grouped}
           dailyCalculation={dailyCalc}

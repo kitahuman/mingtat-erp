@@ -1,4 +1,9 @@
 'use client';
+import {
+  openWorkspacePath,
+  useWorkspaceTabDirty,
+  useWorkspaceTabTitle,
+} from '@/components/WorkspaceTabs';
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { salaryConfigApi, employeesApi, partnersApi } from '@/lib/api';
@@ -42,6 +47,16 @@ export default function SalaryConfigDetailPage() {
   const [history, setHistory] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [partners, setPartners] = useState<any[]>([]);
+  const salaryConfigId = Number(params.id);
+  useWorkspaceTabTitle(
+    record?.employee?.name_zh || record?.employee?.name_en || record?.employee?.emp_code || `薪酬設定 #${salaryConfigId}`,
+    `/salary-config/${salaryConfigId}`,
+  );
+  useWorkspaceTabDirty(
+    editing,
+    '薪酬設定正在編輯，尚未儲存',
+    `/salary-config/${salaryConfigId}`,
+  );
 
   const loadData = () => {
     salaryConfigApi.get(Number(params.id)).then(res => {
@@ -54,7 +69,7 @@ export default function SalaryConfigDetailPage() {
         });
       }
       setLoading(false);
-    }).catch(() => router.push('/salary-config'));
+    }).catch(() => openWorkspacePath('/salary-config'));
   };
 
   useEffect(() => { loadData(); partnersApi.simple().then(r => setPartners(r.data || [])).catch(() => {}); }, [params.id]);

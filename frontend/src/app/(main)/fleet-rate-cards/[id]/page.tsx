@@ -1,4 +1,9 @@
 'use client';
+import {
+  openWorkspacePath,
+  useWorkspaceTabDirty,
+  useWorkspaceTabTitle,
+} from '@/components/WorkspaceTabs';
 import { useState, useEffect } from 'react';
 import DateInput from '@/components/DateInput';
 import { useParams, useRouter } from 'next/navigation';
@@ -42,6 +47,16 @@ export default function FleetRateCardDetailPage() {
   const [partners, setPartners] = useState<any[]>([]);
   const [equipmentOptions, setEquipmentOptions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const rateCardId = Number(params.id);
+  useWorkspaceTabTitle(
+    record?.name || record?.client?.name || record?.service_type || `租賃價目 #${rateCardId}`,
+    `/fleet-rate-cards/${rateCardId}`,
+  );
+  useWorkspaceTabDirty(
+    editing,
+    '租賃價目正在編輯，尚未儲存',
+    `/fleet-rate-cards/${rateCardId}`,
+  );
   const { optionsMap } = useMultiFieldOptions(FIELD_OPTION_CATEGORIES);
   const tonnageOptions = optionsMap['tonnage'] || [];
   const vehicleTypeOptions = optionsMap['machine_type'] || [];
@@ -56,7 +71,7 @@ export default function FleetRateCardDetailPage() {
         linked_allowances: res.data.linked_allowances || []
       });
       setLoading(false);
-    }).catch(() => router.push('/fleet-rate-cards'));
+    }).catch(() => openWorkspacePath('/fleet-rate-cards'));
   };
 
   useEffect(() => {

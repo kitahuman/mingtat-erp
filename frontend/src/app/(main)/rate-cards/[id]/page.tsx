@@ -1,4 +1,9 @@
 'use client';
+import {
+  openWorkspacePath,
+  useWorkspaceTabDirty,
+  useWorkspaceTabTitle,
+} from '@/components/WorkspaceTabs';
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { rateCardsApi, companiesApi, partnersApi, projectsApi, vehiclesApi, machineryApi } from '@/lib/api';
@@ -29,6 +34,16 @@ export default function RateCardDetailPage() {
   const [projects, setProjects] = useState<any[]>([]);
   const [equipmentOptions, setEquipmentOptions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const rateCardId = Number(params.id);
+  useWorkspaceTabTitle(
+    record?.name || record?.client?.name || record?.service_type || `客戶價目 #${rateCardId}`,
+    `/rate-cards/${rateCardId}`,
+  );
+  useWorkspaceTabDirty(
+    editing,
+    '客戶價目正在編輯，尚未儲存',
+    `/rate-cards/${rateCardId}`,
+  );
   const { optionsMap } = useMultiFieldOptions(FIELD_OPTION_CATEGORIES);
   const tonnageOptions = optionsMap['tonnage'] || [];
   const vehicleTypeOptions = optionsMap['machine_type'] || [];
@@ -40,7 +55,7 @@ export default function RateCardDetailPage() {
       setRecord(res.data);
       setForm({ ...res.data, ot_rates: res.data.ot_rates || [] });
       setLoading(false);
-    }).catch(() => router.push('/rate-cards'));
+    }).catch(() => openWorkspacePath('/rate-cards'));
   };
 
   useEffect(() => {

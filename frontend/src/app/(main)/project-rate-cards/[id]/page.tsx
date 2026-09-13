@@ -1,4 +1,9 @@
 'use client';
+import {
+  openWorkspacePath,
+  useWorkspaceTabDirty,
+  useWorkspaceTabTitle,
+} from '@/components/WorkspaceTabs';
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { rateCardsApi, companiesApi, partnersApi, projectsApi } from '@/lib/api';
@@ -22,13 +27,23 @@ export default function ProjectRateCardDetailPage() {
   const [partners, setPartners] = useState<any[]>([]);
   const [projects, setProjects] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const rateCardId = Number(params.id);
+  useWorkspaceTabTitle(
+    record?.name || record?.service_type || record?.client?.name || `工程價目 #${rateCardId}`,
+    `/project-rate-cards/${rateCardId}`,
+  );
+  useWorkspaceTabDirty(
+    editing,
+    '工程價目正在編輯，尚未儲存',
+    `/project-rate-cards/${rateCardId}`,
+  );
 
   const loadData = () => {
     rateCardsApi.get(Number(params.id)).then(res => {
       setRecord(res.data);
       setForm({ ...res.data });
       setLoading(false);
-    }).catch(() => router.push('/project-rate-cards'));
+    }).catch(() => openWorkspacePath('/project-rate-cards'));
   };
 
   useEffect(() => {

@@ -13,8 +13,10 @@ import ExportExcelModal from './ExportExcelModal';
 import Modal from '@/components/Modal';
 import { useAuth } from '@/lib/auth';
 import { useRefetchOnFocus } from '@/hooks/useRefetchOnFocus';
+import { useWorkspaceTabDirty, useWorkspaceTabTitle } from '@/components/WorkspaceTabs';
 
 export default function BankReconciliationPage() {
+  useWorkspaceTabTitle('銀行對帳', '/bank-reconciliation');
   // ── Filter state ──
   const { isReadOnly } = useAuth();
   const [companies, setCompanies] = useState<any[]>([]);
@@ -122,6 +124,20 @@ export default function BankReconciliationPage() {
   // ── Delete confirm state ──
   const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
   const [batchDeleteConfirm, setBatchDeleteConfirm] = useState(false);
+
+  const hasReconciliationDraft =
+    isImportModalOpen ||
+    isMatchModalOpen ||
+    (isEditModalOpen && (Object.values(editForm).some(Boolean) || editLoading)) ||
+    (isAddModalOpen && (Object.values(addForm).some(Boolean) || addLoading)) ||
+    (remarkTxId !== null && (remarkText.trim().length > 0 || remarkLoading)) ||
+    (isBatchMoveOpen &&
+      (moveTargetCompanyId !== null || moveTargetAccountId !== null || batchLoading));
+  useWorkspaceTabDirty(
+    hasReconciliationDraft,
+    '銀行對帳有未儲存的表單修改',
+    '/bank-reconciliation',
+  );
 
   // ── Load companies & accounts ──
   useEffect(() => {
@@ -1077,7 +1093,7 @@ export default function BankReconciliationPage() {
                         </div>
                         <div className="px-2 py-2.5 text-sm">
                           {tx.match_status === 'matched' && matchInfo.link ? (
-                            <a href={matchInfo.link} className="text-blue-600 hover:underline" title="查看詳情">查看 →</a>
+                            <a href={matchInfo.link} data-workspace-open="true" className="text-blue-600 hover:underline" title="查看詳情">查看 →</a>
                           ) : ''}
                         </div>
                         <div className="px-2 py-2 flex items-center justify-center gap-1">
@@ -1112,7 +1128,7 @@ export default function BankReconciliationPage() {
                               <div key={r.id || idx} className="flex items-center gap-2 text-[11px] text-gray-600 bg-gray-50 rounded px-2 py-1">
                                 <span className="font-medium truncate flex-1" title={rName}>{rName}</span>
                                 <span className="font-mono text-gray-700">${Number(r.amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-                                <a href={rLink} className="text-blue-500 hover:underline flex-shrink-0">查看</a>
+                                <a href={rLink} data-workspace-open="true" className="text-blue-500 hover:underline flex-shrink-0">查看</a>
                               </div>
                             );
                           })}

@@ -1,6 +1,5 @@
 'use client';
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
 import { subconFleetDriversApi, partnersApi } from '@/lib/api';
 import CsvImportModal from '@/components/CsvImportModal';
 import { useColumnConfig } from '@/hooks/useColumnConfig';
@@ -10,9 +9,12 @@ import { fmtDate } from '@/lib/dateUtils';
 import { useAuth } from '@/lib/auth';
 import DateInput from '@/components/DateInput';
 import { useRefetchOnFocus } from '@/hooks/useRefetchOnFocus';
+import {
+  openWorkspacePath,
+  useWorkspaceTabDirty,
+} from '@/components/WorkspaceTabs';
 
 export default function SubconFleetDriversPage() {
-  const router = useRouter();
   const { isReadOnly } = useAuth();
   const [data, setData] = useState<any[]>([]);
   const [total, setTotal] = useState(0);
@@ -43,6 +45,10 @@ export default function SubconFleetDriversPage() {
     status: 'active',
   };
   const [form, setForm] = useState<any>({ ...defaultForm });
+  useWorkspaceTabDirty(
+    showModal && JSON.stringify(form) !== JSON.stringify(defaultForm),
+    '新增街車司機表格尚未儲存',
+  );
 
   const load = () => {
     setLoading(true);
@@ -306,6 +312,13 @@ export default function SubconFleetDriversPage() {
           onSearch={setSearch}
           searchPlaceholder="搜尋姓名、身份證、車牌、電話..."
           loading={loading}
+          onRowClick={(row, event) =>
+            openWorkspacePath(
+              `/subcon-fleet-drivers/${row.id}`,
+              undefined,
+              event,
+            )
+          }
           sortBy={sortBy}
           sortOrder={sortOrder}
           onSort={(f, o) => {

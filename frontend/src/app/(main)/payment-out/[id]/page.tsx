@@ -1,4 +1,5 @@
 'use client';
+import { openWorkspacePath, useWorkspaceTabDirty, useWorkspaceTabTitle } from '@/components/WorkspaceTabs';
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -184,6 +185,16 @@ export default function PaymentOutDetailPage() {
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
   const [paymentMethods, setPaymentMethods] = useState<string[]>([]);
 
+  useWorkspaceTabTitle(
+    record
+      ? `付款 #${record.id}${record.reference_no ? ` · ${record.reference_no}` : ''}`
+      : `付款 #${recordId}`,
+  );
+  useWorkspaceTabDirty(
+    editMode || saving,
+    '付款記錄有未儲存的修改',
+  );
+
   const loadRecord = useCallback(() => {
     setLoading(true);
     paymentOutApi
@@ -287,7 +298,7 @@ export default function PaymentOutDetailPage() {
     if (!confirm('確定刪除此付款記錄？此操作無法復原。')) return;
     try {
       await paymentOutApi.delete(recordId);
-      router.push('/payment-out');
+      openWorkspacePath('/payment-out');
     } catch (err: unknown) {
       const msg =
         (err as { response?: { data?: { message?: string } } })?.response?.data
@@ -309,7 +320,7 @@ export default function PaymentOutDetailPage() {
       <div className="text-center py-12">
         <p className="text-red-500 mb-4">{error || '找不到付款記錄'}</p>
         <button
-          onClick={() => router.push('/payment-out')}
+          onClick={() => openWorkspacePath('/payment-out')}
           className="btn-secondary"
         >
           返回列表
@@ -326,7 +337,7 @@ export default function PaymentOutDetailPage() {
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-3">
           <button
-            onClick={() => router.push('/payment-out')}
+            onClick={() => openWorkspacePath('/payment-out')}
             className="text-gray-400 hover:text-gray-600 transition"
           >
             <svg

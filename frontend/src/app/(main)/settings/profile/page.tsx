@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react';
 import { profileApi } from '@/lib/api';
 import { useAuth, ROLE_LABELS, User } from '@/lib/auth';
+import { useWorkspaceTabDirty, useWorkspaceTabTitle } from '@/components/WorkspaceTabs';
 
 export default function ProfilePage() {
   const { user, updateUser } = useAuth();
@@ -18,6 +19,20 @@ export default function ProfilePage() {
   const [passwordSaving, setPasswordSaving] = useState(false);
   const [passwordMessage, setPasswordMessage] = useState('');
   const [passwordError, setPasswordError] = useState('');
+
+  const hasProfileDraft =
+    editing && (
+      form.displayName !== (profile?.displayName || '') ||
+      form.email !== (profile?.email || '') ||
+      form.phone !== (profile?.phone || '')
+    );
+  const hasPasswordDraft = showPasswordForm && Object.values(passwordForm).some(Boolean);
+  useWorkspaceTabTitle(profile?.displayName || '個人資料', '/settings/profile');
+  useWorkspaceTabDirty(
+    hasProfileDraft || hasPasswordDraft || saving || passwordSaving,
+    '個人資料有未儲存的修改',
+    '/settings/profile',
+  );
 
   const loadProfile = async () => {
     try {

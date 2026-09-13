@@ -1,4 +1,5 @@
 'use client';
+import { openWorkspacePath } from '@/components/WorkspaceTabs';
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { companiesApi } from '@/lib/api';
@@ -89,7 +90,7 @@ export default function CompaniesPage() {
           onPageChange={setPage}
           onSearch={(s) => { setSearch(s); setPage(1); }}
           searchPlaceholder="搜尋公司名稱或代號..."
-          onRowClick={(row) => window.open(`/companies/${row.id}`, '_blank')}
+          onRowClick={(row, event) => openWorkspacePath(`/companies/${row.id}`, undefined, event)}
           loading={loading}
           sortBy={sortBy}
           sortOrder={sortOrder}

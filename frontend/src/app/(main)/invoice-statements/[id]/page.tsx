@@ -1,12 +1,13 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import DateInput from '@/components/DateInput';
 import { invoiceStatementsApi, invoicesApi } from '@/lib/api';
 import { fmtDate, toInputDate } from '@/lib/dateUtils';
 import { useAuth } from '@/lib/auth';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
+import { openWorkspacePath, useWorkspaceTabDirty, useWorkspaceTabTitle } from '@/components/WorkspaceTabs';
 
 const fmt$ = (v: any) =>
   `$${Number(v || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -40,25 +41,30 @@ function InlineCell({
   align = 'left',
   disabled,
   onCommit,
+  onEditingChange,
 }: {
   value: any;
   type?: 'text' | 'number' | 'date';
   align?: 'left' | 'right' | 'center';
   disabled?: boolean;
-  onCommit: (value: string) => void;
+  onCommit: (value: string) => Promise<void> | void;
+  onEditingChange?: (editing: boolean) => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
+  const commitHandledRef = useRef(false);
 
   const startEdit = () => {
     if (disabled) return;
+    commitHandledRef.current = false;
     if (type === 'date') {
       setDraft(toInputDate(value) || '');
     } else {
       setDraft(value === null || value === undefined ? '' : String(value));
     }
     setEditing(true);
+    onEditingChange?.(true);
   };
 
   useEffect(() => {
@@ -68,9 +74,21 @@ function InlineCell({
     }
   }, [editing]);
 
-  const commit = () => {
+  const commit = async () => {
+    if (commitHandledRef.current) return;
+    commitHandledRef.current = true;
     setEditing(false);
-    onCommit(draft);
+    try {
+      await onCommit(draft);
+    } finally {
+      onEditingChange?.(false);
+    }
+  };
+
+  const cancel = () => {
+    commitHandledRef.current = true;
+    setEditing(false);
+    onEditingChange?.(false);
   };
 
   const alignClass = align === 'right' ? 'text-right' : align === 'center' ? 'text-center' : 'text-left';
@@ -83,10 +101,10 @@ function InlineCell({
           type={type === 'date' ? 'date' : type === 'number' ? 'number' : 'text'}
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
-          onBlur={commit}
+          onBlur={() => void commit()}
           onKeyDown={(e) => {
-            if (e.key === 'Enter') commit();
-            if (e.key === 'Escape') setEditing(false);
+            if (e.key === 'Enter') void commit();
+            if (e.key === 'Escape') cancel();
           }}
           className={`w-full rounded border border-primary-400 px-2 py-1 text-sm ${alignClass}`}
         />
@@ -134,6 +152,28 @@ export default function InvoiceStatementDetailPage() {
   const [invoiceSearch, setInvoiceSearch] = useState('');
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [searching, setSearching] = useState(false);
+  const [inlineEditors, setInlineEditors] = useState<Set<string>>(new Set());
+  const handleInlineEditingChange = useCallback(
+    (editorKey: string, isEditing: boolean) => {
+      setInlineEditors((previous) => {
+        const next = new Set(previous);
+        if (isEditing) next.add(editorKey);
+        else next.delete(editorKey);
+        return next;
+      });
+    },
+    [],
+  );
+
+  useWorkspaceTabTitle(
+    statement?.statement_no || `發票清單 #${statementId}`,
+  );
+  useWorkspaceTabDirty(
+    editing || showAddInvoice || inlineEditors.size > 0 || saving,
+    editing || inlineEditors.size > 0
+      ? '發票清單有未儲存的修改'
+      : '新增發票表單尚未完成',
+  );
 
   const parseOtherCharges = (value: any) => (Array.isArray(value) ? value : []);
 
@@ -163,7 +203,7 @@ export default function InvoiceStatementDetailPage() {
       const res = await invoiceStatementsApi.get(statementId);
       applyStatement(res.data);
     } catch {
-      router.push('/invoices?tab=statements');
+      openWorkspacePath('/invoices?tab=statements');
     } finally {
       setLoading(false);
     }
@@ -235,7 +275,7 @@ export default function InvoiceStatementDetailPage() {
     if (!confirm('確定要刪除此發票清單？')) return;
     try {
       await invoiceStatementsApi.delete(statementId);
-      router.push('/invoices?tab=statements');
+      openWorkspacePath('/invoices?tab=statements');
     } catch (error: any) {
       alert(error.response?.data?.message || '刪除失敗');
     }
@@ -379,7 +419,20 @@ export default function InvoiceStatementDetailPage() {
           <p className="mt-1 text-sm text-gray-500">{statement.statement_title || '未命名發票清單'}</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Link href={`/invoice-statements/${statementId}/pdf-preview`} target="_blank" className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">PDF 預覽</Link>
+          <Link
+            href={`/invoice-statements/${statementId}/pdf-preview`}
+            onClick={(event) => {
+              event.preventDefault();
+              openWorkspacePath(
+                `/invoice-statements/${statementId}/pdf-preview`,
+                undefined,
+                event,
+              );
+            }}
+            className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+          >
+            PDF 預覽
+          </Link>
           <button onClick={downloadPdf} disabled={pdfLoading} className="rounded-lg border border-primary-600 px-4 py-2 text-sm font-medium text-primary-700 hover:bg-primary-50 disabled:opacity-50">{pdfLoading ? '下載中...' : '下載 PDF'}</button>
           {!readOnly && !editing && <button onClick={() => setEditing(true)} className="rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700">編輯</button>}
           {!readOnly && <button onClick={remove} className="rounded-lg border border-red-300 px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-50">刪除</button>}
@@ -538,24 +591,96 @@ export default function InvoiceStatementDetailPage() {
                             ) : (item.item_invoice_no || '-')}
                           </td>
                         ) : (
-                          <InlineCell value={item.item_invoice_no} onCommit={(v) => commitItem(item, 'item_invoice_no', v)} />
+                          <InlineCell
+                            value={item.item_invoice_no}
+                            onCommit={(v) => commitItem(item, 'item_invoice_no', v)}
+                            onEditingChange={(isEditing) =>
+                              handleInlineEditingChange(
+                                `${item.id}:item_invoice_no`,
+                                isEditing,
+                              )
+                            }
+                          />
                         )}
                         {/* 日期 */}
-                        <InlineCell value={item.item_date} type="date" disabled={readOnly} onCommit={(v) => commitItem(item, 'item_date', v)} />
+                        <InlineCell
+                          value={item.item_date}
+                          type="date"
+                          disabled={readOnly}
+                          onCommit={(v) => commitItem(item, 'item_date', v)}
+                          onEditingChange={(isEditing) =>
+                            handleInlineEditingChange(
+                              `${item.id}:item_date`,
+                              isEditing,
+                            )
+                          }
+                        />
                         {/* 標題 */}
-                        <InlineCell value={item.item_title} disabled={readOnly} onCommit={(v) => commitItem(item, 'item_title', v)} />
+                        <InlineCell
+                          value={item.item_title}
+                          disabled={readOnly}
+                          onCommit={(v) => commitItem(item, 'item_title', v)}
+                          onEditingChange={(isEditing) =>
+                            handleInlineEditingChange(
+                              `${item.id}:item_title`,
+                              isEditing,
+                            )
+                          }
+                        />
                         {/* 狀態 */}
                         <InlineCell
                           value={INVOICE_STATUS_LABELS[statusVal] || statusVal}
                           disabled={readOnly}
                           onCommit={(v) => commitItem(item, 'item_status', v)}
+                          onEditingChange={(isEditing) =>
+                            handleInlineEditingChange(
+                              `${item.id}:item_status`,
+                              isEditing,
+                            )
+                          }
                         />
                         {/* 金額 */}
-                        <InlineCell value={item.item_amount} type="number" align="right" disabled={readOnly} onCommit={(v) => commitItem(item, 'item_amount', v)} />
+                        <InlineCell
+                          value={item.item_amount}
+                          type="number"
+                          align="right"
+                          disabled={readOnly}
+                          onCommit={(v) => commitItem(item, 'item_amount', v)}
+                          onEditingChange={(isEditing) =>
+                            handleInlineEditingChange(
+                              `${item.id}:item_amount`,
+                              isEditing,
+                            )
+                          }
+                        />
                         {/* 已收 */}
-                        <InlineCell value={item.item_paid_amount} type="number" align="right" disabled={readOnly} onCommit={(v) => commitItem(item, 'item_paid_amount', v)} />
+                        <InlineCell
+                          value={item.item_paid_amount}
+                          type="number"
+                          align="right"
+                          disabled={readOnly}
+                          onCommit={(v) => commitItem(item, 'item_paid_amount', v)}
+                          onEditingChange={(isEditing) =>
+                            handleInlineEditingChange(
+                              `${item.id}:item_paid_amount`,
+                              isEditing,
+                            )
+                          }
+                        />
                         {/* 未收 */}
-                        <InlineCell value={item.item_outstanding} type="number" align="right" disabled={readOnly} onCommit={(v) => commitItem(item, 'item_outstanding', v)} />
+                        <InlineCell
+                          value={item.item_outstanding}
+                          type="number"
+                          align="right"
+                          disabled={readOnly}
+                          onCommit={(v) => commitItem(item, 'item_outstanding', v)}
+                          onEditingChange={(isEditing) =>
+                            handleInlineEditingChange(
+                              `${item.id}:item_outstanding`,
+                              isEditing,
+                            )
+                          }
+                        />
                         {!readOnly && (
                           <td className="px-2 py-2 text-center">
                             <button onClick={() => deleteItem(item)} className="text-red-600 hover:text-red-800" title="移除">✕</button>

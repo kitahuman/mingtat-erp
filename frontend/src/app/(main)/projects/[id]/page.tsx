@@ -1,4 +1,5 @@
 'use client';
+import { openWorkspacePath, useWorkspaceTabDirty, useWorkspaceTabTitle } from '@/components/WorkspaceTabs';
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { projectsApi, companiesApi, partnersApi, quotationsApi, rateCardsApi, contractsApi, dailyReportsApi, acceptanceReportsApi } from '@/lib/api';
@@ -93,6 +94,15 @@ export default function ProjectDetailPage() {
   const [dailyReports, setDailyReports] = useState<any[]>([]);
   const [acceptanceReports, setAcceptanceReports] = useState<any[]>([]);
   const [activeTab, setActiveTabState] = useState('project-info');
+  useWorkspaceTabTitle(
+    project
+      ? [project.project_no, project.project_name].filter(Boolean).join(' · ')
+      : `工程 #${projectId}`,
+  );
+  useWorkspaceTabDirty(
+    editing || quotationLinkModal,
+    editing ? '工程資料有未儲存的修改' : '關聯報價單表單尚未完成',
+  );
   // Legacy tab keys merged into the new 工程資料 tab
   const setActiveTab = (tab: string) => {
     const merged = ['basic', 'contract-info', 'deposit', 'projects', 'quotations'];
@@ -104,7 +114,7 @@ export default function ProjectDetailPage() {
       setProject(res.data);
       setForm({ ...res.data });
       setLoading(false);
-    }).catch(() => router.push('/projects'));
+    }).catch(() => openWorkspacePath('/projects'));
   };
 
   const loadLinked = () => {
@@ -526,7 +536,7 @@ export default function ProjectDetailPage() {
               </thead>
               <tbody>
                 {linkedQuotations.map((q: any) => (
-                  <tr key={q.id} className="border-b hover:bg-gray-50 cursor-pointer" onClick={() => router.push(`/quotations/${q.id}`)}>
+                  <tr key={q.id} className="border-b hover:bg-gray-50 cursor-pointer" onClick={(event) => openWorkspacePath(`/quotations/${q.id}`, undefined, event)} onMouseDown={(event) => { if (event.button === 1) { event.preventDefault(); openWorkspacePath(`/quotations/${q.id}`, undefined, event); } }}>
                     <td className="px-3 py-2 font-mono font-bold text-primary-600">{q.quotation_no}</td>
                     <td className="px-3 py-2">{fmtDate(q.quotation_date)}</td>
                     <td className="px-3 py-2">{q.client?.name || '-'}</td>
@@ -584,7 +594,7 @@ export default function ProjectDetailPage() {
               </thead>
               <tbody>
                 {linkedRateCards.map((rc: any) => (
-                  <tr key={rc.id} className="border-b hover:bg-gray-50 cursor-pointer" onClick={() => router.push(`/rate-cards/${rc.id}`)}>
+                  <tr key={rc.id} className="border-b hover:bg-gray-50 cursor-pointer" onClick={(event) => openWorkspacePath(`/rate-cards/${rc.id}`, undefined, event)} onMouseDown={(event) => { if (event.button === 1) { event.preventDefault(); openWorkspacePath(`/rate-cards/${rc.id}`, undefined, event); } }}>
                     <td className="px-3 py-2">{rc.name || '-'}</td>
                     <td className="px-3 py-2">{rc.service_type || '-'}</td>
                     <td className="px-3 py-2 text-right font-mono">${Number(rc.day_rate).toLocaleString()}</td>

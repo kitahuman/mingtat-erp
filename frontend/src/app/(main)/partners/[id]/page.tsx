@@ -1,4 +1,9 @@
 'use client';
+import {
+  openWorkspacePath,
+  useWorkspaceTabDirty,
+  useWorkspaceTabTitle,
+} from '@/components/WorkspaceTabs';
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { partnersApi, subconFleetDriversApi, paymentTermTemplatesApi } from '@/lib/api';
@@ -99,6 +104,16 @@ export default function PartnerDetailPage() {
   }
   const [fleetDrivers, setFleetDrivers] = useState<FleetDriverItem[]>([]);
   const [fleetLoading, setFleetLoading] = useState(false);
+  const partnerId = Number(params.id);
+  useWorkspaceTabTitle(
+    partner?.name || partner?.code || `合作單位 #${partnerId}`,
+    `/partners/${partnerId}`,
+  );
+  useWorkspaceTabDirty(
+    editing || showPaymentTermModal,
+    '合作單位資料或付款條款正在編輯，尚未儲存',
+    `/partners/${partnerId}`,
+  );
 
   const loadPaymentTerms = async (clientId: number) => {
     setPaymentTermsLoading(true);
@@ -130,7 +145,7 @@ export default function PartnerDetailPage() {
       setForm(data);
       setLoading(false);
       loadPaymentTerms(clientId);
-    }).catch(() => router.push('/partners'));
+    }).catch(() => openWorkspacePath('/partners'));
   };
 
   useEffect(() => { loadData(); }, [params.id]);
@@ -570,7 +585,7 @@ export default function PartnerDetailPage() {
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
                   {fleetDrivers.map(d => (
-                    <tr key={d.id} className="hover:bg-gray-50 cursor-pointer" onClick={() => window.location.href = `/subcon-fleet-drivers/${d.id}`}>
+                    <tr key={d.id} className="hover:bg-gray-50 cursor-pointer" onClick={(event) => openWorkspacePath(`/subcon-fleet-drivers/${d.id}`, d.name_zh, event)} onMouseDown={(event) => { if (event.button === 1) { event.preventDefault(); openWorkspacePath(`/subcon-fleet-drivers/${d.id}`, d.name_zh, event); } }}>
                       <td className="px-4 py-3 text-sm font-medium text-primary-600 hover:underline">{d.name_zh}</td>
                       <td className="px-4 py-3 text-sm text-gray-600">{d.short_name || '-'}</td>
                       <td className="px-4 py-3 text-sm font-mono text-gray-900">{d.plate_no || '-'}</td>

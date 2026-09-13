@@ -6,6 +6,7 @@ import { usePathname, useSearchParams } from 'next/navigation';
 import {
   WorkspaceTabsProvider,
   openWorkspacePath,
+  useWorkspaceActivity,
   useWorkspaceTabDirty,
   useWorkspaceTabTitle,
   useWorkspaceTabs,
@@ -80,6 +81,82 @@ function QuotationList() {
   );
 }
 
+function CompanyList() {
+  const openCompany = (
+    id: number,
+    event: React.MouseEvent<HTMLButtonElement>,
+  ) => openWorkspacePath(`/companies/${id}`, `Company ${id}`, event);
+
+  return (
+    <section>
+      <h1>Company list harness</h1>
+      {[1, 2].map((id) => (
+        <button
+          key={id}
+          type="button"
+          data-testid={`open-company-${id}`}
+          onClick={(event) => openCompany(id, event)}
+          onMouseDown={(event) => {
+            if (event.button !== 1) return;
+            event.preventDefault();
+            openCompany(id, event);
+          }}
+        >
+          Open company {id}
+        </button>
+      ))}
+    </section>
+  );
+}
+
+function CompanyDetail({ id }: { id: string }) {
+  const [draft, setDraft] = useState('');
+  const [secondaryDraft, setSecondaryDraft] = useState('');
+  useWorkspaceTabTitle(`Company ${id}`, `/companies/${id}`);
+  useWorkspaceTabDirty(
+    draft.length > 0,
+    `Company ${id} draft is unsaved`,
+    `/companies/${id}`,
+  );
+  useWorkspaceTabDirty(
+    secondaryDraft.length > 0,
+    `Company ${id} secondary draft is unsaved`,
+    `/companies/${id}`,
+  );
+
+  return (
+    <section>
+      <h1>Company {id}</h1>
+      <output data-testid="frame-path">{framePath()}</output>
+      <label>
+        Company draft
+        <input
+          aria-label="Company draft"
+          value={draft}
+          onChange={(event) => setDraft(event.target.value)}
+        />
+      </label>
+      <label>
+        Company secondary draft
+        <input
+          aria-label="Company secondary draft"
+          value={secondaryDraft}
+          onChange={(event) => setSecondaryDraft(event.target.value)}
+        />
+      </label>
+      <button
+        type="button"
+        data-testid="open-company-1-from-detail"
+        onClick={(event) =>
+          openWorkspacePath('/companies/1', 'Company 1', event)
+        }
+      >
+        Open company 1
+      </button>
+    </section>
+  );
+}
+
 function FieldOptionsHarness() {
   const [draft, setDraft] = useState('');
   useWorkspaceTabDirty(
@@ -111,6 +188,7 @@ function DetailHarness({ type, id }: { type: 'invoice' | 'quotation'; id: string
   const searchParams = useSearchParams();
   const { openTab } = useWorkspaceTabs();
   const [draft, setDraft] = useState('');
+  const active = useWorkspaceActivity();
   const basePath = type === 'invoice' ? `/invoices/${id}` : `/quotations/${id}`;
   const label = type === 'invoice' ? `Invoice ${id}` : `Quotation ${id}`;
   const dirty = draft.length > 0;
@@ -124,6 +202,7 @@ function DetailHarness({ type, id }: { type: 'invoice' | 'quotation'; id: string
     <section>
       <h1>{label}</h1>
       <output data-testid="frame-path">{currentUrl}</output>
+      <output data-testid="workspace-active">{String(active)}</output>
       <label>
         Draft
         <input
@@ -185,6 +264,7 @@ function HarnessRoute() {
   }
   if (pathname === '/invoices') return <InvoiceList />;
   if (pathname === '/quotations') return <QuotationList />;
+  if (pathname === '/companies') return <CompanyList />;
   if (pathname === '/settings/field-options') return <FieldOptionsHarness />;
   if (pathname === '/settings/system') {
     return (
@@ -199,6 +279,9 @@ function HarnessRoute() {
 
   const quotation = pathname.match(/^\/quotations\/(\d+)(?:\/pdf-preview)?$/);
   if (quotation) return <DetailHarness type="quotation" id={quotation[1]} />;
+
+  const company = pathname.match(/^\/companies\/(\d+)$/);
+  if (company) return <CompanyDetail id={company[1]} />;
 
   return (
     <section>
@@ -238,6 +321,13 @@ function HarnessSidebar() {
         onClick={() => openMenu('/quotations', '報價單')}
       >
         報價單
+      </button>
+      <button
+        type="button"
+        data-testid="menu-companies"
+        onClick={() => openMenu('/companies', '公司管理')}
+      >
+        公司管理
       </button>
     </nav>
   );

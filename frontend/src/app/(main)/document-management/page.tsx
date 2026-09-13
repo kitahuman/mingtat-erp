@@ -11,6 +11,7 @@ import {
 } from '@/lib/api';
 import AttachmentUpload from '@/components/AttachmentUpload';
 import Modal from '@/components/Modal';
+import { useWorkspaceTabDirty, useWorkspaceTabTitle } from '@/components/WorkspaceTabs';
 
 interface Filters {
   q: string;
@@ -109,6 +110,7 @@ function getFolderIdFromNode(node: DocumentTreeNode | null) {
 }
 
 export default function DocumentManagementPage() {
+  useWorkspaceTabTitle('文件管理', '/document-management');
   const [filters, setFilters] = useState<Filters>(defaultFilters);
   const [appliedFilters, setAppliedFilters] = useState<Filters>(defaultFilters);
   const [page, setPage] = useState(1);
@@ -125,6 +127,12 @@ export default function DocumentManagementPage() {
   const [folderModal, setFolderModal] = useState<FolderModalState>(closedFolderModal);
   const [folderName, setFolderName] = useState('');
   const [savingFolder, setSavingFolder] = useState(false);
+
+  useWorkspaceTabDirty(
+    folderModal.isOpen && (folderName.trim().length > 0 || savingFolder),
+    '文件夾表單有未儲存的修改',
+    '/document-management',
+  );
   const [openFolderMenuId, setOpenFolderMenuId] = useState<number | null>(null);
 
   const loadTree = useCallback(async () => {

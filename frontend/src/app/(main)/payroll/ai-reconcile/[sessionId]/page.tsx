@@ -1,7 +1,13 @@
 'use client';
+import {
+  openWorkspacePath,
+  useWorkspaceActivity,
+  useWorkspaceTabDirty,
+  useWorkspaceTabTitle,
+} from '@/components/WorkspaceTabs';
 
-import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useParams } from 'next/navigation';
 import { aiPayrollSessionApi } from '@/lib/api';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import Modal from '@/components/Modal';
@@ -706,8 +712,8 @@ function ProgressStepper({ steps }: { steps: ReturnType<typeof buildTimelineStep
 
 export default function AiPayrollReconcilePage() {
   const params = useParams();
-  const router = useRouter();
   const sessionId = params.sessionId as string;
+  const isWorkspaceActive = useWorkspaceActivity();
 
   const [session, setSession] = useState<SessionData | null>(null);
   const [progress, setProgress] = useState<ProgressData | null>(null);
@@ -737,6 +743,8 @@ export default function AiPayrollReconcilePage() {
   const [savingItem, setSavingItem] = useState(false);
   const [itemError, setItemError] = useState('');
   const [sourceReviewLoading, setSourceReviewLoading] = useState<string | null>(null);
+  const [previewTabsDirty, setPreviewTabsDirty] = useState(false);
+  const wasWorkspaceActiveRef = useRef(isWorkspaceActive);
 
   const effectiveStatus = normalizeStatus(progress?.status || session?.session_status);
   const payrollIds = useMemo(() => getPayrollIds(session || undefined, generated), [session, generated]);
@@ -766,6 +774,36 @@ export default function AiPayrollReconcilePage() {
   const shouldShowDocumentOcrWarning =
     documentOcrWarnings.length > 0 ||
     (hasDocumentWithoutOcrRecords && !isProcessing && !uploadStatuses.has(effectiveStatus));
+  const tabTitle = session
+    ? `AI 計糧核對：${toDisplayString(
+        session.company?.chinese_name || session.company?.name || session.company_name,
+        session.session_period || `#${sessionId}`,
+      )}${session.session_period ? `（${session.session_period}）` : ''}`
+    : `AI 計糧核對 #${sessionId}`;
+  const hasQuestionAnswerDraft = Object.values(questionAnswers).some((answer) =>
+    answer.trim().length > 0,
+  );
+  const hasItemOverrideDraft = Boolean(
+    selectedItem &&
+      (overrideJson !== safeJson(selectedItem.reconcile_decided_data) ||
+        overrideStatus !== (selectedItem.reconcile_status || 'confirmed')),
+  );
+  const hasUnsavedChanges =
+    uploadFiles.length > 0 ||
+    hasQuestionAnswerDraft ||
+    hasItemOverrideDraft ||
+    previewTabsDirty ||
+    uploading ||
+    generating ||
+    savingItem ||
+    answeringId !== null ||
+    sourceReviewLoading !== null;
+  useWorkspaceTabTitle(tabTitle, `/payroll/ai-reconcile/${sessionId}`);
+  useWorkspaceTabDirty(
+    hasUnsavedChanges,
+    'AI 計糧核對有未儲存的修改或處理中的操作',
+    `/payroll/ai-reconcile/${sessionId}`,
+  );
 
   const loadData = useCallback(
     async (quiet = false) => {
@@ -827,10 +865,21 @@ export default function AiPayrollReconcilePage() {
   }, [loadData]);
 
   useEffect(() => {
-    if (!isProcessing) return;
+    if (!isWorkspaceActive) {
+      wasWorkspaceActiveRef.current = false;
+      return;
+    }
+    if (!wasWorkspaceActiveRef.current) {
+      void loadData(true);
+    }
+    wasWorkspaceActiveRef.current = true;
+  }, [isWorkspaceActive, loadData]);
+
+  useEffect(() => {
+    if (!isWorkspaceActive || !isProcessing) return;
     const timer = window.setInterval(() => loadData(true), 3500);
     return () => window.clearInterval(timer);
-  }, [isProcessing, loadData]);
+  }, [isProcessing, isWorkspaceActive, loadData]);
 
   const startOrRetry = async (force = false) => {
     setError('');
@@ -1102,7 +1151,7 @@ export default function AiPayrollReconcilePage() {
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div>
           <button
-            onClick={() => router.push('/payroll')}
+            onClick={() => openWorkspacePath('/payroll')}
             className="mb-3 text-sm text-gray-500 hover:text-gray-700"
           >
             ← 返回計糧管理
@@ -1211,14 +1260,14 @@ export default function AiPayrollReconcilePage() {
           <div className="mt-4 flex flex-wrap gap-2">
             {payrollIds[0] && (
               <button
-                onClick={() => router.push(`/payroll/${payrollIds[0]}`)}
+                onClick={() => openWorkspacePath(`/payroll/${payrollIds[0]}`)}
                 className="rounded-lg bg-green-700 px-4 py-2 text-sm font-medium text-white hover:bg-green-800"
               >
                 查看首張糧單
               </button>
             )}
             <button
-              onClick={() => router.push('/payroll-records')}
+              onClick={() => openWorkspacePath('/payroll-records')}
               className="rounded-lg border border-green-300 bg-white px-4 py-2 text-sm text-green-700 hover:bg-green-50"
             >
               查看糧單記錄
@@ -1839,6 +1888,7 @@ export default function AiPayrollReconcilePage() {
                 onBatchUpdateWorkLogs={handlePreviewBatchUpdate}
                 onBatchDeleteWorkLogs={handlePreviewBatchDelete}
                 onGroupBillingQuantityTypeChange={handlePreviewGroupBillingQuantityTypeChange}
+                onDirtyChange={setPreviewTabsDirty}
               />
             </div>
           </div>

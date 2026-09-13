@@ -1,4 +1,9 @@
 'use client';
+import {
+  openWorkspacePath,
+  useWorkspaceTabDirty,
+  useWorkspaceTabTitle,
+} from '@/components/WorkspaceTabs';
 import { useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -20,6 +25,13 @@ export default function VehiclePlateDetailPage() {
   const [showTransferHistoryModal, setShowTransferHistoryModal] = useState(false);
   const [assignmentForm, setAssignmentForm] = useState({ vehicle_id: '', assigned_date: '', removed_date: '', notes: '' });
   const [transferForm, setTransferForm] = useState({ from_company_id: '', to_company_id: '', transfer_date: '', notes: '' });
+  const plateId = Number(params.id);
+  useWorkspaceTabTitle(plate?.plate_number || `車牌 #${plateId}`, `/vehicles/plates/${plateId}`);
+  useWorkspaceTabDirty(
+    editing || showAssignHistoryModal || showTransferHistoryModal,
+    '車牌資料或歷史表單正在編輯，尚未儲存',
+    `/vehicles/plates/${plateId}`,
+  );
 
   const loadData = async () => {
     try {
@@ -38,7 +50,7 @@ export default function VehiclePlateDetailPage() {
       setVehicles(vehicleRes.data?.data || []);
       setLoading(false);
     } catch {
-      router.push('/vehicles');
+      openWorkspacePath('/vehicles');
     }
   };
 

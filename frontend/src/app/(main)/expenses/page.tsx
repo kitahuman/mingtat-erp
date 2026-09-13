@@ -1,4 +1,5 @@
 'use client';
+import { openWorkspacePath } from '@/components/WorkspaceTabs';
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import DateInput from '@/components/DateInput';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -1105,7 +1106,7 @@ export default function ExpensesPage() {
           }}
           onSave={handleInlineSave}
           onDelete={handleInlineDelete}
-          onRowClick={(row) => window.open(`/expenses/${row.id}`, '_blank')}
+          onRowClick={(row, event) => openWorkspacePath(`/expenses/${row.id}`, undefined, event)}
           filters={
             <DateRangeFilter
               dateTypeOptions={[

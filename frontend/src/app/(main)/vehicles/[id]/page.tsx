@@ -1,4 +1,9 @@
 'use client';
+import {
+  openWorkspacePath,
+  useWorkspaceTabDirty,
+  useWorkspaceTabTitle,
+} from '@/components/WorkspaceTabs';
 import { useState, useEffect } from 'react';
 import DateInput from '@/components/DateInput';
 import { useParams, useRouter } from 'next/navigation';
@@ -47,9 +52,24 @@ export default function VehicleDetailPage() {
   const [transferForm, setTransferForm] = useState({ to_company_id: '', transfer_date: '', notes: '' });
   const [manualTransferForm, setManualTransferForm] = useState({ from_company_id: '', to_company_id: '', transfer_date: '', notes: '' });
   const [historyEventForm, setHistoryEventForm] = useState({ event_date: '', event_type: '', description: '' });
+  const vehicleId = Number(params.id);
+  useWorkspaceTabTitle(
+    vehicle?.plate_number || vehicle?.vehicle_original_plate || `車輛 #${vehicleId}`,
+    `/vehicles/${vehicleId}`,
+  );
+  useWorkspaceTabDirty(
+    editing ||
+      showPlateModal ||
+      showRemovePlateModal ||
+      showTransferModal ||
+      showManualTransferModal ||
+      showHistoryEventModal,
+    '車輛資料或歷史表單正在編輯，尚未儲存',
+    `/vehicles/${vehicleId}`,
+  );
 
   const loadData = () => {
-    vehiclesApi.get(Number(params.id)).then(res => { setVehicle(res.data); setForm(res.data); setLoading(false); }).catch(() => router.push('/vehicles'));
+    vehiclesApi.get(Number(params.id)).then(res => { setVehicle(res.data); setForm(res.data); setLoading(false); }).catch(() => openWorkspacePath('/vehicles'));
   };
 
   useEffect(() => {

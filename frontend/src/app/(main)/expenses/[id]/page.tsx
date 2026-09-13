@@ -1,4 +1,5 @@
 'use client';
+import { openWorkspacePath, useWorkspaceTabDirty, useWorkspaceTabTitle } from '@/components/WorkspaceTabs';
 import { useState, useEffect, useCallback } from 'react';
 import DateInput from '@/components/DateInput';
 import { useParams, useRouter } from 'next/navigation';
@@ -119,6 +120,23 @@ export default function ExpenseDetailPage() {
   const [editingItemId, setEditingItemId] = useState<number | null>(null);
   const [editingItemForm, setEditingItemForm] = useState<any>({});
   const [itemSaving, setItemSaving] = useState(false);
+
+  const hasNewItemDraft = Boolean(
+    itemForm.description.trim() ||
+      itemForm.quantity !== '1' ||
+      itemForm.unit ||
+      itemForm.unit_price ||
+      itemForm.amount,
+  );
+  useWorkspaceTabTitle(
+    expense
+      ? `支出 #${expense.id}${expense.item ? ` · ${expense.item}` : ''}`
+      : `支出 #${expenseId}`,
+  );
+  useWorkspaceTabDirty(
+    editMode || editingItemId !== null || hasNewItemDraft || saving || itemSaving,
+    '支出資料或細項有未儲存的修改',
+  );
 
   const loadExpense = useCallback(() => {
     setLoading(true);
@@ -392,7 +410,7 @@ export default function ExpenseDetailPage() {
     setDeleting(true);
     try {
       await expensesApi.delete(expenseId);
-      router.push('/expenses');
+      openWorkspacePath('/expenses');
     } catch (err: any) {
       alert(err.response?.data?.message || '刪除支出失敗');
     } finally {

@@ -1,4 +1,9 @@
 'use client';
+import {
+  openWorkspacePath,
+  useWorkspaceTabDirty,
+  useWorkspaceTabTitle,
+} from '@/components/WorkspaceTabs';
 import { useState, useEffect } from 'react';
 import DateInput from '@/components/DateInput';
 import { useParams, useRouter } from 'next/navigation';
@@ -35,9 +40,19 @@ export default function MachineryDetailPage() {
   const [showTransferModal, setShowTransferModal] = useState(false);
   const [transferForm, setTransferForm] = useState({ to_company_id: '', transfer_date: '', notes: '' });
   const [tonnageOptions, setTonnageOptions] = useState<{ value: string; label: string }[]>([]);
+  const machineryId = Number(params.id);
+  useWorkspaceTabTitle(
+    machine?.machine_code || machine?.model || `機械 #${machineryId}`,
+    `/machinery/${machineryId}`,
+  );
+  useWorkspaceTabDirty(
+    editing || showTransferModal,
+    '機械資料或過戶表單正在編輯，尚未儲存',
+    `/machinery/${machineryId}`,
+  );
 
   const loadData = () => {
-    machineryApi.get(Number(params.id)).then(res => { setMachine(res.data); setForm(res.data); setLoading(false); }).catch(() => router.push('/machinery'));
+    machineryApi.get(Number(params.id)).then(res => { setMachine(res.data); setForm(res.data); setLoading(false); }).catch(() => openWorkspacePath('/machinery'));
   };
 
   useEffect(() => {

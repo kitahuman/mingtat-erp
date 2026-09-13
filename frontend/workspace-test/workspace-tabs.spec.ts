@@ -70,6 +70,64 @@ test('routes programmatic internal opens through Workspace instead of a browser 
   await expect(page.getByText('1/8', { exact: true })).toBeVisible();
 });
 
+test('opens a newly registered list detail as a reusable, dirty-protected work tab', async ({ page }) => {
+  await page.goto('/companies');
+  await expect(
+    activeFrame(page).getByRole('heading', { name: 'Company list harness' }),
+  ).toBeVisible();
+
+  await activeFrame(page).getByTestId('open-company-1').click();
+  await expect(page).toHaveURL(/\/companies\/1$/);
+  await expect(page.getByRole('tab', { name: '公司管理' })).toBeVisible();
+  await expect(page.getByRole('tab', { name: 'Company 1' })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  );
+  await expect(page.getByText('1/8', { exact: true })).toBeVisible();
+
+  await activeFrame(page)
+    .getByRole('textbox', { name: 'Company draft' })
+    .fill('keep company draft');
+  await activeFrame(page)
+    .getByRole('textbox', { name: 'Company secondary draft' })
+    .fill('keep secondary draft');
+  await activeFrame(page)
+    .getByRole('textbox', { name: 'Company draft' })
+    .fill('');
+  await expect(page.getByLabel('有未儲存修改')).toBeVisible();
+  const dismissed = answerNextDialog(page, 'dismiss');
+  await Promise.all([
+    page.getByRole('button', { name: '關閉 Company 1' }).click(),
+    dismissed,
+  ]);
+  await expect(page.getByRole('tab', { name: /Company 1/ })).toBeVisible();
+  await expect(
+    activeFrame(page).getByRole('textbox', { name: 'Company secondary draft' }),
+  ).toHaveValue('keep secondary draft');
+});
+
+test('keeps modified and middle clicks outside the current workspace quota', async ({ context, page }) => {
+  await page.goto('/companies');
+
+  const ctrlPopupPromise = context.waitForEvent('page');
+  await activeFrame(page)
+    .getByTestId('open-company-1')
+    .click({ modifiers: ['Control'] });
+  const ctrlPopup = await ctrlPopupPromise;
+  await ctrlPopup.waitForLoadState('domcontentloaded');
+  await expect(ctrlPopup).toHaveURL(/\/companies\/1$/);
+  await expect(page.getByRole('tab')).toHaveCount(1);
+  await ctrlPopup.close();
+
+  const middlePopupPromise = context.waitForEvent('page');
+  await activeFrame(page).getByTestId('open-company-2').click({ button: 'middle' });
+  const middlePopup = await middlePopupPromise;
+  await middlePopup.waitForLoadState('domcontentloaded');
+  await expect(middlePopup).toHaveURL(/\/companies\/2$/);
+  await expect(page.getByRole('tab')).toHaveCount(1);
+  await middlePopup.close();
+});
+
 test('keeps the invoice list as base and opens Sidebar pages as closable extra tabs', async ({ page }) => {
   await openInvoice(page, 1);
   await page.getByTestId('menu-field-options').click();
@@ -108,6 +166,27 @@ test('preserves each tab page instance and its local state while switching tabs'
   await expect(
     activeFrame(page).getByRole('textbox', { name: 'Option draft' }),
   ).toHaveValue('temporary option');
+});
+
+test('suspends hidden frames and reactivates them without remounting', async ({ page }) => {
+  await openInvoice(page, 1);
+  await expect(activeFrame(page).getByTestId('workspace-active')).toHaveText('true');
+  await openInvoice(page, 2);
+
+  await expect(
+    page.frameLocator('iframe[title="Invoice 1"]').getByTestId('workspace-active'),
+  ).toHaveText('false');
+  await expect(
+    page.frameLocator('iframe[title="Invoice 2"]').getByTestId('workspace-active'),
+  ).toHaveText('true');
+
+  await page.getByRole('tab', { name: 'Invoice 1' }).click();
+  await expect(
+    page.frameLocator('iframe[title="Invoice 1"]').getByTestId('workspace-active'),
+  ).toHaveText('true');
+  await expect(
+    page.frameLocator('iframe[title="Invoice 2"]').getByTestId('workspace-active'),
+  ).toHaveText('false');
 });
 
 test('keeps non-pilot page-to-page navigation inside the existing work tab', async ({ page }) => {

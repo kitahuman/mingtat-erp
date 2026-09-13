@@ -1,4 +1,9 @@
 'use client';
+import {
+  openWorkspacePath,
+  useWorkspaceTabDirty,
+  useWorkspaceTabTitle,
+} from '@/components/WorkspaceTabs';
 import { useState, useEffect } from 'react';
 import DateInput from '@/components/DateInput';
 import { useParams, useRouter } from 'next/navigation';
@@ -293,6 +298,22 @@ export default function EmployeeDetailPage() {
   const [payrollLeaveExpanded, setPayrollLeaveExpanded] = useState(false);
   // C. 年假餘額 tooltip
   const [showAnnualLeaveTooltip, setShowAnnualLeaveTooltip] = useState(false);
+  const employeeId = Number(params.id);
+  useWorkspaceTabTitle(
+    emp?.name_zh || emp?.name_en || emp?.emp_code || `員工 #${employeeId}`,
+    `/employees/${employeeId}`,
+  );
+  useWorkspaceTabDirty(
+    editing ||
+      showSalaryModal ||
+      showTransferModal ||
+      showTerminateModal ||
+      showReinstateModal ||
+      showPettyCashModal ||
+      showLeaveModal,
+    '員工資料或表單正在編輯，尚未儲存',
+    `/employees/${employeeId}`,
+  );
 
   const loadPettyCash = async (employeeId: number) => {
     setPettyCashLoading(true);
@@ -317,7 +338,7 @@ export default function EmployeeDetailPage() {
         else if (typeof oc === 'string') setOtherCerts(JSON.parse(oc));
       } catch { setOtherCerts({}); }
       setLoading(false);
-    }).catch(() => router.push('/employees'));
+    }).catch(() => openWorkspacePath('/employees'));
     loadPettyCash(Number(params.id));
     employeesApi.getEmploymentHistory(Number(params.id)).then(res => {
       setEmploymentHistoryRows(buildEmploymentHistoryRows(res.data || []));

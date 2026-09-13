@@ -1,4 +1,35 @@
-export type WorkspaceGroup = 'invoices' | 'quotations' | 'general';
+export type WorkspaceModule =
+  | 'invoices'
+  | 'quotations'
+  | 'company-profiles'
+  | 'companies'
+  | 'employees'
+  | 'vehicles'
+  | 'vehicle-plates'
+  | 'machinery'
+  | 'partners'
+  | 'subcon-fleet-drivers'
+  | 'salary-config'
+  | 'project-rate-cards'
+  | 'rental-rate-cards'
+  | 'fleet-rate-cards'
+  | 'subcon-rate-cards'
+  | 'rate-cards'
+  | 'projects'
+  | 'contract-pa'
+  | 'daily-reports'
+  | 'expenses'
+  | 'payment-in'
+  | 'payment-out'
+  | 'invoice-statements'
+  | 'profit-loss'
+  | 'equipment-profit'
+  | 'payroll'
+  | 'ai-payroll-reconcile'
+  | 'subcon-payroll'
+  | 'ai-knowledge';
+
+export type WorkspaceGroup = WorkspaceModule | 'general';
 export type WorkspaceTabKind = 'list' | 'detail' | 'page';
 export type WorkspaceSubrouteKind = 'entity' | 'child';
 
@@ -17,6 +48,7 @@ export const WORKSPACE_PAGE_TITLES: Record<string, string> = {
   '/verification/upload': '上傳資料',
   '/verification/batches': '匯入紀錄',
   '/verification/records': '已匯入資料',
+  '/verification/ocr': 'AI OCR 辨識結果確認',
   '/verification/whatsapp': 'WhatsApp Order',
   '/company-profiles': '公司資料',
   '/companies': '公司管理',
@@ -86,14 +118,29 @@ export type WorkspaceOpenDecision =
   | 'open-new'
   | 'overflow';
 
+type ParsedWorkspaceUrl = {
+  pathname: string;
+  path: string;
+  searchParams: URLSearchParams;
+};
+
 type WorkspaceRouteDefinition = {
-  group: Exclude<WorkspaceGroup, 'general'>;
+  group: WorkspaceModule;
   listPath: string;
   listTitle: string;
   detailPattern: RegExp;
-  detailKeyPrefix: string;
-  detailTitle: (id: string, child?: string) => string;
+  getCanonicalKey: (
+    match: RegExpMatchArray,
+    parsed: ParsedWorkspaceUrl,
+  ) => string;
+  getDetailTitle: (match: RegExpMatchArray) => string;
+  isChild?: (match: RegExpMatchArray) => boolean;
 };
+
+const idKey = (prefix: string, index = 1) => (match: RegExpMatchArray) =>
+  `${prefix}:${match[index]}`;
+const numberedTitle = (label: string, index = 1) =>
+  (match: RegExpMatchArray) => `${label} #${match[index]}`;
 
 const WORKSPACE_ROUTE_DEFINITIONS: WorkspaceRouteDefinition[] = [
   {
@@ -101,45 +148,262 @@ const WORKSPACE_ROUTE_DEFINITIONS: WorkspaceRouteDefinition[] = [
     listPath: '/invoices',
     listTitle: '發票列表',
     detailPattern: /^\/invoices\/(\d+)(?:\/(prepare|pricing|pdf-preview))?$/,
-    detailKeyPrefix: 'invoice',
-    detailTitle: (id, child) =>
-      child === 'pdf-preview' ? `發票 #${id} · PDF` : `發票 #${id}`,
+    getCanonicalKey: idKey('invoice'),
+    getDetailTitle: (match) =>
+      match[2] === 'pdf-preview'
+        ? `發票 #${match[1]} · PDF`
+        : `發票 #${match[1]}`,
+    isChild: (match) => Boolean(match[2]),
   },
   {
     group: 'quotations',
     listPath: '/quotations',
     listTitle: '報價單列表',
     detailPattern: /^\/quotations\/(\d+)(?:\/(pdf-preview))?$/,
-    detailKeyPrefix: 'quotation',
-    detailTitle: (id, child) =>
-      child === 'pdf-preview' ? `報價單 #${id} · PDF` : `報價單 #${id}`,
+    getCanonicalKey: idKey('quotation'),
+    getDetailTitle: (match) =>
+      match[2] === 'pdf-preview'
+        ? `報價單 #${match[1]} · PDF`
+        : `報價單 #${match[1]}`,
+    isChild: (match) => Boolean(match[2]),
+  },
+  {
+    group: 'company-profiles',
+    listPath: '/company-profiles',
+    listTitle: '公司資料',
+    detailPattern: /^\/company-profiles\/(\d+)$/,
+    getCanonicalKey: idKey('company-profile'),
+    getDetailTitle: numberedTitle('公司資料'),
+  },
+  {
+    group: 'companies',
+    listPath: '/companies',
+    listTitle: '公司管理',
+    detailPattern: /^\/companies\/(\d+)$/,
+    getCanonicalKey: idKey('company'),
+    getDetailTitle: numberedTitle('公司'),
+  },
+  {
+    group: 'employees',
+    listPath: '/employees',
+    listTitle: '員工管理',
+    detailPattern: /^\/employees\/(\d+)$/,
+    getCanonicalKey: idKey('employee'),
+    getDetailTitle: numberedTitle('員工'),
+  },
+  {
+    group: 'vehicles',
+    listPath: '/vehicles',
+    listTitle: '車輛管理',
+    detailPattern: /^\/vehicles\/(\d+)$/,
+    getCanonicalKey: idKey('vehicle'),
+    getDetailTitle: numberedTitle('車輛'),
+  },
+  {
+    group: 'vehicle-plates',
+    listPath: '/vehicles',
+    listTitle: '車輛管理',
+    detailPattern: /^\/vehicles\/plates\/(\d+)$/,
+    getCanonicalKey: idKey('vehicle-plate'),
+    getDetailTitle: numberedTitle('車牌'),
+  },
+  {
+    group: 'machinery',
+    listPath: '/machinery',
+    listTitle: '機械管理',
+    detailPattern: /^\/machinery\/(\d+)$/,
+    getCanonicalKey: idKey('machinery'),
+    getDetailTitle: numberedTitle('機械'),
+  },
+  {
+    group: 'partners',
+    listPath: '/partners',
+    listTitle: '合作單位',
+    detailPattern: /^\/partners\/(\d+)$/,
+    getCanonicalKey: idKey('partner'),
+    getDetailTitle: numberedTitle('合作單位'),
+  },
+  {
+    group: 'subcon-fleet-drivers',
+    listPath: '/subcon-fleet-drivers',
+    listTitle: '街車車隊管理',
+    detailPattern: /^\/subcon-fleet-drivers\/(\d+)$/,
+    getCanonicalKey: idKey('subcon-fleet-driver'),
+    getDetailTitle: numberedTitle('街車司機'),
+  },
+  {
+    group: 'salary-config',
+    listPath: '/salary-config',
+    listTitle: '員工薪酬',
+    detailPattern: /^\/salary-config\/(\d+)$/,
+    getCanonicalKey: idKey('salary-config'),
+    getDetailTitle: numberedTitle('員工薪酬'),
+  },
+  {
+    group: 'project-rate-cards',
+    listPath: '/project-rate-cards',
+    listTitle: '工程價目表',
+    detailPattern: /^\/project-rate-cards\/(\d+)$/,
+    getCanonicalKey: idKey('rate-card'),
+    getDetailTitle: numberedTitle('工程價目'),
+  },
+  {
+    group: 'rental-rate-cards',
+    listPath: '/rental-rate-cards',
+    listTitle: '客戶價目表',
+    detailPattern: /^\/rental-rate-cards\/(\d+)$/,
+    getCanonicalKey: idKey('rate-card'),
+    getDetailTitle: numberedTitle('客戶價目'),
+  },
+  {
+    group: 'fleet-rate-cards',
+    listPath: '/fleet-rate-cards',
+    listTitle: '租賃價目表',
+    detailPattern: /^\/fleet-rate-cards\/(\d+)$/,
+    getCanonicalKey: idKey('fleet-rate-card'),
+    getDetailTitle: numberedTitle('租賃價目'),
+  },
+  {
+    group: 'subcon-rate-cards',
+    listPath: '/subcon-rate-cards',
+    listTitle: '供應商價目表',
+    detailPattern: /^\/subcon-rate-cards\/(\d+)$/,
+    getCanonicalKey: idKey('subcon-rate-card'),
+    getDetailTitle: numberedTitle('供應商價目'),
+  },
+  {
+    group: 'rate-cards',
+    listPath: '/rate-cards',
+    listTitle: '價目表',
+    detailPattern: /^\/rate-cards\/(\d+)$/,
+    getCanonicalKey: idKey('rate-card'),
+    getDetailTitle: numberedTitle('價目'),
+  },
+  {
+    group: 'projects',
+    listPath: '/projects',
+    listTitle: '工程項目',
+    detailPattern: /^\/projects\/(\d+)$/,
+    getCanonicalKey: idKey('project'),
+    getDetailTitle: numberedTitle('工程'),
+  },
+  {
+    group: 'contract-pa',
+    listPath: '/projects',
+    listTitle: '工程項目',
+    detailPattern: /^\/contracts\/(\d+)\/pa\/(\d+)(?:\/(print))?$/,
+    getCanonicalKey: (match) => `contract-pa:${match[1]}:${match[2]}`,
+    getDetailTitle: (match) => `付款申請 #${match[2]}`,
+    isChild: (match) => Boolean(match[3]),
+  },
+  {
+    group: 'daily-reports',
+    listPath: '/daily-reports',
+    listTitle: '工程日報',
+    detailPattern: /^\/daily-reports\/(\d+)\/edit$/,
+    getCanonicalKey: idKey('daily-report'),
+    getDetailTitle: numberedTitle('工程日報'),
+  },
+  {
+    group: 'expenses',
+    listPath: '/expenses',
+    listTitle: '支出管理',
+    detailPattern: /^\/expenses\/(\d+)$/,
+    getCanonicalKey: idKey('expense'),
+    getDetailTitle: numberedTitle('支出'),
+  },
+  {
+    group: 'payment-in',
+    listPath: '/payment-in',
+    listTitle: '收款記錄',
+    detailPattern: /^\/payment-in\/(\d+)(?:\/(receipt-preview))?$/,
+    getCanonicalKey: idKey('payment-in'),
+    getDetailTitle: (match) =>
+      match[2] ? `收款 #${match[1]} · 收據` : `收款 #${match[1]}`,
+    isChild: (match) => Boolean(match[2]),
+  },
+  {
+    group: 'payment-out',
+    listPath: '/payment-out',
+    listTitle: '付款記錄',
+    detailPattern: /^\/payment-out\/(\d+)$/,
+    getCanonicalKey: idKey('payment-out'),
+    getDetailTitle: numberedTitle('付款'),
+  },
+  {
+    group: 'invoice-statements',
+    listPath: '/invoices?tab=statements',
+    listTitle: '發票清單',
+    detailPattern: /^\/invoice-statements\/(\d+)(?:\/(pdf-preview))?$/,
+    getCanonicalKey: idKey('invoice-statement'),
+    getDetailTitle: (match) =>
+      match[2] ? `發票清單 #${match[1]} · PDF` : `發票清單 #${match[1]}`,
+    isChild: (match) => Boolean(match[2]),
+  },
+  {
+    group: 'profit-loss',
+    listPath: '/profit-loss',
+    listTitle: '工程損益總覽',
+    detailPattern: /^\/profit-loss\/(\d+)$/,
+    getCanonicalKey: (match, parsed) =>
+      `profit-loss:${match[1]}:${parsed.searchParams.get('date_from') || ''}:${parsed.searchParams.get('date_to') || ''}`,
+    getDetailTitle: numberedTitle('工程損益'),
+  },
+  {
+    group: 'equipment-profit',
+    listPath: '/equipment-profit',
+    listTitle: '機械收支',
+    detailPattern: /^\/equipment-profit\/(machinery|vehicle)\/(\d+)$/,
+    getCanonicalKey: (match, parsed) =>
+      `equipment-profit:${match[1]}:${match[2]}:${parsed.searchParams.get('date_from') || ''}:${parsed.searchParams.get('date_to') || ''}`,
+    getDetailTitle: (match) =>
+      `${match[1] === 'vehicle' ? '車輛' : '機械'}收支 #${match[2]}`,
+  },
+  {
+    group: 'payroll',
+    listPath: '/payroll-records',
+    listTitle: '糧單記錄',
+    detailPattern: /^\/payroll\/(\d+)$/,
+    getCanonicalKey: idKey('payroll'),
+    getDetailTitle: numberedTitle('糧單'),
+  },
+  {
+    group: 'ai-payroll-reconcile',
+    listPath: '/payroll-records',
+    listTitle: '糧單記錄',
+    detailPattern: /^\/payroll\/ai-reconcile\/(\d+)$/,
+    getCanonicalKey: idKey('ai-payroll-reconcile'),
+    getDetailTitle: numberedTitle('AI 計糧核對'),
+  },
+  {
+    group: 'subcon-payroll',
+    listPath: '/subcon-payroll/records',
+    listTitle: '判頭糧單記錄',
+    detailPattern: /^\/subcon-payroll\/(\d+)$/,
+    getCanonicalKey: idKey('subcon-payroll'),
+    getDetailTitle: numberedTitle('判頭糧單'),
+  },
+  {
+    group: 'ai-knowledge',
+    listPath: '/ai-knowledge',
+    listTitle: 'AI 知識庫',
+    detailPattern: /^\/ai-knowledge\/(\d+)$/,
+    getCanonicalKey: idKey('ai-knowledge'),
+    getDetailTitle: numberedTitle('AI 知識'),
   },
 ];
 
-const getEnabledGroups = (): Set<WorkspaceRouteDefinition['group']> => {
-  const configured = process.env.NEXT_PUBLIC_WORKSPACE_TABS_MODULES;
-  if (configured === undefined) {
-    return new Set<WorkspaceRouteDefinition['group']>([
-      'invoices',
-      'quotations',
-    ]);
-  }
+const WORKSPACE_EXCLUDED_PATHS = [
+  /^\/ai-knowledge\/new$/,
+  /^\/contracts$/,
+  /^\/contracts\/\d+$/,
+  /^\/payroll$/,
+  /^\/subcon-payroll$/,
+  /^\/verification\/upload$/,
+  /^\/clock-in$/,
+];
 
-  return new Set(
-    configured
-      .split(',')
-      .map((value) => value.trim())
-      .filter((value): value is WorkspaceRouteDefinition['group'] =>
-        WORKSPACE_ROUTE_DEFINITIONS.some(
-          (definition) => definition.group === value,
-        ),
-      ),
-  );
-};
-
-const ENABLED_GROUPS = getEnabledGroups();
-
-const parseWorkspaceUrl = (path: string) => {
+const parseWorkspaceUrl = (path: string): ParsedWorkspaceUrl | null => {
   try {
     const url = new URL(path, 'http://workspace.local');
     url.searchParams.delete('workspace_frame');
@@ -147,22 +411,30 @@ const parseWorkspaceUrl = (path: string) => {
     return {
       pathname: url.pathname,
       path: `${url.pathname}${search ? `?${search}` : ''}${url.hash}`,
+      searchParams: url.searchParams,
     };
   } catch {
     return null;
   }
 };
 
-export const getWorkspacePageTitle = (pathname: string): string => {
-  if (WORKSPACE_PAGE_TITLES[pathname]) return WORKSPACE_PAGE_TITLES[pathname];
-  const segments = pathname.split('/');
-  while (segments.length > 1) {
-    segments.pop();
-    const parent = segments.join('/') || '/';
-    if (WORKSPACE_PAGE_TITLES[parent]) return WORKSPACE_PAGE_TITLES[parent];
-  }
-  return '';
+const getEnabledGroups = (): Set<WorkspaceModule> => {
+  const configured = process.env.NEXT_PUBLIC_WORKSPACE_TABS_MODULES?.trim();
+  const allGroups = WORKSPACE_ROUTE_DEFINITIONS.map(({ group }) => group);
+  if (!configured || configured === 'all') return new Set(allGroups);
+
+  return new Set(
+    configured
+      .split(',')
+      .map((value) => value.trim())
+      .filter((value): value is WorkspaceModule =>
+        allGroups.includes(value as WorkspaceModule),
+      ),
+  );
 };
+
+export const getWorkspacePageTitle = (pathname: string): string =>
+  WORKSPACE_PAGE_TITLES[pathname] || '';
 
 export const describeWorkspacePath = (
   path: string,
@@ -171,10 +443,15 @@ export const describeWorkspacePath = (
   const parsed = parseWorkspaceUrl(path);
   if (!parsed) return null;
 
+  const enabledGroups = getEnabledGroups();
+  let matchedDisabledRoute = false;
   for (const definition of WORKSPACE_ROUTE_DEFINITIONS) {
-    if (!ENABLED_GROUPS.has(definition.group)) continue;
-
-    if (parsed.pathname === definition.listPath) {
+    const listPathname = parseWorkspaceUrl(definition.listPath)?.pathname;
+    if (parsed.pathname === listPathname) {
+      if (!enabledGroups.has(definition.group)) {
+        matchedDisabledRoute = true;
+        continue;
+      }
       return {
         ...parsed,
         title: preferredTitle || definition.listTitle,
@@ -189,18 +466,26 @@ export const describeWorkspacePath = (
 
     const match = parsed.pathname.match(definition.detailPattern);
     if (!match) continue;
+    if (!enabledGroups.has(definition.group)) {
+      matchedDisabledRoute = true;
+      continue;
+    }
 
-    const [, id, child] = match;
     return {
       ...parsed,
-      title: preferredTitle || definition.detailTitle(id, child),
+      title: preferredTitle || definition.getDetailTitle(match),
       group: definition.group,
       kind: 'detail',
-      canonicalKey: `${definition.detailKeyPrefix}:${id}`,
+      canonicalKey: definition.getCanonicalKey(match, parsed),
       listPath: definition.listPath,
       listTitle: definition.listTitle,
-      subrouteKind: child ? 'child' : 'entity',
+      subrouteKind: definition.isChild?.(match) ? 'child' : 'entity',
     };
+  }
+
+  if (matchedDisabledRoute) return null;
+  if (WORKSPACE_EXCLUDED_PATHS.some((pattern) => pattern.test(parsed.pathname))) {
+    return null;
   }
 
   const pageTitle = preferredTitle || getWorkspacePageTitle(parsed.pathname);

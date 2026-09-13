@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { useRouter } from 'next/navigation';
+import { openWorkspacePath } from '@/components/WorkspaceTabs';
 import Modal from '@/components/Modal';
 import DateInput from '@/components/DateInput';
 import {
@@ -41,7 +41,6 @@ export default function ProjectExpensesList({
   projectId: number;
   companyId?: number | null;
 }) {
-  const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [expenses, setExpenses] = useState<any[]>([]);
   const [total, setTotal] = useState(0);
@@ -193,7 +192,14 @@ export default function ProjectExpensesList({
                   <tr
                     key={exp.id}
                     className="hover:bg-gray-50 cursor-pointer"
-                    onClick={() => router.push(`/expenses/${exp.id}`)}
+                    onClick={(event) =>
+                      openWorkspacePath(`/expenses/${exp.id}`, undefined, event)
+                    }
+                    onMouseDown={(event) => {
+                      if (event.button !== 1) return;
+                      event.preventDefault();
+                      openWorkspacePath(`/expenses/${exp.id}`, undefined, event);
+                    }}
                   >
                     <td className="px-3 py-2 whitespace-nowrap">{fmtDate(exp.date)}</td>
                     <td className="px-3 py-2">

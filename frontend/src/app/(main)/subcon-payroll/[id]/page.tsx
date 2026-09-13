@@ -1,6 +1,11 @@
 'use client';
+import {
+  openWorkspacePath,
+  useWorkspaceTabDirty,
+  useWorkspaceTabTitle,
+} from '@/components/WorkspaceTabs';
 import { useState, useEffect, useCallback } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams } from 'next/navigation';
 import { subconPayrollApi } from '@/lib/api';
 import Link from 'next/link';
 import { fmtDate } from '@/lib/dateUtils';
@@ -25,13 +30,24 @@ const STATUS_COLORS: Record<string, string> = {
 
 export default function SubconPayrollDetailPage() {
   const params = useParams();
-  const router = useRouter();
   const id = Number(params.id);
 
   const { isReadOnly } = useAuth();
   const [payroll, setPayroll] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [paymentFormDirty, setPaymentFormDirty] = useState(false);
+
+  const payrollTabPath = `/subcon-payroll/${params.id}`;
+  const payrollTitle = payroll
+    ? `判頭糧單 #${payroll.id}${payroll.subcontractor?.name ? ` — ${payroll.subcontractor.name}` : ''}`
+    : `判頭糧單 #${params.id}`;
+  useWorkspaceTabTitle(payrollTitle, payrollTabPath);
+  useWorkspaceTabDirty(
+    paymentFormDirty,
+    '付款紀錄表單有未儲存的修改',
+    payrollTabPath,
+  );
 
   const loadPayroll = useCallback(() => {
     if (!id) return;
@@ -48,7 +64,7 @@ export default function SubconPayrollDetailPage() {
     if (!confirm('確定要刪除此糧單嗎？此操作將同時刪除關聯的支出記錄，且不可恢復。')) return;
     try {
       await subconPayrollApi.remove(id);
-      router.push('/subcon-payroll/records');
+      openWorkspacePath('/subcon-payroll/records');
     } catch (err: any) {
       alert(err.response?.data?.message || '刪除失敗');
     }
@@ -286,6 +302,7 @@ export default function SubconPayrollDetailPage() {
         sourceRefId={id}
         totalAmount={Number(payroll.subcon_payroll_total_amount) || 0}
         onStatusChange={loadPayroll}
+        onDirtyChange={setPaymentFormDirty}
       />
     </div>
   );

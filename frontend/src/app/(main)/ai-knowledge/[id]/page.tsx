@@ -1,8 +1,12 @@
 'use client';
+import {
+  openWorkspacePath,
+  useWorkspaceTabDirty,
+  useWorkspaceTabTitle,
+} from '@/components/WorkspaceTabs';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import { aiKnowledgeApi } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 
@@ -95,7 +99,6 @@ function JsonKeyValueView({ value }: { value: any }) {
 }
 
 export default function AiKnowledgeDetailPage({ params }: { params: { id: string } }) {
-  const router = useRouter();
   const { isReadOnly } = useAuth();
   const readOnly = isReadOnly('ai-knowledge');
   const [entry, setEntry] = useState<KnowledgeEntry | null>(null);
@@ -104,6 +107,24 @@ export default function AiKnowledgeDetailPage({ params }: { params: { id: string
   const [editing, setEditing] = useState(false);
   const [activeTab, setActiveTab] = useState<'content' | 'evidence' | 'history' | 'stats' | 'reviews'>('content');
   const [form, setForm] = useState({ title: '', description: '', category: '', module: '', keywords: '', payloadJson: '{}' });
+  const knowledgeTabPath = `/ai-knowledge/${params.id}`;
+  const knowledgeTitle = entry?.title || entry?.knowledge_title || `知識 #${params.id}`;
+  const entryPayload = entry ? getPayload(entry) : {};
+  const hasFormDraft = Boolean(
+    entry &&
+      (form.title !== (entry.title || entry.knowledge_title || '') ||
+        form.description !== (entry.description || entry.summary || '') ||
+        form.category !== (entry.category || entry.knowledge_category || '') ||
+        form.module !== (entry.module || entry.module_scope || entry.target_module || '') ||
+        form.keywords !== (Array.isArray(entry.keywords) ? entry.keywords.join(', ') : (entry.keywords || '')) ||
+        form.payloadJson !== (typeof entryPayload === 'string' ? entryPayload : JSON.stringify(entryPayload, null, 2))),
+  );
+  useWorkspaceTabTitle(knowledgeTitle, knowledgeTabPath);
+  useWorkspaceTabDirty(
+    (editing && hasFormDraft) || saving,
+    '知識資料有未儲存的修改或處理中的操作',
+    knowledgeTabPath,
+  );
 
   const loadEntry = useCallback(async () => {
     setLoading(true);
@@ -189,7 +210,7 @@ export default function AiKnowledgeDetailPage({ params }: { params: { id: string
     setSaving(true);
     try {
       await aiKnowledgeApi.delete(params.id);
-      router.push('/ai-knowledge');
+      openWorkspacePath('/ai-knowledge');
     } catch (err: any) {
       const msg = err?.response?.data?.message || '刪除失敗';
       alert(typeof msg === 'string' ? msg : JSON.stringify(msg));

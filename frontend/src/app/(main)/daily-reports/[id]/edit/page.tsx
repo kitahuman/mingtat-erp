@@ -1,6 +1,7 @@
 'use client';
+import { openWorkspacePath, useWorkspaceTabDirty, useWorkspaceTabTitle } from '@/components/WorkspaceTabs';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import DateInput from '@/components/DateInput';
 import { useRouter, useParams } from 'next/navigation';
 import {
@@ -129,6 +130,108 @@ export default function EditDailyReportPage() {
 
   // 核對狀態（每個 item 的配對狀態）
   const [verificationStatuses, setVerificationStatuses] = useState<Map<number, { status: string; matched_work_logs: Array<{ id: number; equipment_number: string | null; employee_name: string | null; service_type: string | null }>; quantity_info?: { report_quantity: number; actual_quantity: number } }>>(new Map());
+
+  const dailyReportDraftSnapshot = useMemo(
+    () =>
+      JSON.stringify({
+        reportDate,
+        shiftType,
+        projectId,
+        projectName,
+        quotationId,
+        clientId,
+        clientName,
+        clientContractNo,
+        workSummary,
+        completedWork,
+        memo,
+        status,
+        projectLocation,
+        items: items.map(({ _key, _id, ...item }) => item),
+      }),
+    [
+      clientContractNo,
+      clientId,
+      clientName,
+      completedWork,
+      items,
+      memo,
+      projectId,
+      projectLocation,
+      projectName,
+      quotationId,
+      reportDate,
+      shiftType,
+      status,
+      workSummary,
+    ],
+  );
+  const originalDailyReportSnapshot = useMemo(() => {
+    if (!originalReport) return null;
+    return JSON.stringify({
+      reportDate: originalReport.daily_report_date?.split('T')[0] || '',
+      shiftType: originalReport.daily_report_shift_type || 'day',
+      projectId: originalReport.daily_report_project_id
+        ? String(originalReport.daily_report_project_id)
+        : '',
+      projectName:
+        originalReport.daily_report_project_name ||
+        originalReport.project?.project_name ||
+        '',
+      quotationId: originalReport.daily_report_quotation_id
+        ? String(originalReport.daily_report_quotation_id)
+        : '',
+      clientId: originalReport.daily_report_client_id
+        ? String(originalReport.daily_report_client_id)
+        : '',
+      clientName:
+        originalReport.daily_report_client_name ||
+        originalReport.client?.name ||
+        '',
+      clientContractNo: originalReport.daily_report_client_contract_no || '',
+      workSummary: originalReport.daily_report_work_summary || '',
+      completedWork: originalReport.daily_report_completed_work || '',
+      memo: originalReport.daily_report_memo || '',
+      status: originalReport.daily_report_status || 'submitted',
+      projectLocation: originalReport.daily_report_project_location || '',
+      items: (originalReport.items || []).map((item: any) => ({
+        category: item.daily_report_item_category || 'worker',
+        worker_type: item.daily_report_item_worker_type || '',
+        content: item.daily_report_item_content || '',
+        quantity:
+          item.daily_report_item_quantity != null
+            ? String(item.daily_report_item_quantity)
+            : '',
+        shift_quantity:
+          item.daily_report_item_shift_quantity != null
+            ? String(item.daily_report_item_shift_quantity)
+            : '',
+        ot_hours:
+          item.daily_report_item_ot_hours != null
+            ? String(item.daily_report_item_ot_hours)
+            : '',
+        name_or_plate: item.daily_report_item_name_or_plate || '',
+        with_operator: item.daily_report_item_with_operator || false,
+        machine_type: item.daily_report_item_machine_type || '',
+        tonnage:
+          item.daily_report_item_tonnage != null
+            ? String(item.daily_report_item_tonnage)
+            : '',
+      })),
+    });
+  }, [originalReport]);
+  const isDailyReportDirty =
+    originalDailyReportSnapshot !== null &&
+    dailyReportDraftSnapshot !== originalDailyReportSnapshot;
+  useWorkspaceTabTitle(
+    originalReport
+      ? `日報 · ${originalReport.daily_report_date?.split('T')[0] || `#${reportId}`}${originalReport.daily_report_project_name || originalReport.project?.project_name ? ` · ${originalReport.daily_report_project_name || originalReport.project?.project_name}` : ''}`
+      : `日報 #${reportId}`,
+  );
+  useWorkspaceTabDirty(
+    isDailyReportDirty || saving,
+    '日報表有未儲存的修改',
+  );
 
   const normalizeProjectNames = (data: any): string[] => {
     const list = Array.isArray(data) ? data : [];
@@ -533,7 +636,7 @@ export default function EditDailyReportPage() {
         })),
       };
       await dailyReportsApi.adminUpdate(reportId, dto);
-      router.push('/daily-reports');
+      openWorkspacePath('/daily-reports');
     } catch (e: any) {
       setError(e?.response?.data?.message || '保存失敗，請重試');
     } finally {
@@ -579,7 +682,7 @@ export default function EditDailyReportPage() {
         </div>
         <div className="flex gap-2">
           <button
-            onClick={() => router.push('/daily-reports')}
+            onClick={() => openWorkspacePath('/daily-reports')}
             className="px-4 py-2 border rounded-lg text-sm text-gray-600 hover:bg-gray-50"
           >
             取消
@@ -1081,7 +1184,7 @@ export default function EditDailyReportPage() {
         </p>
         <div className="flex gap-2">
           <button
-            onClick={() => router.push('/daily-reports')}
+            onClick={() => openWorkspacePath('/daily-reports')}
             className="px-4 py-2 border rounded-lg text-sm text-gray-600 hover:bg-gray-50"
           >
             取消

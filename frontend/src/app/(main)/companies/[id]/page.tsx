@@ -1,4 +1,9 @@
 'use client';
+import {
+  openWorkspacePath,
+  useWorkspaceTabDirty,
+  useWorkspaceTabTitle,
+} from '@/components/WorkspaceTabs';
 import { useRef, useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { companiesApi, paymentTermTemplatesApi } from '@/lib/api';
@@ -56,6 +61,13 @@ export default function CompanyDetailPage() {
   const [paymentTermForm, setPaymentTermForm] = useState<PaymentTermForm>(emptyPaymentTermForm);
   const [savingPaymentTerm, setSavingPaymentTerm] = useState(false);
   const [deletingPaymentTermId, setDeletingPaymentTermId] = useState<number | null>(null);
+  const companyId = Number(params.id);
+  useWorkspaceTabTitle(company?.name || `公司 #${companyId}`, `/companies/${companyId}`);
+  useWorkspaceTabDirty(
+    editing || showPaymentTermModal,
+    '公司資料或付款條款正在編輯，尚未儲存',
+    `/companies/${companyId}`,
+  );
 
   const getLogoSrc = (path?: string) => {
     if (!path) return '';
@@ -181,7 +193,7 @@ export default function CompanyDetailPage() {
       setForm(res.data);
       setLoading(false);
       loadPaymentTerms(companyId);
-    }).catch(() => { router.push('/companies'); });
+    }).catch(() => { openWorkspacePath('/companies'); });
   }, [params.id, router]);
 
   const handleSave = async () => {
@@ -529,7 +541,7 @@ export default function CompanyDetailPage() {
               <thead><tr className="bg-gray-50 border-b"><th className="px-3 py-2 text-left">編號</th><th className="px-3 py-2 text-left">姓名</th><th className="px-3 py-2 text-left">職位</th><th className="px-3 py-2 text-left">狀態</th></tr></thead>
               <tbody>
                 {company.employees.slice(0, 10).map((emp: any) => (
-                  <tr key={emp.id} className="border-b hover:bg-gray-50 cursor-pointer" onClick={() => router.push(`/employees/${emp.id}`)}>
+                  <tr key={emp.id} className="border-b hover:bg-gray-50 cursor-pointer" onClick={(event) => openWorkspacePath(`/employees/${emp.id}`, undefined, event)} onMouseDown={(event) => { if (event.button === 1) { event.preventDefault(); openWorkspacePath(`/employees/${emp.id}`, undefined, event); } }}>
                     <td className="px-3 py-2 font-mono">{emp.emp_code}</td>
                     <td className="px-3 py-2 font-medium">{emp.name_zh}</td>
                     <td className="px-3 py-2">{emp.role || '-'}</td>
@@ -555,7 +567,7 @@ export default function CompanyDetailPage() {
               <thead><tr className="bg-gray-50 border-b"><th className="px-3 py-2 text-left">車牌</th><th className="px-3 py-2 text-left">車型</th><th className="px-3 py-2 text-left">噸數</th><th className="px-3 py-2 text-left">狀態</th></tr></thead>
               <tbody>
                 {company.vehicles.slice(0, 10).map((v: any) => (
-                  <tr key={v.id} className="border-b hover:bg-gray-50 cursor-pointer" onClick={() => router.push(`/vehicles/${v.id}`)}>
+                  <tr key={v.id} className="border-b hover:bg-gray-50 cursor-pointer" onClick={(event) => openWorkspacePath(`/vehicles/${v.id}`, undefined, event)} onMouseDown={(event) => { if (event.button === 1) { event.preventDefault(); openWorkspacePath(`/vehicles/${v.id}`, undefined, event); } }}>
                     <td className="px-3 py-2 font-mono font-bold">{v.plate_number}</td>
                     <td className="px-3 py-2">{v.machine_type || '-'}</td>
                     <td className="px-3 py-2">{v.tonnage ? `${v.tonnage}T` : '-'}</td>
@@ -580,7 +592,7 @@ export default function CompanyDetailPage() {
               <thead><tr className="bg-gray-50 border-b"><th className="px-3 py-2 text-left">編號</th><th className="px-3 py-2 text-left">品牌</th><th className="px-3 py-2 text-left">型號</th><th className="px-3 py-2 text-left">噸數</th></tr></thead>
               <tbody>
                 {company.machinery.slice(0, 10).map((m: any) => (
-                  <tr key={m.id} className="border-b hover:bg-gray-50 cursor-pointer" onClick={() => router.push(`/machinery/${m.id}`)}>
+                  <tr key={m.id} className="border-b hover:bg-gray-50 cursor-pointer" onClick={(event) => openWorkspacePath(`/machinery/${m.id}`, undefined, event)} onMouseDown={(event) => { if (event.button === 1) { event.preventDefault(); openWorkspacePath(`/machinery/${m.id}`, undefined, event); } }}>
                     <td className="px-3 py-2 font-mono font-bold">{m.machine_code}</td>
                     <td className="px-3 py-2">{m.brand || '-'}</td>
                     <td className="px-3 py-2">{m.model || '-'}</td>

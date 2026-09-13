@@ -1,4 +1,5 @@
 'use client';
+import { openWorkspacePath } from '@/components/WorkspaceTabs';
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import DateInput from '@/components/DateInput';
@@ -858,7 +859,11 @@ export default function DailyReportsAdminPage() {
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
-                              router.push(`/daily-reports/${report.id}/edit`);
+                              openWorkspacePath(
+                                `/daily-reports/${report.id}/edit`,
+                                undefined,
+                                e,
+                              );
                             }}
                             className="text-green-600 hover:text-green-800 text-xs font-medium"
                           >

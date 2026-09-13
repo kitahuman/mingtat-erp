@@ -1,4 +1,5 @@
 'use client';
+import { openWorkspacePath, useWorkspaceTabDirty, useWorkspaceTabTitle } from '@/components/WorkspaceTabs';
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -159,6 +160,16 @@ export default function PaymentInDetailPage() {
   const [paymentMethods, setPaymentMethods] = useState<any[]>([]);
   const [sourceTypes, setSourceTypes] = useState<any[]>([]);
   const [partners, setPartners] = useState<any[]>([]);
+
+  useWorkspaceTabTitle(
+    record
+      ? `收款 #${record.id}${record.reference_no ? ` · ${record.reference_no}` : ''}`
+      : `收款 #${recordId}`,
+  );
+  useWorkspaceTabDirty(
+    editMode || saving,
+    '收款記錄有未儲存的修改',
+  );
 
   const loadRecord = useCallback(() => {
     setLoading(true);
@@ -336,7 +347,7 @@ export default function PaymentInDetailPage() {
     if (!confirm('確定刪除此收款記錄？此操作無法復原。')) return;
     try {
       await paymentInApi.delete(recordId);
-      router.push('/payment-in');
+      openWorkspacePath('/payment-in');
     } catch (err: unknown) {
       const msg =
         (err as { response?: { data?: { message?: string } } })?.response?.data
@@ -358,7 +369,7 @@ export default function PaymentInDetailPage() {
       <div className="text-center py-12">
         <p className="text-red-500 mb-4">{error || '找不到收款記錄'}</p>
         <button
-          onClick={() => router.push('/payment-in')}
+          onClick={() => openWorkspacePath('/payment-in')}
           className="btn-secondary"
         >
           返回列表
@@ -380,7 +391,7 @@ export default function PaymentInDetailPage() {
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-3">
           <button
-            onClick={() => router.push('/payment-in')}
+            onClick={() => openWorkspacePath('/payment-in')}
             className="text-gray-400 hover:text-gray-600 transition"
           >
             <svg

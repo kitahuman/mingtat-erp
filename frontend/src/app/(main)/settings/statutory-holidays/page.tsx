@@ -5,6 +5,7 @@ import { statutoryHolidaysApi } from '@/lib/api';
 import Modal from '@/components/Modal';
 import { useAuth } from '@/lib/auth';
 import DateInput from '@/components/DateInput';
+import { useWorkspaceTabDirty, useWorkspaceTabTitle } from '@/components/WorkspaceTabs';
 
 const HK_STATUTORY_HOLIDAYS = [
   { name: '元旦', month: 1, day: 1 },
@@ -30,6 +31,7 @@ function fmtDate(d: string) {
 }
 
 export default function StatutoryHolidaysPage() {
+  useWorkspaceTabTitle('法定假期', '/settings/statutory-holidays');
   const { isReadOnly } = useAuth();
   const [holidays, setHolidays] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -39,6 +41,12 @@ export default function StatutoryHolidaysPage() {
   const [saving, setSaving] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editForm, setEditForm] = useState({ date: '', name: '' });
+
+  useWorkspaceTabDirty(
+    showCreate || editingId !== null || saving,
+    '法定假期有未儲存的表單修改',
+    '/settings/statutory-holidays',
+  );
 
   const loadData = async () => {
     setLoading(true);

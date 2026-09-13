@@ -1,12 +1,12 @@
 'use client';
+import { openWorkspacePath } from '@/components/WorkspaceTabs';
 
 import { useEffect, useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams } from 'next/navigation';
 import { invoiceStatementsApi } from '@/lib/api';
 
 export default function InvoiceStatementPdfPreviewPage() {
   const { id } = useParams<{ id: string }>();
-  const router = useRouter();
   const statementId = Number(id);
 
   const [statement, setStatement] = useState<any>(null);
@@ -22,8 +22,8 @@ export default function InvoiceStatementPdfPreviewPage() {
     invoiceStatementsApi
       .get(statementId)
       .then((res) => setStatement(res.data))
-      .catch(() => router.push('/invoice-statements'));
-  }, [statementId, router]);
+      .catch(() => openWorkspacePath('/invoices?tab=statements'));
+  }, [statementId]);
 
   useEffect(() => {
     if (!Number.isFinite(statementId)) return;
@@ -140,7 +140,7 @@ export default function InvoiceStatementPdfPreviewPage() {
             {printing ? '開啟中...' : '列印'}
           </button>
           <button
-            onClick={() => router.push(`/invoice-statements/${statementId}`)}
+            onClick={() => openWorkspacePath(`/invoice-statements/${statementId}`)}
             className="btn-secondary px-3 py-1.5 text-sm"
           >
             返回

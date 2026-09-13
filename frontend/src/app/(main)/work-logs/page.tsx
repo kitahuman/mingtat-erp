@@ -16,6 +16,11 @@ import {
   invoicesApi,
 } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
+import {
+  openWorkspacePath,
+  useWorkspaceTabDirty,
+  useWorkspaceTabTitle,
+} from '@/components/WorkspaceTabs';
 import EditableCell from './EditableCell';
 import SearchableSelect from './SearchableSelect';
 import MultiSearchableSelect from './MultiSearchableSelect';
@@ -278,6 +283,7 @@ const COLUMNS = [
 
 export default function WorkLogsPage() {
   const { user, isReadOnly } = useAuth();
+  useWorkspaceTabTitle('工作記錄', '/work-logs');
 
   // ── Reference data ──────────────────────────────────────────
   const [companies, setCompanies] = useState<Option[]>([]);
@@ -377,6 +383,12 @@ export default function WorkLogsPage() {
   // ── New row ─────────────────────────────────────────────────
   const [newRow, setNewRow] = useState<any | null>(null);
   const [savingNew, setSavingNew] = useState(false);
+
+  useWorkspaceTabDirty(
+    dirtyRows.size > 0 || newRow !== null || saving || savingNew,
+    '工作記錄有未儲存的新增或修改',
+    '/work-logs',
+  );
 
   // ── Selection ───────────────────────────────────────────────
   const [selected, setSelected] = useState<Set<number>>(new Set());
@@ -1597,7 +1609,7 @@ export default function WorkLogsPage() {
       if (clientContractNo) params.set('client_contract_no', clientContractNo);
       if (invoiceTitle) params.set('invoice_title', invoiceTitle);
 
-      window.location.href = `/invoices?${params.toString()}`;
+      openWorkspacePath(`/invoices?${params.toString()}`);
       return;
     }
 

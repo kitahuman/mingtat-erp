@@ -1,4 +1,5 @@
 'use client';
+import { openWorkspacePath } from '@/components/WorkspaceTabs';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { rateCardsApi, companiesApi, partnersApi } from '@/lib/api';
@@ -439,7 +440,7 @@ export default function RentalRateCardsPage() {
           onPageChange={setPage}
           onSearch={setSearch}
           searchPlaceholder="搜尋客戶、名稱、起終點..."
-          onRowClick={(row) => window.open(`/rental-rate-cards/${row.id}`, '_blank')}
+          onRowClick={(row, event) => openWorkspacePath(`/rental-rate-cards/${row.id}`, undefined, event)}
           loading={loading}
           sortBy={sortBy}
           sortOrder={sortOrder}

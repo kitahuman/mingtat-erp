@@ -5,6 +5,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useId,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -38,7 +39,7 @@ type WorkspaceTab = {
   openerTabId?: string;
 };
 
-type OpenTabEvent = {
+export type OpenTabEvent = {
   ctrlKey?: boolean;
   metaKey?: boolean;
   shiftKey?: boolean;
@@ -48,7 +49,12 @@ type OpenTabEvent = {
 type WorkspaceTabsContextValue = {
   openTab: (path: string, title?: string, event?: OpenTabEvent) => void;
   setTabTitle: (path: string, title: string) => void;
-  setTabDirty: (path: string, dirty: boolean, reason?: string) => void;
+  setTabDirty: (
+    path: string,
+    dirty: boolean,
+    reason?: string,
+    sourceId?: string,
+  ) => void;
   closeTab: (path: string) => void;
 };
 
@@ -132,8 +138,16 @@ const postToParent = (message: Record<string, unknown>) => {
   );
 };
 
-export const openWorkspacePath = (path: string, title?: string) => {
+export const openWorkspacePath = (
+  path: string,
+  title?: string,
+  event?: OpenTabEvent,
+) => {
   if (typeof window === 'undefined') return;
+  if (isExternalOpenEvent(event)) {
+    openInNewBrowserTab(path);
+    return;
+  }
   if (window.parent !== window) {
     postToParent({ action: 'open', path, title });
     return;
@@ -186,6 +200,9 @@ export function WorkspaceTabsProvider({ children }: { children: React.ReactNode 
   const tabsRef = useRef(tabs);
   const activityByTabRef = useRef(new Map<string, boolean>());
   const frameDirtyRef = useRef(false);
+  const frameDirtySourcesRef = useRef(
+    new Map<string, { path: string; reason?: string }>(),
+  );
   const frameReadySentRef = useRef(false);
   const incomingFrameNavigationRef = useRef<{
     path: string;
@@ -420,6 +437,9 @@ export function WorkspaceTabsProvider({ children }: { children: React.ReactNode 
           return;
         }
         frameDirtyRef.current = false;
+        frameDirtySourcesRef.current.clear();
+        workspaceDiscardAllowedUntil = Date.now() + 2_000;
+        window.dispatchEvent(new Event('workspace-discard'));
         postToParent({ action: 'navigate-within', path: targetDescriptor.path });
         return;
       }
@@ -466,10 +486,22 @@ export function WorkspaceTabsProvider({ children }: { children: React.ReactNode 
   );
 
   const setTabDirty = useCallback(
-    (path: string, dirty: boolean, reason?: string) => {
+    (path: string, dirty: boolean, reason?: string, sourceId?: string) => {
       if (isWorkspaceFrame) {
-        frameDirtyRef.current = dirty;
-        postToParent({ action: 'set-dirty', path, dirty, reason });
+        const sourceKey = sourceId || `workspace-dirty:${path}`;
+        if (dirty) {
+          frameDirtySourcesRef.current.set(sourceKey, { path, reason });
+        } else {
+          frameDirtySourcesRef.current.delete(sourceKey);
+        }
+        const dirtyState = Array.from(frameDirtySourcesRef.current.values());
+        frameDirtyRef.current = dirtyState.length > 0;
+        postToParent({
+          action: 'set-dirty',
+          path,
+          dirty: frameDirtyRef.current,
+          reason: dirtyState.find((item) => item.reason)?.reason,
+        });
         return;
       }
 
@@ -663,11 +695,17 @@ export function WorkspaceTabsProvider({ children }: { children: React.ReactNode 
           return;
         }
         frameDirtyRef.current = false;
+        frameDirtySourcesRef.current.clear();
+        workspaceDiscardAllowedUntil = Date.now() + 2_000;
+        window.dispatchEvent(new Event('workspace-discard'));
         postToParent({ action: 'navigate-within', path: targetPath });
         return;
       }
 
-      if (targetDescriptor?.group !== 'general') {
+      if (
+        targetDescriptor?.group !== 'general' ||
+        anchor.dataset.workspaceOpen === 'true'
+      ) {
         event.preventDefault();
         postToParent({ action: 'open', path: targetPath });
       } else if (targetDescriptor) {
@@ -679,6 +717,9 @@ export function WorkspaceTabsProvider({ children }: { children: React.ReactNode 
           return;
         }
         frameDirtyRef.current = false;
+        frameDirtySourcesRef.current.clear();
+        workspaceDiscardAllowedUntil = Date.now() + 2_000;
+        window.dispatchEvent(new Event('workspace-discard'));
         router.push(addWorkspaceFrameFlag(targetPath));
       } else if (!targetDescriptor) {
         event.preventDefault();
@@ -732,6 +773,7 @@ export function WorkspaceTabsProvider({ children }: { children: React.ReactNode 
             window.dispatchEvent(new Event('workspace-discard'));
           }
           frameDirtyRef.current = false;
+          frameDirtySourcesRef.current.clear();
         }
         postToParent({
           action: 'close-response',
@@ -778,6 +820,9 @@ export function WorkspaceTabsProvider({ children }: { children: React.ReactNode 
           return;
         }
         frameDirtyRef.current = false;
+        frameDirtySourcesRef.current.clear();
+        workspaceDiscardAllowedUntil = Date.now() + 2_000;
+        window.dispatchEvent(new Event('workspace-discard'));
         incomingFrameNavigationRef.current = {
           path: targetDescriptor.path,
           epoch: event.data.epoch,
@@ -1391,9 +1436,10 @@ export const useWorkspaceTabDirty = (
   const pathname = usePathname() || '';
   const { setTabDirty } = useWorkspaceTabs();
   const targetPath = tabPath || pathname;
+  const sourceId = useId();
 
   useLayoutEffect(() => {
-    setTabDirty(targetPath, dirty, reason);
+    setTabDirty(targetPath, dirty, reason, sourceId);
     const handleBeforeUnload = (event: BeforeUnloadEvent) => {
       if (!dirty || Date.now() < workspaceDiscardAllowedUntil) return;
       event.preventDefault();
@@ -1402,9 +1448,9 @@ export const useWorkspaceTabDirty = (
     if (dirty) window.addEventListener('beforeunload', handleBeforeUnload);
     return () => {
       if (dirty) window.removeEventListener('beforeunload', handleBeforeUnload);
-      setTabDirty(targetPath, false);
+      setTabDirty(targetPath, false, undefined, sourceId);
     };
-  }, [dirty, reason, setTabDirty, targetPath]);
+  }, [dirty, reason, setTabDirty, sourceId, targetPath]);
 };
 
 export const useWorkspaceActivity = () => {

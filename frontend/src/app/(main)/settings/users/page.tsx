@@ -4,6 +4,7 @@ import { usersApi, authApi } from '@/lib/api';
 import { useAuth, UserRole, ROLE_LABELS, DEPARTMENT_OPTIONS } from '@/lib/auth';
 import RoleGuard from '@/components/RoleGuard';
 import Modal from '@/components/Modal';
+import { useWorkspaceTabDirty, useWorkspaceTabTitle } from '@/components/WorkspaceTabs';
 
 interface LinkedEmployee {
   id: number;
@@ -178,6 +179,13 @@ function UsersPageContent() {
     pending: EmployeePhonePendingSync;
   } | null>(null);
   const [phoneSyncRunning, setPhoneSyncRunning] = useState(false);
+
+  useWorkspaceTabTitle('用戶管理', '/settings/users');
+  useWorkspaceTabDirty(
+    showModal || showPermModal || phoneSyncPrompt !== null || saving || permSaving || phoneSyncRunning,
+    '用戶管理有未完成的表單或權限修改',
+    '/settings/users',
+  );
 
   // Delete flow
   const [deleteCheck, setDeleteCheck] = useState<{

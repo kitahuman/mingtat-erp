@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 import { paymentInSourceTypesApi } from '@/lib/api';
 import RoleGuard from '@/components/RoleGuard';
 import { useAuth } from '@/lib/auth';
+import { useWorkspaceTabDirty, useWorkspaceTabTitle } from '@/components/WorkspaceTabs';
 
 interface SourceType {
   id: number;
@@ -15,6 +16,7 @@ interface SourceType {
 }
 
 export default function PaymentInSourceTypesPage() {
+  useWorkspaceTabTitle('收款來源類型', '/settings/payment-in-source-types');
   const { isReadOnly } = useAuth();
   const [items, setItems] = useState<SourceType[]>([]);
   const [loading, setLoading] = useState(true);
@@ -24,6 +26,12 @@ export default function PaymentInSourceTypesPage() {
   const [form, setForm] = useState({ code: '', label: '', has_recalculation: false, sort_order: 0 });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+
+  useWorkspaceTabDirty(
+    showAddForm || editingId !== null || saving,
+    '收款來源類型有未儲存的表單修改',
+    '/settings/payment-in-source-types',
+  );
 
   const fetchData = async () => {
     try {

@@ -4,6 +4,7 @@ import { dashboardApi, employeesApi, issueReportsApi } from '@/lib/api';
 import Link from 'next/link';
 import ConfirmProjectModal from '@/components/ConfirmProjectModal';
 import { useAuth } from '@/lib/auth';
+import { useWorkspaceActivity, useWorkspaceTabTitle } from '@/components/WorkspaceTabs';
 
 // ══════════════════════════════════════════════════════════════
 // 工具函數
@@ -658,6 +659,7 @@ function WorkStatusTab({ data, onRefresh }: { data: any; onRefresh?: () => void 
 // ══════════════════════════════════════════════════════════════
 
 function IssueReportsSection() {
+  const isWorkspaceActive = useWorkspaceActivity();
   const [reports, setReports] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState<Record<number, boolean>>({});
@@ -675,10 +677,11 @@ function IssueReportsSection() {
   };
 
   useEffect(() => {
+    if (!isWorkspaceActive) return;
     load();
     const t = setInterval(load, 20000); // refresh every 20s to catch AI analysis results
     return () => clearInterval(t);
-  }, []);
+  }, [isWorkspaceActive]);
 
   if (loading) {
     return (
@@ -1644,6 +1647,7 @@ const ALL_TABS: { id: TabId; permKey: string }[] = [
 
 export default function DashboardPage() {
   const { user } = useAuth();
+  useWorkspaceTabTitle('儀表板', '/dashboard');
 
   // 計算用戶可見的 tab（admin 永遠全部可見；舊用戶有 dashboard 但無任何 dashboard-* 子項時也全部可見）
   const visibleTabs = useMemo<TabId[]>(() => {

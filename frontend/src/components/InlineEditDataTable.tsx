@@ -4,6 +4,7 @@ import { fmtDate, toInputDate } from '@/lib/dateUtils';
 import DataTable from './DataTable';
 import { ColumnConfig } from './ColumnCustomizer';
 import DateInput from '@/components/DateInput';
+import { useWorkspaceTabDirty } from '@/components/WorkspaceTabs';
 
 export interface InlineColumn {
   key: string;
@@ -35,7 +36,10 @@ interface InlineEditDataTableProps {
   onSearch?: (search: string) => void;
   searchPlaceholder?: string;
   searchInputClassName?: string;
-  onRowClick?: (row: any) => void;
+  onRowClick?: (
+    row: any,
+    event: React.MouseEvent<HTMLTableRowElement>,
+  ) => void;
   filters?: React.ReactNode;
   actions?: React.ReactNode;
   loading?: boolean;
@@ -86,6 +90,10 @@ export default function InlineEditDataTable({
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editForm, setEditForm] = useState<any>({});
   const [saving, setSaving] = useState(false);
+  useWorkspaceTabDirty(
+    editingId !== null,
+    '列表有尚未儲存的列內編輯',
+  );
 
   const startEdit = useCallback((row: any) => {
     setEditingId(row[idField]);

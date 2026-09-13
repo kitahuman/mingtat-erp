@@ -1,4 +1,5 @@
 'use client';
+import { openWorkspacePath, useWorkspaceTabDirty, useWorkspaceTabTitle } from '@/components/WorkspaceTabs';
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -43,6 +44,13 @@ export default function ProjectProfitLossPage() {
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
 
+  useWorkspaceTabTitle(
+    data?.project
+      ? `工程損益 · ${[data.project.project_no, data.project.project_name].filter(Boolean).join(' · ')}`
+      : `工程損益 #${projectId}`,
+  );
+  useWorkspaceTabDirty(false);
+
   useEffect(() => {
     loadProjects();
   }, []);
@@ -81,7 +89,7 @@ export default function ProjectProfitLossPage() {
 
   const handleProjectChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const id = e.target.value;
-    if (id) router.push(`/profit-loss/${id}`);
+    if (id) openWorkspacePath(`/profit-loss/${id}`);
   };
 
   if (loading) {

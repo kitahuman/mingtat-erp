@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import ColumnFilter from "@/components/ColumnFilter";
 import { payrollApi, systemSettingsApi, fleetRateCardsApi, workLogsApi } from "@/lib/api";
 import { fmtDate } from "@/lib/dateUtils";
@@ -384,6 +384,7 @@ export type PayrollTabsProps = {
   onBatchUpdateWorkLogs?: (ids: Array<number | string>, updates: WorkLogUpdatePayload) => Promise<unknown>;
   onBatchDeleteWorkLogs?: (ids: Array<number | string>) => Promise<unknown>;
   onGroupBillingQuantityTypeChange?: (groupKey: string, billingQuantityType: BillingQuantityType) => Promise<unknown>;
+  onDirtyChange?: (dirty: boolean) => void;
 };
 
 const TAB_LABELS: Record<TabKey, string> = {
@@ -797,6 +798,7 @@ function PayrollTabs({
   onBatchUpdateWorkLogs,
   onBatchDeleteWorkLogs,
   onGroupBillingQuantityTypeChange,
+  onDirtyChange,
 }: PayrollTabsProps) {
   const [activeTab, setActiveTab] = useState<TabKey>("detail");
   const [rows, setRows] = useState<WorkLogRecord[]>(workLogs);
@@ -822,6 +824,9 @@ function PayrollTabs({
   const [manualMatchGroup, setManualMatchGroup] = useState<GroupedSettlementRecord | null>(null);
   // 查看彈窗：記錄要查看的 fleet_rate_card id
   const [viewRateCardId, setViewRateCardId] = useState<number | null>(null);
+  const [detailTabDirty, setDetailTabDirty] = useState(false);
+  const [dailyTabDirty, setDailyTabDirty] = useState(false);
+  const [calculationTabDirty, setCalculationTabDirty] = useState(false);
   const printRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => setRows(workLogs), [workLogs]);
@@ -831,6 +836,29 @@ function PayrollTabs({
 
   const calculation = useMemo(() => summarizeCalculation(details, snapshot), [details, snapshot]);
   const computedUnmatchedGroups = useMemo(() => buildUnmatchedGroups(rows.length > 0 ? rows : unmatchedRecords), [rows, unmatchedRecords]);
+
+  useEffect(() => {
+    onDirtyChange?.(
+      detailTabDirty ||
+        dailyTabDirty ||
+        calculationTabDirty ||
+        rateCardSource !== null ||
+        manualMatchGroup !== null ||
+        rateCardSaving ||
+        saving,
+    );
+  }, [
+    calculationTabDirty,
+    dailyTabDirty,
+    detailTabDirty,
+    manualMatchGroup,
+    onDirtyChange,
+    rateCardSaving,
+    rateCardSource,
+    saving,
+  ]);
+
+  useEffect(() => () => onDirtyChange?.(false), [onDirtyChange]);
 
   const filteredRows = useMemo(() => {
     const term = filterText.trim().toLowerCase();
@@ -1235,11 +1263,11 @@ function PayrollTabs({
         <SummaryPill label="已移除" value={`${excludedCount} 筆`} tone="gray" />
       </div>
 
-      {activeTab === "detail" && <DetailTab rows={rows} saving={saving} readOnly={readOnly} onUpdateWorkLog={commitDetailRowUpdate} onBatchUpdateWorkLogs={batchUpdateRows} onBatchDeleteWorkLogs={excludeRows} />}
+      {activeTab === "detail" && <DetailTab rows={rows} saving={saving} readOnly={readOnly} onUpdateWorkLog={commitDetailRowUpdate} onBatchUpdateWorkLogs={batchUpdateRows} onBatchDeleteWorkLogs={excludeRows} onDirtyChange={setDetailTabDirty} />}
       {activeTab === "grouped" && <GroupedTab groups={groups} readOnly={readOnly || saving || !payrollId} onBillingTypeChange={setGroupBillingQuantityType} onSetGroupRate={setGroupRate} onSetGroupOtRate={setGroupOtRate} onSetGroupMidShiftRate={setGroupMidShiftRate} onOpenRateCard={openRateCardModal} onAmountSelectionChange={updateGroupedAmountSelection} onOpenManualMatch={(group) => setManualMatchGroup(group)} onUnmatch={unmatchGroupRateCard} onViewRateCard={(id) => setViewRateCardId(id)} />}
-      {activeTab === "daily" && <DailyTab days={dailyRows} allowanceOptions={calculation.allowance_options || []} adjustments={calculation.adjustments || []} expandedDay={expandedDay} readOnly={readOnly || saving || !payrollId} onToggleExpand={(date) => setExpandedDay((prev) => (prev === date ? null : date))} onAddAllowance={addDailyAllowance} onRemoveAllowance={removeDailyAllowance} onAddAdjustment={addAdjustment} onRemoveAdjustment={removeAdjustment} onExcludeBadge={excludeBadge} onRestoreBadge={restoreBadge} onSaveTopUpOverride={saveTopUpOverride} onSaveDayQuantity={saveDayQuantity} onResetDayQuantity={resetDayQuantity} />}
+      {activeTab === "daily" && <DailyTab days={dailyRows} allowanceOptions={calculation.allowance_options || []} adjustments={calculation.adjustments || []} expandedDay={expandedDay} readOnly={readOnly || saving || !payrollId} onToggleExpand={(date) => setExpandedDay((prev) => (prev === date ? null : date))} onAddAllowance={addDailyAllowance} onRemoveAllowance={removeDailyAllowance} onAddAdjustment={addAdjustment} onRemoveAdjustment={removeAdjustment} onExcludeBadge={excludeBadge} onRestoreBadge={restoreBadge} onSaveTopUpOverride={saveTopUpOverride} onSaveDayQuantity={saveDayQuantity} onResetDayQuantity={resetDayQuantity} onDirtyChange={setDailyTabDirty} />}
       {activeTab === "unmatched" && <UnmatchedTab groups={computedUnmatchedGroups} readOnly={readOnly || saving || !payrollId} onOpenRateCard={openRateCardModal} />}
-      {activeTab === "calculation" && <CalculationTab calculation={calculation} snapshot={snapshot} salarySetting={snapshot?.salary_setting} workLogs={rows} dailyCalculation={dailyRows} payrollId={payrollId} readOnly={readOnly} onItemUpdated={loadSnapshot} />}
+      {activeTab === "calculation" && <CalculationTab calculation={calculation} snapshot={snapshot} salarySetting={snapshot?.salary_setting} workLogs={rows} dailyCalculation={dailyRows} payrollId={payrollId} readOnly={readOnly} onItemUpdated={loadSnapshot} onDirtyChange={setCalculationTabDirty} />}
       {activeTab === "print" && <PrintTab payrollId={payrollId} showGroupedInPrint={showGroupedInPrint} onShowGroupedChange={setShowGroupedInPrint} />}
 
       {rateCardSource && <RateCardModal source={rateCardSource} form={rateCardForm} saving={rateCardSaving} onChange={setRateCardForm} onClose={() => setRateCardSource(null)} onSubmit={submitRateCard} />}
@@ -1261,6 +1289,7 @@ type DetailTabProps = {
   onUpdateWorkLog: (id: number | string, column: DetailColumn, value: CellValue) => Promise<void> | void;
   onBatchUpdateWorkLogs: (ids: Array<number | string>, updates: WorkLogUpdatePayload) => Promise<void> | void;
   onBatchDeleteWorkLogs: (ids: Array<number | string>) => Promise<void> | void;
+  onDirtyChange?: (dirty: boolean) => void;
 };
 
 type EditableCellProps = {
@@ -1489,7 +1518,7 @@ function EditableDetailCell({ row, column, readOnly, editingKey, setEditingKey, 
   );
 }
 
-function DetailTab({ rows, saving, readOnly, onUpdateWorkLog, onBatchUpdateWorkLogs, onBatchDeleteWorkLogs }: DetailTabProps) {
+function DetailTab({ rows, saving, readOnly, onUpdateWorkLog, onBatchUpdateWorkLogs, onBatchDeleteWorkLogs, onDirtyChange }: DetailTabProps) {
   const [localRows, setLocalRows] = useState<WorkLogRecord[]>(rows || []);
   const [sortKey, setSortKey] = useState<DetailColumnKey>("scheduled_date");
   const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
@@ -1531,6 +1560,14 @@ function DetailTab({ rows, saving, readOnly, onUpdateWorkLog, onBatchUpdateWorkL
 
   const selectedCount = selectedIds.size;
   const selectedRows = localRows.filter((row) => selectedIds.has(String(row.id)));
+  const hasBatchDraft = selectedCount > 0 && batchValue.trim().length > 0;
+
+  useEffect(() => {
+    onDirtyChange?.(editingKey !== null || hasBatchDraft);
+  }, [editingKey, hasBatchDraft, onDirtyChange]);
+
+  useEffect(() => () => onDirtyChange?.(false), [onDirtyChange]);
+
   const detailSummary = useMemo(() => {
     const sourceRows = selectedCount > 0 ? selectedRows : filteredSortedRows;
     return sourceRows.reduce(
@@ -1842,7 +1879,7 @@ function isAdjustmentOnDate(adjustment: Adjustment, date: string | null | undefi
   return Boolean(adjustmentDate && date && adjustmentDate === dateOnly(date));
 }
 
-function DailyTab({ days, allowanceOptions, adjustments, expandedDay, readOnly, onToggleExpand, onAddAllowance, onRemoveAllowance, onAddAdjustment, onRemoveAdjustment, onExcludeBadge, onRestoreBadge, onSaveTopUpOverride, onSaveDayQuantity, onResetDayQuantity }: { days: DailyCalculationRecord[]; allowanceOptions: AllowanceOption[]; adjustments: Adjustment[]; expandedDay: string | null; readOnly: boolean; onToggleExpand: (date: string) => void; onAddAllowance: (date: string, option: AllowanceOption) => Promise<void>; onRemoveAllowance: (id: number | string) => Promise<void>; onAddAdjustment: (date: string, item: { item_name: string; amount: number }) => Promise<void>; onRemoveAdjustment: (id: number | string) => Promise<void>; onExcludeBadge: (date: string, badgeKey: string) => Promise<void>; onRestoreBadge: (date: string, badgeKey: string) => Promise<void>; onSaveTopUpOverride: (date: string) => Promise<void>; onSaveDayQuantity: (date: string, values: { dayQuantity: number; nightQuantity: number }) => Promise<void>; onResetDayQuantity: (date: string) => Promise<void> }) {
+function DailyTab({ days, allowanceOptions, adjustments, expandedDay, readOnly, onToggleExpand, onAddAllowance, onRemoveAllowance, onAddAdjustment, onRemoveAdjustment, onExcludeBadge, onRestoreBadge, onSaveTopUpOverride, onSaveDayQuantity, onResetDayQuantity, onDirtyChange }: { days: DailyCalculationRecord[]; allowanceOptions: AllowanceOption[]; adjustments: Adjustment[]; expandedDay: string | null; readOnly: boolean; onToggleExpand: (date: string) => void; onAddAllowance: (date: string, option: AllowanceOption) => Promise<void>; onRemoveAllowance: (id: number | string) => Promise<void>; onAddAdjustment: (date: string, item: { item_name: string; amount: number }) => Promise<void>; onRemoveAdjustment: (id: number | string) => Promise<void>; onExcludeBadge: (date: string, badgeKey: string) => Promise<void>; onRestoreBadge: (date: string, badgeKey: string) => Promise<void>; onSaveTopUpOverride: (date: string) => Promise<void>; onSaveDayQuantity: (date: string, values: { dayQuantity: number; nightQuantity: number }) => Promise<void>; onResetDayQuantity: (date: string) => Promise<void>; onDirtyChange?: (dirty: boolean) => void }) {
   const [addingDate, setAddingDate] = useState<string | null>(null);
   const [selectedAllowance, setSelectedAllowance] = useState("");
   const [customAllowanceName, setCustomAllowanceName] = useState("");
@@ -1857,6 +1894,28 @@ function DailyTab({ days, allowanceOptions, adjustments, expandedDay, readOnly, 
   const [batchCustomAmount, setBatchCustomAmount] = useState("");
   const [batchSubmitting, setBatchSubmitting] = useState(false);
   const [showMoreMenu, setShowMoreMenu] = useState(false);
+  const [dayQuantityDirtyDates, setDayQuantityDirtyDates] = useState<Set<string>>(new Set());
+  const setDayQuantityDirty = useCallback((date: string, dirty: boolean) => {
+    setDayQuantityDirtyDates((previous) => {
+      if (previous.has(date) === dirty) return previous;
+      const next = new Set(previous);
+      if (dirty) next.add(date);
+      else next.delete(date);
+      return next;
+    });
+  }, []);
+  const hasDailyDraft =
+    addingDate !== null ||
+    batchSelectedDates.size > 0 ||
+    showBatchAllowanceDialog ||
+    batchSubmitting ||
+    dayQuantityDirtyDates.size > 0;
+
+  useEffect(() => {
+    onDirtyChange?.(hasDailyDraft);
+  }, [hasDailyDraft, onDirtyChange]);
+
+  useEffect(() => () => onDirtyChange?.(false), [onDirtyChange]);
 
   if (days.length === 0) return <div className="rounded-lg border border-gray-200 bg-gray-50 py-10 text-center text-gray-500">暫無逐日計算資料。</div>;
 
@@ -2124,6 +2183,7 @@ function DailyTab({ days, allowanceOptions, adjustments, expandedDay, readOnly, 
                             readOnly={readOnly}
                             onSave={(values) => day.date && onSaveDayQuantity(day.date, values)}
                             onReset={() => day.date && onResetDayQuantity(day.date)}
+                            onDirtyChange={(dirty) => setDayQuantityDirty(rowDate, dirty)}
                           />
                         )}
                         {day.is_holiday && <span className="rounded bg-red-100 px-1.5 py-0.5 text-xs font-medium text-red-700">法定假期</span>}
@@ -2498,11 +2558,13 @@ function DayQuantityCell({
   readOnly,
   onSave,
   onReset,
+  onDirtyChange,
 }: {
   day: DailyCalculationRecord;
   readOnly: boolean;
   onSave: (values: { dayQuantity: number; nightQuantity: number }) => void;
   onReset: () => void;
+  onDirtyChange?: (dirty: boolean) => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [draftDay, setDraftDay] = useState("");
@@ -2513,6 +2575,12 @@ function DayQuantityCell({
   const displayDayQty = day.day_quantity != null ? Number(day.day_quantity) : 0;
   const displayNightQty = day.night_quantity != null ? Number(day.night_quantity) : 0;
   const isManual = day.is_manual_day_quantity === true;
+
+  useEffect(() => {
+    onDirtyChange?.(editing);
+  }, [editing, onDirtyChange]);
+
+  useEffect(() => () => onDirtyChange?.(false), [onDirtyChange]);
 
   useEffect(() => {
     if (editing && dayInputRef.current) {
@@ -2623,13 +2691,20 @@ function UnmatchedTab({ groups, readOnly, onOpenRateCard }: { groups: UnmatchedG
   return <div><div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">以下工作記錄未能自動匹配價目。可直接將組合加入價目表，重新計算後相關分頁會同步更新。</div><div className="overflow-x-auto rounded-lg border"><table className="w-full min-w-[980px] text-sm"><thead className="bg-gray-50"><tr><th className="px-3 py-2 text-left">客戶</th><th className="px-3 py-2 text-left">合約</th><th className="px-3 py-2 text-center">日/夜</th><th className="px-3 py-2 text-left">路線</th><th className="px-3 py-2 text-right">數量</th><th className="px-3 py-2 text-right">筆數</th><th className="px-3 py-2 text-left">原因</th><th className="px-3 py-2 text-center">操作</th></tr></thead><tbody>{groups.map((group) => <tr key={group.key} className="border-b hover:bg-amber-50/50"><td className="px-3 py-2 font-medium">{group.clientName}</td><td className="px-3 py-2 text-gray-600">{group.contractNo}</td><td className="px-3 py-2 text-center">{group.dayNight}</td><td className="px-3 py-2 text-gray-600">{group.route}</td><td className="px-3 py-2 text-right font-mono">{group.quantity.toLocaleString()} {group.unit}</td><td className="px-3 py-2 text-right font-mono">{group.count}</td><td className="px-3 py-2 text-xs text-amber-700">{group.reason}</td><td className="px-3 py-2 text-center"><button type="button" disabled={readOnly} onClick={() => onOpenRateCard(group.source)} className="text-xs font-medium text-primary-600 hover:underline">加入價目表</button></td></tr>)}</tbody></table></div></div>;
 }
 
-function CalculationTab({ calculation, snapshot, salarySetting, workLogs = [], dailyCalculation = [], payrollId, readOnly = false, onItemUpdated }: { calculation: CalculationDetails; snapshot?: PayrollSnapshot | null; salarySetting?: SalarySetting | null; workLogs?: WorkLogRecord[]; dailyCalculation?: DailyCalculationRecord[]; payrollId?: number; readOnly?: boolean; onItemUpdated?: () => Promise<void> }) {
+function CalculationTab({ calculation, snapshot, salarySetting, workLogs = [], dailyCalculation = [], payrollId, readOnly = false, onItemUpdated, onDirtyChange }: { calculation: CalculationDetails; snapshot?: PayrollSnapshot | null; salarySetting?: SalarySetting | null; workLogs?: WorkLogRecord[]; dailyCalculation?: DailyCalculationRecord[]; payrollId?: number; readOnly?: boolean; onItemUpdated?: () => Promise<void>; onDirtyChange?: (dirty: boolean) => void }) {
   const summary = { ...calculation.payroll_summary } || {};
   const items = calculation.items || [];
   const salaryItems = buildSalarySettingDisplayItems(salarySetting, calculation.mpf_plan);
   const adjustments = calculation.adjustments || snapshot?.adjustments || [];
   const payrollExpenses = snapshot?.payroll_expenses || [];
   const workSummary = buildCalculationWorkSummary(workLogs, dailyCalculation);
+  const [itemsTableDirty, setItemsTableDirty] = useState(false);
+
+  useEffect(() => {
+    onDirtyChange?.(itemsTableDirty);
+  }, [itemsTableDirty, onDirtyChange]);
+
+  useEffect(() => () => onDirtyChange?.(false), [onDirtyChange]);
 
   // 計算應付總額
   const netAmount = toNumber(summary.net_amount);
@@ -2692,7 +2767,7 @@ function CalculationTab({ calculation, snapshot, salarySetting, workLogs = [], d
           })}
         </div>
       </section>
-      <PayrollItemsGroupedTable items={items} adjustments={adjustments} payrollExpenses={payrollExpenses} summary={displaySummary} mpfPlan={calculation.mpf_plan || salarySetting?.mpf_plan || snapshot?.mpf_plan || null} payrollId={payrollId} readOnly={readOnly} onItemUpdated={onItemUpdated} />
+      <PayrollItemsGroupedTable items={items} adjustments={adjustments} payrollExpenses={payrollExpenses} summary={displaySummary} mpfPlan={calculation.mpf_plan || salarySetting?.mpf_plan || snapshot?.mpf_plan || null} payrollId={payrollId} readOnly={readOnly} onItemUpdated={onItemUpdated} onDirtyChange={setItemsTableDirty} />
     </div>
   );
 }
@@ -2842,6 +2917,7 @@ function PayrollItemsGroupedTable({
   payrollId,
   readOnly = false,
   onItemUpdated,
+  onDirtyChange,
 }: {
   items: PayrollItem[];
   adjustments: Adjustment[];
@@ -2851,10 +2927,17 @@ function PayrollItemsGroupedTable({
   payrollId?: number;
   readOnly?: boolean;
   onItemUpdated?: () => Promise<void>;
+  onDirtyChange?: (dirty: boolean) => void;
 }) {
   const [editingItemId, setEditingItemId] = useState<number | string | null>(null);
   const [editAmount, setEditAmount] = useState("");
   const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    onDirtyChange?.(editingItemId !== null || saving);
+  }, [editingItemId, onDirtyChange, saving]);
+
+  useEffect(() => () => onDirtyChange?.(false), [onDirtyChange]);
 
   const handleDoubleClickAmount = (item: PayrollItem) => {
     if (readOnly || !payrollId || !item.id) return;

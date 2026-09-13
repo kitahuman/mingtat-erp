@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback, Fragment } from 'react';
 import { verificationApi } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import DateInput from '@/components/DateInput';
+import { useWorkspaceTabDirty, useWorkspaceTabTitle } from '@/components/WorkspaceTabs';
 
 // ══════════════════════════════════════════════════════════════
 // 介面定義
@@ -1305,6 +1306,7 @@ function MobileItemCard({ item, expandedItemLogs, toggleItemLog, onEdit, onDelet
 // ══════════════════════════════════════════════════════════════
 
 export default function WhatsAppDailySummaryPage() {
+  useWorkspaceTabTitle('WhatsApp 報工核對', '/verification/whatsapp');
   const { isReadOnly } = useAuth();
   const [summaries, setSummaries] = useState<DailySummary[]>([]);
   const [pagination, setPagination] = useState<Pagination>({ page: 1, limit: 20, total: 0, total_pages: 0 });
@@ -1325,6 +1327,12 @@ export default function WhatsAppDailySummaryPage() {
   const [deleting, setDeleting] = useState(false);
   const [addingType, setAddingType] = useState<{ orderType: string; orderId: number } | null>(null);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+
+  useWorkspaceTabDirty(
+    (editingId !== null && editForm !== null) || addingType !== null || saving,
+    'WhatsApp 報工核對有未儲存的項目修改',
+    '/verification/whatsapp',
+  );
 
   const showToast = (message: string, type: 'success' | 'error') => {
     setToast({ message, type });

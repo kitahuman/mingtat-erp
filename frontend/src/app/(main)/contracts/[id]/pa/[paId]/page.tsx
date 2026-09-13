@@ -1,4 +1,5 @@
 'use client';
+import { openWorkspacePath, useWorkspaceTabDirty, useWorkspaceTabTitle } from '@/components/WorkspaceTabs';
 
 import React, { useState, useEffect, useCallback } from 'react';
 import DateInput from '@/components/DateInput';
@@ -92,6 +93,19 @@ export default function IpaDetailPage() {
   const [previewError, setPreviewError] = useState('');
   const [downloadingPdf, setDownloadingPdf] = useState(false);
   const [downloadingExcel, setDownloadingExcel] = useState(false);
+
+  const hasUnsavedWorkspaceState =
+    dirty ||
+    saving ||
+    showCertifyModal ||
+    showPaymentModal ||
+    showMaterialModal ||
+    showDeductionModal;
+  useWorkspaceTabTitle(ipa?.reference || `IPA #${paId}`);
+  useWorkspaceTabDirty(
+    hasUnsavedWorkspaceState,
+    dirty ? 'IPA 進度有未儲存的修改' : 'IPA 表單尚未完成',
+  );
 
   const fetchIpa = useCallback(async () => {
     setLoading(true);
@@ -378,7 +392,7 @@ export default function IpaDetailPage() {
     if (!confirm('確認刪除此 IPA？此操作不可復原。')) return;
     try {
       await paymentApplicationsApi.delete(contractId, paId);
-      router.push(`/contracts/${contractId}`);
+      openWorkspacePath(`/contracts/${contractId}`);
     } catch (err: any) {
       window.alert(err.response?.data?.message || '刪除失敗');
     }

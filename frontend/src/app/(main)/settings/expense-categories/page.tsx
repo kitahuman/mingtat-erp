@@ -3,6 +3,7 @@ import { useState, useEffect, useRef } from 'react';
 import { expenseCategoriesApi } from '@/lib/api';
 import RoleGuard from '@/components/RoleGuard';
 import { useAuth } from '@/lib/auth';
+import { useWorkspaceTabDirty, useWorkspaceTabTitle } from '@/components/WorkspaceTabs';
 
 interface Category {
   id: number;
@@ -94,6 +95,7 @@ function DraggableRow({
 }
 
 export default function ExpenseCategoriesPage() {
+  useWorkspaceTabTitle('支出類別管理', '/settings/expense-categories');
   const { isReadOnly } = useAuth();
   const [tree, setTree] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
@@ -106,6 +108,12 @@ export default function ExpenseCategoriesPage() {
   const [formType, setFormType] = useState<string>('');
   const [formFixedExpense, setFormFixedExpense] = useState(false);
   const [saving, setSaving] = useState(false);
+
+  useWorkspaceTabDirty(
+    showModal || saving,
+    '支出類別有未儲存的表單修改',
+    '/settings/expense-categories',
+  );
 
   // Drag state
   const dragId = useRef<number | null>(null);

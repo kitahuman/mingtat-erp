@@ -4,8 +4,10 @@ import { bankAccountsApi, companiesApi, bankReconciliationApi } from '@/lib/api'
 import InlineEditDataTable, { InlineColumn } from '@/components/InlineEditDataTable';
 import RoleGuard from '@/components/RoleGuard';
 import { useAuth } from '@/lib/auth';
+import { useWorkspaceTabTitle } from '@/components/WorkspaceTabs';
 
 export default function BankAccountsPage() {
+  useWorkspaceTabTitle('銀行帳戶管理', '/settings/bank-accounts');
   const { isReadOnly } = useAuth();
   const [data, setData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);

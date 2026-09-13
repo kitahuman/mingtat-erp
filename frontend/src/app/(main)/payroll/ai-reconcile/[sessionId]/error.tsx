@@ -1,4 +1,5 @@
 'use client';
+import { openWorkspacePath } from '@/components/WorkspaceTabs';
 
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
@@ -37,7 +38,7 @@ export default function AiPayrollReconcileError({ error, reset }: AiPayrollRecon
           </button>
           <button
             type="button"
-            onClick={() => router.push('/payroll-records')}
+            onClick={() => openWorkspacePath('/payroll-records')}
             className="rounded-lg border px-4 py-2 text-sm hover:bg-gray-50"
           >
             返回糧單記錄

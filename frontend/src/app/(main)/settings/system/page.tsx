@@ -1,5 +1,6 @@
 'use client';
 import { useState, useEffect } from 'react';
+import { useWorkspaceTabDirty, useWorkspaceTabTitle } from '@/components/WorkspaceTabs';
 import { systemSettingsApi } from '@/lib/api';
 import RoleGuard from '@/components/RoleGuard';
 import { useAuth } from '@/lib/auth';
@@ -251,12 +252,22 @@ const SETTING_FIELDS: SettingField[] = [
 ];
 
 export default function SystemSettingsPage() {
+  useWorkspaceTabTitle('系統參數', '/settings/system');
   const { isReadOnly } = useAuth();
   const [values, setValues] = useState<Record<string, string>>({});
+  const [persistedValues, setPersistedValues] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState('');
+
+  const hasSettingsDraft =
+    !loading && JSON.stringify(values) !== JSON.stringify(persistedValues);
+  useWorkspaceTabDirty(
+    hasSettingsDraft || saving,
+    '系統參數有未儲存的修改',
+    '/settings/system',
+  );
 
   useEffect(() => {
     loadSettings();
@@ -273,6 +284,7 @@ export default function SystemSettingsPage() {
         merged[field.key] = data[field.key] ?? field.defaultValue;
       }
       setValues(merged);
+      setPersistedValues(merged);
     } catch (err) {
       console.error(err);
       // Use defaults on error
@@ -281,6 +293,7 @@ export default function SystemSettingsPage() {
         defaults[field.key] = field.defaultValue;
       }
       setValues(defaults);
+      setPersistedValues(defaults);
     } finally {
       setLoading(false);
     }
@@ -301,6 +314,7 @@ export default function SystemSettingsPage() {
         description: f.description,
       }));
       await systemSettingsApi.setMany(settings);
+      setPersistedValues(values);
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
     } catch (err: any) {

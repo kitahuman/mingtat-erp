@@ -20,6 +20,7 @@ const PAGE_TITLES: Record<string, string> = {
   '/verification/upload': '上傳資料',
   '/verification/batches': '匯入紀錄',
   '/verification/records': '已匯入資料',
+  '/verification/ocr': 'AI OCR 辨識結果確認',
   '/verification/whatsapp': 'WhatsApp Order',
   '/company-profiles': '公司資料',
   '/companies': '公司管理',
