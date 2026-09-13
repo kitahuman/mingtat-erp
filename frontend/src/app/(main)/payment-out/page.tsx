@@ -1,4 +1,5 @@
 'use client';
+import { openWorkspacePath } from '@/components/WorkspaceTabs';
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import {
@@ -241,7 +242,7 @@ export default function PaymentOutPage() {
               className="text-xs text-indigo-600 hover:underline font-medium"
               onClick={(e) => {
                 e.stopPropagation();
-                router.push(`/payroll/${row.payroll_id}`);
+                openWorkspacePath(`/payroll/${row.payroll_id}`);
               }}
             >
               糧單
@@ -257,7 +258,7 @@ export default function PaymentOutPage() {
               className="text-xs text-blue-600 hover:underline font-medium"
               onClick={(e) => {
                 e.stopPropagation();
-                router.push(`/expenses/${linkedExpenseId}`);
+                openWorkspacePath(`/expenses/${linkedExpenseId}`);
               }}
             >
               支出
@@ -443,7 +444,7 @@ export default function PaymentOutPage() {
             onColumnConfigSaveDefault={handleSaveDefault}
         columnWidths={columnWidths}
         onColumnResize={handleColumnResize}
-        onRowClick={(row: any) => window.open(`/payment-out/${row.id}`, '_blank')}
+        onRowClick={(row: any) => openWorkspacePath(`/payment-out/${row.id}`)}
         serverSideFilter={true}
         columnFilters={columnFilters}
         onColumnFilterChange={(f) => { setColumnFilters(f); setPage(1); }}

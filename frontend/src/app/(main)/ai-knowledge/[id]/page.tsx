@@ -1,4 +1,5 @@
 'use client';
+import { openWorkspacePath } from '@/components/WorkspaceTabs';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
@@ -189,7 +190,7 @@ export default function AiKnowledgeDetailPage({ params }: { params: { id: string
     setSaving(true);
     try {
       await aiKnowledgeApi.delete(params.id);
-      router.push('/ai-knowledge');
+      openWorkspacePath('/ai-knowledge');
     } catch (err: any) {
       const msg = err?.response?.data?.message || '刪除失敗';
       alert(typeof msg === 'string' ? msg : JSON.stringify(msg));

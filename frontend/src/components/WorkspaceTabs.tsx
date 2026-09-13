@@ -12,14 +12,14 @@ import {
 } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import {
-  MAX_WORKSPACE_DETAIL_TABS,
+  MAX_WORKSPACE_EXTRA_TABS,
   WORKSPACE_MESSAGE_SOURCE,
   WORKSPACE_PROTOCOL_VERSION,
   WorkspaceGroup,
   WorkspacePathDescriptor,
   WorkspaceTabKind,
   addWorkspaceFrameFlag,
-  decideWorkspaceDetailOpen,
+  decideWorkspaceOpen,
   describeWorkspacePath,
 } from '@/lib/workspaceRoutes';
 
@@ -33,6 +33,7 @@ type WorkspaceTab = {
   canonicalKey: string;
   listPath: string;
   dirty: boolean;
+  isBase: boolean;
   dirtyReason?: string;
   openerTabId?: string;
 };
@@ -81,6 +82,7 @@ const createWorkspaceTab = (
   descriptor: WorkspacePathDescriptor,
   title?: string,
   openerTabId?: string,
+  isBase = false,
 ): WorkspaceTab => ({
   id: `workspace-tab-${Date.now()}-${++tabSequence}`,
   path: descriptor.path,
@@ -91,26 +93,15 @@ const createWorkspaceTab = (
   canonicalKey: descriptor.canonicalKey,
   listPath: descriptor.listPath,
   dirty: false,
+  isBase,
   openerTabId,
 });
-
-const createListTabFor = (
-  descriptor: WorkspacePathDescriptor,
-): WorkspaceTab | null => {
-  const listDescriptor = describeWorkspacePath(descriptor.listPath);
-  return listDescriptor ? createWorkspaceTab(listDescriptor) : null;
-};
 
 const createInitialTabs = (
   descriptor: WorkspacePathDescriptor | null,
 ): WorkspaceTab[] => {
   if (!descriptor) return [];
-  if (descriptor.kind === 'list') return [createWorkspaceTab(descriptor)];
-
-  const listTab = createListTabFor(descriptor);
-  return listTab
-    ? [listTab, createWorkspaceTab(descriptor, undefined, listTab.id)]
-    : [createWorkspaceTab(descriptor)];
+  return [createWorkspaceTab(descriptor, undefined, undefined, true)];
 };
 
 const isExternalOpenEvent = (event?: OpenTabEvent) =>
@@ -138,6 +129,19 @@ const postToParent = (message: Record<string, unknown>) => {
       ...message,
     },
     window.location.origin,
+  );
+};
+
+export const openWorkspacePath = (path: string, title?: string) => {
+  if (typeof window === 'undefined') return;
+  if (window.parent !== window) {
+    postToParent({ action: 'open', path, title });
+    return;
+  }
+  window.dispatchEvent(
+    new CustomEvent('workspace-menu-open', {
+      detail: { path, title },
+    }),
   );
 };
 
@@ -293,7 +297,7 @@ export function WorkspaceTabsProvider({ children }: { children: React.ReactNode 
 
   const requestCloseApproval = useCallback(
     (tab: WorkspaceTab): Promise<boolean> => {
-      if (tab.kind === 'list') return Promise.resolve(false);
+      if (tab.isBase) return Promise.resolve(false);
       const frame = document.querySelector<HTMLIFrameElement>(
         `iframe[data-workspace-tab-id="${tab.id}"]`,
       );
@@ -338,14 +342,14 @@ export function WorkspaceTabsProvider({ children }: { children: React.ReactNode 
 
   const activateParentTab = useCallback(
     (path: string, title?: string, openerTabId?: string) => {
-      const descriptor = describeWorkspacePath(path);
+      const descriptor = describeWorkspacePath(path, title);
       if (!descriptor) {
         router.push(path);
         return;
       }
 
       const current = tabsRef.current;
-      const decision = decideWorkspaceDetailOpen(current, descriptor);
+      const decision = decideWorkspaceOpen(current, descriptor);
       const existing = current.find(
         (tab) => tab.canonicalKey === descriptor.canonicalKey,
       );
@@ -377,22 +381,13 @@ export function WorkspaceTabsProvider({ children }: { children: React.ReactNode 
       }
 
       let nextTabs = current;
-      if (descriptor.kind === 'list') {
-        const nextListTab = createWorkspaceTab(descriptor, title);
-        const currentListIndex = current.findIndex((tab) => tab.kind === 'list');
-        if (currentListIndex >= 0) {
-          nextListTab.id = current[currentListIndex].id;
-          nextTabs = current.map((tab, index) =>
-            index === currentListIndex ? nextListTab : tab,
-          );
-        } else {
-          nextTabs = [nextListTab, ...current];
-        }
-      } else {
-        if (!current.some((tab) => tab.kind === 'list')) {
-          const listTab = createListTabFor(descriptor);
-          if (listTab) nextTabs = [listTab, ...nextTabs];
-        }
+      let shouldAddTarget = true;
+      if (!current.some((tab) => tab.isBase)) {
+        const baseTab = createWorkspaceTab(descriptor, title, undefined, true);
+        nextTabs = [baseTab, ...nextTabs];
+        shouldAddTarget = false;
+      }
+      if (shouldAddTarget) {
         nextTabs = [
           ...nextTabs,
           createWorkspaceTab(descriptor, title, openerTabId),
@@ -412,7 +407,7 @@ export function WorkspaceTabsProvider({ children }: { children: React.ReactNode 
         return;
       }
 
-      const targetDescriptor = describeWorkspacePath(path);
+      const targetDescriptor = describeWorkspacePath(path, title);
       if (
         isWorkspaceFrame &&
         currentDescriptor &&
@@ -437,6 +432,17 @@ export function WorkspaceTabsProvider({ children }: { children: React.ReactNode 
     },
     [activateParentTab, currentDescriptor, isWorkspaceFrame, router],
   );
+
+  useEffect(() => {
+    if (isWorkspaceFrame) return;
+    const handleMenuOpen = (event: Event) => {
+      const detail = (event as CustomEvent<{ path?: string; title?: string }>).detail;
+      if (!detail?.path) return;
+      openTab(detail.path, detail.title);
+    };
+    window.addEventListener('workspace-menu-open', handleMenuOpen);
+    return () => window.removeEventListener('workspace-menu-open', handleMenuOpen);
+  }, [isWorkspaceFrame, openTab]);
 
   const setTabTitle = useCallback(
     (path: string, title: string) => {
@@ -488,7 +494,7 @@ export function WorkspaceTabsProvider({ children }: { children: React.ReactNode 
       if (index < 0) return;
 
       const closing = current[index];
-      if (closing.kind === 'list') return;
+      if (closing.isBase) return;
       pendingCloseTabIdsRef.current.add(tabId);
       const approved = await requestCloseApproval(closing);
       pendingCloseTabIdsRef.current.delete(tabId);
@@ -504,7 +510,7 @@ export function WorkspaceTabsProvider({ children }: { children: React.ReactNode 
         const opener = latestClosing.openerTabId
           ? nextTabs.find((tab) => tab.id === latestClosing.openerTabId)
           : null;
-        const fallback = opener || nextTabs.find((tab) => tab.kind === 'list');
+        const fallback = opener || nextTabs.find((tab) => tab.isBase);
         pushWorkspacePath(fallback?.path || latestClosing.listPath);
       }
     },
@@ -584,36 +590,25 @@ export function WorkspaceTabsProvider({ children }: { children: React.ReactNode 
       return;
     }
 
-    if (currentDescriptor.kind === 'detail') {
-      const detailCount = current.filter((tab) => tab.kind === 'detail').length;
-      if (detailCount >= MAX_WORKSPACE_DETAIL_TABS) {
-        setPendingExternalOpen({
-          path: currentDescriptor.path,
-          title: currentDescriptor.title,
-        });
-        const listTab = current.find((tab) => tab.kind === 'list');
-        replaceWorkspacePath(listTab?.path || currentDescriptor.listPath);
-        return;
-      }
+    const extraCount = current.filter((tab) => !tab.isBase).length;
+    if (extraCount >= MAX_WORKSPACE_EXTRA_TABS) {
+      setPendingExternalOpen({
+        path: currentDescriptor.path,
+        title: currentDescriptor.title,
+      });
+      const baseTab = current.find((tab) => tab.isBase);
+      replaceWorkspacePath(baseTab?.path || currentDescriptor.listPath);
+      return;
     }
 
     let nextTabs = current;
-    if (currentDescriptor.kind === 'list') {
-      const listIndex = current.findIndex((tab) => tab.kind === 'list');
-      const listTab = createWorkspaceTab(currentDescriptor);
-      if (listIndex >= 0) {
-        listTab.id = current[listIndex].id;
-        nextTabs = current.map((tab, index) =>
-          index === listIndex ? listTab : tab,
-        );
-      } else {
-        nextTabs = [listTab, ...current];
-      }
-    } else {
-      if (!current.some((tab) => tab.kind === 'list')) {
-        const listTab = createListTabFor(currentDescriptor);
-        if (listTab) nextTabs = [listTab, ...nextTabs];
-      }
+    if (!current.some((tab) => tab.isBase)) {
+      nextTabs = [
+        createWorkspaceTab(currentDescriptor, undefined, undefined, true),
+        ...nextTabs,
+      ];
+    }
+    if (!nextTabs.some((tab) => tab.canonicalKey === currentDescriptor.canonicalKey)) {
       nextTabs = [...nextTabs, createWorkspaceTab(currentDescriptor)];
     }
     browserPopPendingRef.current = false;
@@ -1049,8 +1044,8 @@ export function WorkspaceTabsProvider({ children }: { children: React.ReactNode 
     const active = current.find(
       (tab) => tab.canonicalKey === currentDescriptor?.canonicalKey,
     );
-    const list = current.find((tab) => tab.kind === 'list');
-    const keepIds = new Set([list?.id, active?.id].filter(Boolean));
+    const base = current.find((tab) => tab.isBase);
+    const keepIds = new Set([base?.id, active?.id].filter(Boolean));
     const closing = current.filter((tab) => !keepIds.has(tab.id));
     if (closing.length === 0) return;
     for (const tab of closing) {
@@ -1178,14 +1173,14 @@ function WorkspaceLimitDialog({
           id="workspace-limit-title"
           className="text-lg font-semibold text-gray-900"
         >
-          已達詳細頁籤上限
+          已達工作頁籤上限
         </h2>
         <p
           id="workspace-limit-description"
           className="mt-3 text-sm leading-6 text-gray-600"
         >
-          已開啟 {MAX_WORKSPACE_DETAIL_TABS}{' '}
-          個詳細頁籤。你可以取消，或將「{target.title}」在新的瀏覽器分頁開啟。既有頁籤不會被自動關閉。
+          已開啟 {MAX_WORKSPACE_EXTRA_TABS}{' '}
+          個工作頁籤。你可以取消，或將「{target.title}」在新的瀏覽器分頁開啟。既有頁籤不會被自動關閉。
         </p>
         {popupBlocked && (
           <p className="mt-3 text-sm text-red-600" role="alert">
@@ -1226,7 +1221,7 @@ function WorkspaceTabBar({
   onClose: (id: string) => void;
   onCloseOthers: () => void;
 }) {
-  const detailCount = tabs.filter((tab) => tab.kind === 'detail').length;
+  const extraCount = tabs.filter((tab) => !tab.isBase).length;
 
   return (
     <div className="mb-3 flex items-center gap-2 border-b border-gray-200 bg-white">
@@ -1261,7 +1256,7 @@ function WorkspaceTabBar({
                 )}
                 {tab.title}
               </button>
-              {tab.kind === 'detail' && (
+              {!tab.isBase && (
                 <>
                   <button
                     type="button"
@@ -1298,9 +1293,9 @@ function WorkspaceTabBar({
         })}
       </div>
       <span className="mb-1 shrink-0 text-xs text-gray-400">
-        {detailCount}/{MAX_WORKSPACE_DETAIL_TABS}
+        {extraCount}/{MAX_WORKSPACE_EXTRA_TABS}
       </span>
-      {detailCount > 1 && activeCanonicalKey && (
+      {extraCount > 1 && activeCanonicalKey && (
         <button
           type="button"
           onClick={onCloseOthers}

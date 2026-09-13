@@ -192,23 +192,25 @@ function MainLayoutContent({ children }: { children: React.ReactNode }) {
         `}
       >
         <div className="p-4 sm:p-6 h-full">
-          {accessDenied ? (
-            <div className="min-h-[60vh] flex items-center justify-center">
-              <div className="text-center">
-                <div className="text-6xl mb-4">🔒</div>
-                <h2 className="text-2xl font-bold text-gray-800 mb-2">無權限訪問</h2>
-                <p className="text-gray-500 mb-4">您沒有權限查看此頁面，請聯繫管理員。</p>
-                <button
-                  onClick={() => router.push('/dashboard')}
-                  className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
-                >
-                  返回儀表板
-                </button>
+          <WorkspaceTabsProvider>
+            {accessDenied ? (
+              <div className="min-h-[60vh] flex items-center justify-center">
+                <div className="text-center">
+                  <div className="text-6xl mb-4">🔒</div>
+                  <h2 className="text-2xl font-bold text-gray-800 mb-2">無權限訪問</h2>
+                  <p className="text-gray-500 mb-4">您沒有權限查看此頁面，請聯繫管理員。</p>
+                  <button
+                    onClick={() => router.push('/dashboard')}
+                    className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
+                  >
+                    返回儀表板
+                  </button>
+                </div>
               </div>
-            </div>
-          ) : (
-            <WorkspaceTabsProvider>{children}</WorkspaceTabsProvider>
-          )}
+            ) : (
+              children
+            )}
+          </WorkspaceTabsProvider>
         </div>
       </main>
       <ChatWidget />

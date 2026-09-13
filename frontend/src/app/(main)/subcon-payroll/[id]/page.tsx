@@ -1,4 +1,5 @@
 'use client';
+import { openWorkspacePath } from '@/components/WorkspaceTabs';
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { subconPayrollApi } from '@/lib/api';
@@ -48,7 +49,7 @@ export default function SubconPayrollDetailPage() {
     if (!confirm('確定要刪除此糧單嗎？此操作將同時刪除關聯的支出記錄，且不可恢復。')) return;
     try {
       await subconPayrollApi.remove(id);
-      router.push('/subcon-payroll/records');
+      openWorkspacePath('/subcon-payroll/records');
     } catch (err: any) {
       alert(err.response?.data?.message || '刪除失敗');
     }

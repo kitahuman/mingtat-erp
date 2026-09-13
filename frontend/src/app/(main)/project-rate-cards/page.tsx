@@ -1,4 +1,5 @@
 'use client';
+import { openWorkspacePath } from '@/components/WorkspaceTabs';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import {
@@ -331,7 +332,7 @@ export default function ProjectRateCardsPage() {
           onPageChange={setPage}
           onSearch={setSearch}
           searchPlaceholder="搜尋工程項目、客戶、項目名稱..."
-          onRowClick={(row) => window.open(`/project-rate-cards/${row.id}`, '_blank')}
+          onRowClick={(row) => openWorkspacePath(`/project-rate-cards/${row.id}`)}
           loading={loading}
           sortBy={sortBy}
           sortOrder={sortOrder}

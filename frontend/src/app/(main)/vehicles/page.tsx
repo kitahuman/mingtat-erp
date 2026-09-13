@@ -1,4 +1,5 @@
 'use client';
+import { openWorkspacePath } from '@/components/WorkspaceTabs';
 import { useState, useEffect, useCallback } from 'react';
 import DateInput from '@/components/DateInput';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -817,7 +818,7 @@ export default function VehiclesPage() {
               setPage(1);
             }}
             searchPlaceholder="搜尋車牌、品牌、型號或底盤號碼..."
-            onRowClick={(row) => window.open(`/vehicles/${row.id}`, '_blank')}
+            onRowClick={(row) => openWorkspacePath(`/vehicles/${row.id}`)}
             loading={loading}
             sortBy={sortBy}
             sortOrder={sortOrder}
@@ -910,7 +911,7 @@ export default function VehiclesPage() {
                   <tr
                     key={v.id}
                     className="border-b hover:bg-gray-50 cursor-pointer"
-                    onClick={() => router.push(`/vehicles/${v.id}`)}
+                    onClick={() => openWorkspacePath(`/vehicles/${v.id}`)}
                   >
                     <td className="px-3 py-2">{v.brand || '-'}</td>
                     <td className="px-3 py-2">{v.model || '-'}</td>
@@ -990,7 +991,7 @@ export default function VehiclesPage() {
               setPage(1);
             }}
             searchPlaceholder="搜尋車牌..."
-            onRowClick={(row) => window.open(`/vehicles/plates/${row.id}`, '_blank')}
+            onRowClick={(row) => openWorkspacePath(`/vehicles/plates/${row.id}`)}
             loading={loading}
             sortBy={plateSortBy}
             sortOrder={plateSortOrder}

@@ -1,4 +1,5 @@
 'use client';
+import { openWorkspacePath } from '@/components/WorkspaceTabs';
 
 import { useState } from 'react';
 import Link from 'next/link';
@@ -72,7 +73,7 @@ export default function NewAiKnowledgePage() {
       });
       const item = res.data?.data || res.data?.entry || res.data;
       const id = item?.id || item?.entry_id || item?.knowledge_id;
-      router.push(id ? `/ai-knowledge/${id}` : '/ai-knowledge');
+      openWorkspacePath(id ? `/ai-knowledge/${id}` : '/ai-knowledge');
     } catch (err: any) {
       const msg = err?.response?.data?.message || '新增知識失敗';
       alert(typeof msg === 'string' ? msg : JSON.stringify(msg));

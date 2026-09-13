@@ -1,17 +1,28 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
-  MAX_WORKSPACE_DETAIL_TABS,
+  MAX_WORKSPACE_EXTRA_TABS,
   addWorkspaceFrameFlag,
-  decideWorkspaceDetailOpen,
+  decideWorkspaceOpen,
   describeWorkspacePath,
 } from './workspaceRoutes';
 
-test('describes a list as the pinned list slot', () => {
-  const descriptor = describeWorkspacePath('/invoices');
-  assert.equal(descriptor?.kind, 'list');
-  assert.equal(descriptor?.canonicalKey, 'list:invoices');
-  assert.equal(descriptor?.listPath, '/invoices');
+test('describes invoice list and generic Sidebar pages', () => {
+  const invoices = describeWorkspacePath('/invoices');
+  const options = describeWorkspacePath('/settings/field-options');
+
+  assert.equal(invoices?.kind, 'list');
+  assert.equal(invoices?.canonicalKey, 'list:invoices');
+  assert.equal(options?.kind, 'page');
+  assert.equal(options?.canonicalKey, 'page:/settings/field-options');
+  assert.equal(options?.title, '選項管理');
+});
+
+test('uses a Sidebar-provided title for a known internal page', () => {
+  assert.equal(
+    describeWorkspacePath('/settings/field-options', '選項設定')?.title,
+    '選項設定',
+  );
 });
 
 test('canonicalizes invoice child pages to one detail entity', () => {
@@ -40,51 +51,55 @@ test('keeps meaningful query and hash while replacing the frame flag', () => {
     '/invoices/42/prepare?mode=compact&workspace_frame=1#totals',
   );
   assert.equal(
-    addWorkspaceFrameFlag('/invoices/42?workspace_frame=0'),
-    '/invoices/42?workspace_frame=1',
+    addWorkspaceFrameFlag('/settings/field-options?group=invoice#choices'),
+    '/settings/field-options?group=invoice&workspace_frame=1#choices',
   );
 });
 
-test('reuses an existing detail even when five details are open', () => {
-  const target = describeWorkspacePath('/invoices/3');
-  assert.ok(target);
-  const tabs = Array.from({ length: MAX_WORKSPACE_DETAIL_TABS }, (_, index) => ({
-    kind: 'detail' as const,
-    canonicalKey: `invoice:${index + 1}`,
-  }));
-
-  assert.equal(decideWorkspaceDetailOpen(tabs, target), 'activate-existing');
-});
-
-test('allows details one through five and blocks only a sixth new detail', () => {
-  const target = describeWorkspacePath('/invoices/99');
-  assert.ok(target);
-  const fourDetails = Array.from(
-    { length: MAX_WORKSPACE_DETAIL_TABS - 1 },
-    (_, index) => ({
-      kind: 'detail' as const,
-      canonicalKey: `invoice:${index + 1}`,
-    }),
-  );
-  const fiveDetails = [
-    ...fourDetails,
-    { kind: 'detail' as const, canonicalKey: 'quotation:5' },
-  ];
-
-  assert.equal(decideWorkspaceDetailOpen(fourDetails, target), 'open-new');
-  assert.equal(decideWorkspaceDetailOpen(fiveDetails, target), 'overflow');
-});
-
-test('the list slot is not counted toward the five-detail limit', () => {
-  const target = describeWorkspacePath('/quotations/99');
+test('reuses an existing tab even when eight extra tabs are open', () => {
+  const target = describeWorkspacePath('/settings/field-options');
   assert.ok(target);
   const tabs = [
-    { kind: 'list' as const, canonicalKey: 'list:invoices' },
-    ...Array.from({ length: 4 }, (_, index) => ({
-      kind: 'detail' as const,
+    { isBase: true, canonicalKey: 'list:invoices' },
+    { isBase: false, canonicalKey: 'page:/settings/field-options' },
+    ...Array.from({ length: MAX_WORKSPACE_EXTRA_TABS - 1 }, (_, index) => ({
+      isBase: false,
       canonicalKey: `invoice:${index + 1}`,
     })),
   ];
 
-  assert.equal(decideWorkspaceDetailOpen(tabs, target), 'open-new');
+  assert.equal(decideWorkspaceOpen(tabs, target), 'activate-existing');
+});
+
+test('allows eight extra tabs and blocks only a ninth new tab', () => {
+  const target = describeWorkspacePath('/invoices/99');
+  assert.ok(target);
+  const sevenExtras = [
+    { isBase: true, canonicalKey: 'list:invoices' },
+    ...Array.from({ length: MAX_WORKSPACE_EXTRA_TABS - 1 }, (_, index) => ({
+      isBase: false,
+      canonicalKey: `invoice:${index + 1}`,
+    })),
+  ];
+  const eightExtras = [
+    ...sevenExtras,
+    { isBase: false, canonicalKey: 'page:/settings/field-options' },
+  ];
+
+  assert.equal(decideWorkspaceOpen(sevenExtras, target), 'open-new');
+  assert.equal(decideWorkspaceOpen(eightExtras, target), 'overflow');
+});
+
+test('the single base tab is not counted toward the eight-tab quota', () => {
+  const target = describeWorkspacePath('/quotations');
+  assert.ok(target);
+  const tabs = [
+    { isBase: true, canonicalKey: 'list:invoices' },
+    ...Array.from({ length: MAX_WORKSPACE_EXTRA_TABS - 1 }, (_, index) => ({
+      isBase: false,
+      canonicalKey: `invoice:${index + 1}`,
+    })),
+  ];
+
+  assert.equal(decideWorkspaceOpen(tabs, target), 'open-new');
 });

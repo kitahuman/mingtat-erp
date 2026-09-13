@@ -8,6 +8,7 @@ import {
 } from '@/lib/api';
 import RoleGuard from '@/components/RoleGuard';
 import { useAuth } from '@/lib/auth';
+import { useWorkspaceTabDirty } from '@/components/WorkspaceTabs';
 
 const CATEGORY_LABELS: Record<string, string> = {
   employee_role: '員工職位',
@@ -423,6 +424,19 @@ export default function FieldOptionsPage() {
   const totalCount = sortedOptions.length;
   const filteredCount = currentOptions.length;
   const isSearchActive = searchQuery.trim().length > 0;
+  const originalAliases = editingOption?.aliases || [];
+  const isFormDirty =
+    showModal &&
+    (formLabel !== (editingOption?.label || '') ||
+      JSON.stringify(formAliases) !== JSON.stringify(originalAliases) ||
+      newAlias.trim().length > 0);
+  const isImportDirty =
+    showImportModal && importResult === null && importPreview.length > 0;
+  const isMergeDirty = mergeMode && selectedIds.size > 0;
+  useWorkspaceTabDirty(
+    isFormDirty || isImportDirty || isMergeDirty,
+    '選項管理有尚未儲存的修改',
+  );
 
   // Merge description text based on category
   const mergeDescription = isContractTab

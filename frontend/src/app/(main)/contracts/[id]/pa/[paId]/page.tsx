@@ -1,4 +1,5 @@
 'use client';
+import { openWorkspacePath } from '@/components/WorkspaceTabs';
 
 import React, { useState, useEffect, useCallback } from 'react';
 import DateInput from '@/components/DateInput';
@@ -378,7 +379,7 @@ export default function IpaDetailPage() {
     if (!confirm('確認刪除此 IPA？此操作不可復原。')) return;
     try {
       await paymentApplicationsApi.delete(contractId, paId);
-      router.push(`/contracts/${contractId}`);
+      openWorkspacePath(`/contracts/${contractId}`);
     } catch (err: any) {
       window.alert(err.response?.data?.message || '刪除失敗');
     }

@@ -1,4 +1,5 @@
 'use client';
+import { openWorkspacePath } from '@/components/WorkspaceTabs';
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { subconRateCardsApi, companiesApi, partnersApi, vehiclesApi, machineryApi } from '@/lib/api';
@@ -38,7 +39,7 @@ export default function SubconRateCardDetailPage() {
       setRecord(res.data);
       setForm({ ...res.data, ot_rates: res.data.ot_rates || [] });
       setLoading(false);
-    }).catch(() => router.push('/subcon-rate-cards'));
+    }).catch(() => openWorkspacePath('/subcon-rate-cards'));
   };
 
   useEffect(() => {

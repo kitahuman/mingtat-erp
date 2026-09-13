@@ -1,4 +1,5 @@
 'use client';
+import { openWorkspacePath } from '@/components/WorkspaceTabs';
 
 import { useState, useEffect, useCallback } from 'react';
 import DateInput from '@/components/DateInput';
@@ -533,7 +534,7 @@ export default function EditDailyReportPage() {
         })),
       };
       await dailyReportsApi.adminUpdate(reportId, dto);
-      router.push('/daily-reports');
+      openWorkspacePath('/daily-reports');
     } catch (e: any) {
       setError(e?.response?.data?.message || '保存失敗，請重試');
     } finally {
@@ -579,7 +580,7 @@ export default function EditDailyReportPage() {
         </div>
         <div className="flex gap-2">
           <button
-            onClick={() => router.push('/daily-reports')}
+            onClick={() => openWorkspacePath('/daily-reports')}
             className="px-4 py-2 border rounded-lg text-sm text-gray-600 hover:bg-gray-50"
           >
             取消
@@ -1081,7 +1082,7 @@ export default function EditDailyReportPage() {
         </p>
         <div className="flex gap-2">
           <button
-            onClick={() => router.push('/daily-reports')}
+            onClick={() => openWorkspacePath('/daily-reports')}
             className="px-4 py-2 border rounded-lg text-sm text-gray-600 hover:bg-gray-50"
           >
             取消

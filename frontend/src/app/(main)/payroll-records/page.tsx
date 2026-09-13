@@ -1,4 +1,5 @@
 'use client';
+import { openWorkspacePath } from '@/components/WorkspaceTabs';
 import { usePageState } from '@/hooks/usePageState';
 
 import { useState, useEffect, useCallback, type MouseEvent } from 'react';
@@ -354,7 +355,7 @@ export default function PayrollRecordsPage() {
       }
       setSelectedIds(new Set());
       setSelectAll(false);
-      router.push(`/expenses/${expenseId}`);
+      openWorkspacePath(`/expenses/${expenseId}`);
     } catch (err: any) {
       console.error(err);
       alert(err?.response?.data?.message || '生成強積金支出失敗，請稍後再試。');
@@ -693,10 +694,10 @@ export default function PayrollRecordsPage() {
         searchPlaceholder="搜尋員工姓名/編號..."
         onRowClick={(row) => {
           if (row.record_type === 'ai_session' && row.ai_session_id) {
-            window.open(`/payroll/ai-reconcile/${row.ai_session_id}`, '_blank');
+            openWorkspacePath(`/payroll/ai-reconcile/${row.ai_session_id}`);
             return;
           }
-          window.open(`/payroll/${row.id}`, '_blank');
+          openWorkspacePath(`/payroll/${row.id}`);
         }}
         loading={loading}
         sortBy={sortBy}

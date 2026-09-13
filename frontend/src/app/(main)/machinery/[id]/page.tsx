@@ -1,4 +1,5 @@
 'use client';
+import { openWorkspacePath } from '@/components/WorkspaceTabs';
 import { useState, useEffect } from 'react';
 import DateInput from '@/components/DateInput';
 import { useParams, useRouter } from 'next/navigation';
@@ -37,7 +38,7 @@ export default function MachineryDetailPage() {
   const [tonnageOptions, setTonnageOptions] = useState<{ value: string; label: string }[]>([]);
 
   const loadData = () => {
-    machineryApi.get(Number(params.id)).then(res => { setMachine(res.data); setForm(res.data); setLoading(false); }).catch(() => router.push('/machinery'));
+    machineryApi.get(Number(params.id)).then(res => { setMachine(res.data); setForm(res.data); setLoading(false); }).catch(() => openWorkspacePath('/machinery'));
   };
 
   useEffect(() => {

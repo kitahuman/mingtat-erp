@@ -1,4 +1,5 @@
 'use client';
+import { openWorkspacePath } from '@/components/WorkspaceTabs';
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { companyProfilesApi } from '@/lib/api';
@@ -23,7 +24,7 @@ export default function CompanyProfileDetailPage() {
       setProfile(res.data);
       setForm(res.data);
       setLoading(false);
-    }).catch(() => router.push('/company-profiles'));
+    }).catch(() => openWorkspacePath('/company-profiles'));
   };
 
   useEffect(() => { loadData(); }, [params.id]);

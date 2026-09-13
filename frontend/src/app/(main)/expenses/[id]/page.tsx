@@ -1,4 +1,5 @@
 'use client';
+import { openWorkspacePath } from '@/components/WorkspaceTabs';
 import { useState, useEffect, useCallback } from 'react';
 import DateInput from '@/components/DateInput';
 import { useParams, useRouter } from 'next/navigation';
@@ -392,7 +393,7 @@ export default function ExpenseDetailPage() {
     setDeleting(true);
     try {
       await expensesApi.delete(expenseId);
-      router.push('/expenses');
+      openWorkspacePath('/expenses');
     } catch (err: any) {
       alert(err.response?.data?.message || '刪除支出失敗');
     } finally {

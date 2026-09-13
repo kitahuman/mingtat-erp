@@ -1,4 +1,5 @@
 'use client';
+import { openWorkspacePath } from '@/components/WorkspaceTabs';
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { salaryConfigApi, employeesApi, partnersApi } from '@/lib/api';
@@ -54,7 +55,7 @@ export default function SalaryConfigDetailPage() {
         });
       }
       setLoading(false);
-    }).catch(() => router.push('/salary-config'));
+    }).catch(() => openWorkspacePath('/salary-config'));
   };
 
   useEffect(() => { loadData(); partnersApi.simple().then(r => setPartners(r.data || [])).catch(() => {}); }, [params.id]);

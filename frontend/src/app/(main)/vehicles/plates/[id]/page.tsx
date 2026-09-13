@@ -1,4 +1,5 @@
 'use client';
+import { openWorkspacePath } from '@/components/WorkspaceTabs';
 import { useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -38,7 +39,7 @@ export default function VehiclePlateDetailPage() {
       setVehicles(vehicleRes.data?.data || []);
       setLoading(false);
     } catch {
-      router.push('/vehicles');
+      openWorkspacePath('/vehicles');
     }
   };
 

@@ -2,7 +2,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useAuth, UserRole, ROLE_LABELS } from '@/lib/auth';
-import { useCallback, useEffect, useState } from 'react';
+import { MouseEvent as ReactMouseEvent, useCallback, useEffect, useState } from 'react';
 import WhatsAppBotStatus from './WhatsAppBotStatus';
 import VersionBadge from './VersionBadge';
 import IssueReportModal from './IssueReportModal';
@@ -31,6 +31,28 @@ type NavEntry = NavItem | NavGroup;
 
 function isGroup(entry: NavEntry): entry is NavGroup {
   return 'items' in entry;
+}
+
+function openWorkspaceMenuItem(
+  event: ReactMouseEvent<HTMLAnchorElement>,
+  item: Pick<NavItem, 'href' | 'label'>,
+) {
+  if (
+    event.defaultPrevented ||
+    event.button !== 0 ||
+    event.ctrlKey ||
+    event.metaKey ||
+    event.shiftKey ||
+    event.altKey
+  ) {
+    return;
+  }
+  event.preventDefault();
+  window.dispatchEvent(
+    new CustomEvent('workspace-menu-open', {
+      detail: { path: item.href, title: item.label },
+    }),
+  );
 }
 
 const navEntries: NavEntry[] = [
@@ -162,7 +184,10 @@ function CollapsedGroupItem({
   entry: NavGroup;
   canAccess: (item: { pageKey?: string; minRole?: UserRole; roles?: UserRole[] }) => boolean;
   pathname: string;
-  onNavigate: () => void;
+  onNavigate: (
+    event: ReactMouseEvent<HTMLAnchorElement>,
+    item: NavItem,
+  ) => void;
   onExpand: (label: string) => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -223,7 +248,7 @@ function CollapsedGroupItem({
               <Link
                 key={item.href}
                 href={item.href}
-                onClick={onNavigate}
+                onClick={(event) => onNavigate(event, item)}
                 className={itemClass}
               >
                 <span className="text-base">{item.icon}</span>
@@ -346,7 +371,10 @@ export default function Sidebar({ onCollapse }: SidebarProps) {
       <Link
         key={item.href}
         href={item.href}
-        onClick={handleMobileNavigate}
+        onClick={(event) => {
+          openWorkspaceMenuItem(event, item);
+          handleMobileNavigate();
+        }}
         className={className}
       >
         <span className="text-lg">{item.icon}</span>
@@ -480,7 +508,10 @@ export default function Sidebar({ onCollapse }: SidebarProps) {
                     entry={entry}
                     canAccess={canAccess}
                     pathname={pathname}
-                    onNavigate={handleMobileNavigate}
+                    onNavigate={(event, item) => {
+                      openWorkspaceMenuItem(event, item);
+                      handleMobileNavigate();
+                    }}
                     onExpand={handleCollapsedIconExpand}
                   />
                 );
@@ -499,7 +530,8 @@ export default function Sidebar({ onCollapse }: SidebarProps) {
                 <Link
                   key={entry.href}
                   href={entry.href}
-                  onClick={() => {
+                  onClick={(event) => {
+                    openWorkspaceMenuItem(event, entry);
                     handleCollapsedIconExpand();
                     handleMobileNavigate();
                   }}
@@ -587,7 +619,17 @@ export default function Sidebar({ onCollapse }: SidebarProps) {
         <div className={`p-4 border-t border-gray-700 ${collapsed ? 'text-center' : ''}`}>
           {!collapsed && (
             <div className="mb-2">
-              <Link href="/settings/profile" onClick={handleMobileNavigate} className="hover:text-primary-400 transition-colors">
+              <Link
+                href="/settings/profile"
+                onClick={(event) => {
+                  openWorkspaceMenuItem(event, {
+                    href: '/settings/profile',
+                    label: '個人設定',
+                  });
+                  handleMobileNavigate();
+                }}
+                className="hover:text-primary-400 transition-colors"
+              >
                 <p className="text-sm font-medium">{user?.displayName || user?.username}</p>
                 <p className="text-xs text-gray-400">{roleLabel}{user?.department ? ` - ${user.department}` : ''}</p>
               </Link>

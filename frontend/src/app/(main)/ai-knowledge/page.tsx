@@ -1,4 +1,5 @@
 "use client";
+import { openWorkspacePath } from '@/components/WorkspaceTabs';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
@@ -377,7 +378,7 @@ export default function AiKnowledgePage() {
                       return (
                         <tr
                           key={String(id || idx)}
-                          onClick={() => id && router.push(`/ai-knowledge/${id}`)}
+                          onClick={() => id && openWorkspacePath(`/ai-knowledge/${id}`)}
                           className="border-t hover:bg-gray-50 cursor-pointer"
                         >
                           <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>

@@ -1,4 +1,5 @@
 'use client';
+import { openWorkspacePath } from '@/components/WorkspaceTabs';
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { partnersApi, subconFleetDriversApi, paymentTermTemplatesApi } from '@/lib/api';
@@ -130,7 +131,7 @@ export default function PartnerDetailPage() {
       setForm(data);
       setLoading(false);
       loadPaymentTerms(clientId);
-    }).catch(() => router.push('/partners'));
+    }).catch(() => openWorkspacePath('/partners'));
   };
 
   useEffect(() => { loadData(); }, [params.id]);

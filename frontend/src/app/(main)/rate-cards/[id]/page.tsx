@@ -1,4 +1,5 @@
 'use client';
+import { openWorkspacePath } from '@/components/WorkspaceTabs';
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { rateCardsApi, companiesApi, partnersApi, projectsApi, vehiclesApi, machineryApi } from '@/lib/api';
@@ -40,7 +41,7 @@ export default function RateCardDetailPage() {
       setRecord(res.data);
       setForm({ ...res.data, ot_rates: res.data.ot_rates || [] });
       setLoading(false);
-    }).catch(() => router.push('/rate-cards'));
+    }).catch(() => openWorkspacePath('/rate-cards'));
   };
 
   useEffect(() => {

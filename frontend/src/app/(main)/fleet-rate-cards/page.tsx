@@ -1,4 +1,5 @@
 'use client';
+import { openWorkspacePath } from '@/components/WorkspaceTabs';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import {
@@ -464,7 +465,7 @@ export default function FleetRateCardsPage() {
           onPageChange={setPage}
           onSearch={setSearch}
           searchPlaceholder="搜尋客戶、合約、起終點..."
-          onRowClick={(row) => window.open(`/fleet-rate-cards/${row.id}`, '_blank')}
+          onRowClick={(row) => openWorkspacePath(`/fleet-rate-cards/${row.id}`)}
           loading={loading}
           sortBy={sortBy}
           sortOrder={sortOrder}
