@@ -1,5 +1,4 @@
 'use client';
-import { openWorkspacePath } from '@/components/WorkspaceTabs';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import {
@@ -727,7 +726,7 @@ export default function PayrollPage() {
 
       await aiPayrollSessionApi.startReconcile(sessionId);
       setShowAiPayrollModal(false);
-      openWorkspacePath(`/payroll/ai-reconcile/${sessionId}`);
+      router.push(`/payroll/ai-reconcile/${sessionId}`);
     } catch (err: any) {
       setAiError(
         err.response?.data?.message || err.message || 'AI 計糧啟動失敗，請重試',
@@ -752,7 +751,7 @@ export default function PayrollPage() {
         date_to: dateTo,
         company_id: selectedCompanyId || undefined,
       });
-      openWorkspacePath(`/payroll/${res.data.id}`);
+      router.push(`/payroll/${res.data.id}`);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : '準備失敗，請重試';
       setCalculateError(message);
@@ -845,7 +844,7 @@ export default function PayrollPage() {
             </button>
           )}
           <button
-            onClick={() => openWorkspacePath('/payroll-records')}
+            onClick={() => router.push('/payroll-records')}
             className="btn-secondary"
           >
             查看糧單記錄

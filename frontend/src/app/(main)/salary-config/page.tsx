@@ -1,5 +1,4 @@
 'use client';
-import { openWorkspacePath } from '@/components/WorkspaceTabs';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { salaryConfigApi, employeesApi, partnersApi } from '@/lib/api';
@@ -447,7 +446,7 @@ export default function SalaryConfigPage() {
           onPageChange={setPage}
           onSearch={setSearch}
           searchPlaceholder="搜尋員工姓名、編號..."
-          onRowClick={(row) => openWorkspacePath(`/salary-config/${row.id}`)}
+          onRowClick={(row) => window.open(`/salary-config/${row.id}`, '_blank')}
           loading={loading}
           sortBy={sortBy}
           sortOrder={sortOrder}

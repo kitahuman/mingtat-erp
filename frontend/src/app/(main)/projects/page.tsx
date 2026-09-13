@@ -1,5 +1,4 @@
 'use client';
-import { openWorkspacePath } from '@/components/WorkspaceTabs';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import {
@@ -251,7 +250,7 @@ export default function ProjectsPage() {
           onPageChange={setPage}
           onSearch={setSearch}
           searchPlaceholder="搜尋工程編號、工程名稱、客戶..."
-          onRowClick={(row) => openWorkspacePath(`/projects/${row.id}`)}
+          onRowClick={(row) => window.open(`/projects/${row.id}`, '_blank')}
           loading={loading}
           sortBy={sortBy}
           sortOrder={sortOrder}

@@ -1,5 +1,4 @@
 'use client';
-import { openWorkspacePath } from '@/components/WorkspaceTabs';
 
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
@@ -1103,7 +1102,7 @@ export default function AiPayrollReconcilePage() {
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div>
           <button
-            onClick={() => openWorkspacePath('/payroll')}
+            onClick={() => router.push('/payroll')}
             className="mb-3 text-sm text-gray-500 hover:text-gray-700"
           >
             ← 返回計糧管理
@@ -1212,14 +1211,14 @@ export default function AiPayrollReconcilePage() {
           <div className="mt-4 flex flex-wrap gap-2">
             {payrollIds[0] && (
               <button
-                onClick={() => openWorkspacePath(`/payroll/${payrollIds[0]}`)}
+                onClick={() => router.push(`/payroll/${payrollIds[0]}`)}
                 className="rounded-lg bg-green-700 px-4 py-2 text-sm font-medium text-white hover:bg-green-800"
               >
                 查看首張糧單
               </button>
             )}
             <button
-              onClick={() => openWorkspacePath('/payroll-records')}
+              onClick={() => router.push('/payroll-records')}
               className="rounded-lg border border-green-300 bg-white px-4 py-2 text-sm text-green-700 hover:bg-green-50"
             >
               查看糧單記錄

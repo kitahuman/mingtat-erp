@@ -1,5 +1,4 @@
 'use client';
-import { openWorkspacePath } from '@/components/WorkspaceTabs';
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { usePageState } from '@/hooks/usePageState';
 import DateInput from '@/components/DateInput';
@@ -1063,7 +1062,7 @@ export default function InvoicesPage() {
       // 建立後重新加載發票清單 tab
       setStatementListPage(1);
       // 可選：也可以打開詳情頁
-      // openWorkspacePath(`/invoice-statements/${res.data.id}`);
+      // window.open(`/invoice-statements/${res.data.id}`, '_blank');
     } catch (err: any) {
       alert(err.response?.data?.message || '建立發票清單失敗');
     } finally {
@@ -1419,7 +1418,7 @@ export default function InvoicesPage() {
               setStatementListPage(1);
             }}
             searchPlaceholder="搜尋清單編號、標題、客戶..."
-            onRowClick={(row) => openWorkspacePath(`/invoice-statements/${row.id}`)}
+            onRowClick={(row) => window.open(`/invoice-statements/${row.id}`, '_blank')}
             loading={statementRecordsLoading}
             sortBy={statementListSortBy}
             sortOrder={statementListSortOrder}

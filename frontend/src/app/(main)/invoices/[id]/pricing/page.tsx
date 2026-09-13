@@ -3871,10 +3871,8 @@ export default function InvoicePricingPage() {
                                         {rowPrice.rate_card_id && (
                                           <Link
                                             href={`/rental-rate-cards/${rowPrice.rate_card_id}`}
-                                            onClick={(event) => {
-                                              event.preventDefault();
-                                              openTab(`/rental-rate-cards/${rowPrice.rate_card_id}`);
-                                            }}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
                                             className="rounded border border-green-200 bg-white px-1.5 py-0.5 text-green-700 hover:bg-green-50 hover:text-green-800"
                                           >
                                             查看價目
@@ -3888,10 +3886,8 @@ export default function InvoicePricingPage() {
                                         <div className="flex justify-end text-[11px]">
                                           <Link
                                             href={`/rental-rate-cards/${rowPrice.rate_card_id}`}
-                                            onClick={(event) => {
-                                              event.preventDefault();
-                                              openTab(`/rental-rate-cards/${rowPrice.rate_card_id}`);
-                                            }}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
                                             className="rounded border border-gray-200 bg-white px-1.5 py-0.5 font-semibold text-gray-600 hover:bg-gray-50 hover:text-gray-800"
                                           >
                                             查看價目

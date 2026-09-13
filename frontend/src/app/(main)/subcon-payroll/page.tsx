@@ -1,5 +1,4 @@
 'use client';
-import { openWorkspacePath } from '@/components/WorkspaceTabs';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import {
@@ -388,7 +387,7 @@ export default function SubconPayrollPage() {
         extra_items: validExtras.length > 0 ? validExtras : undefined,
       });
       // Navigate to the detail page
-      openWorkspacePath(`/subcon-payroll/${res.data.id}`);
+      router.push(`/subcon-payroll/${res.data.id}`);
     } catch (err: any) {
       setError(err.response?.data?.message || '確認失敗');
     } finally {
@@ -448,7 +447,7 @@ export default function SubconPayrollPage() {
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold">供應商計糧</h1>
         <button
-          onClick={() => openWorkspacePath('/subcon-payroll/records')}
+          onClick={() => router.push('/subcon-payroll/records')}
           className="text-sm text-primary-600 hover:text-primary-700 border border-primary-300 rounded px-3 py-1.5 hover:bg-primary-50"
         >
           查看糧單記錄

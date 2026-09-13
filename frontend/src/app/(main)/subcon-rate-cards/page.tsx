@@ -1,5 +1,4 @@
 'use client';
-import { openWorkspacePath } from '@/components/WorkspaceTabs';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import {
@@ -535,7 +534,7 @@ export default function SubconRateCardsPage() {
           onPageChange={setPage}
           onSearch={setSearch}
           searchPlaceholder="搜尋供應商、車牌、客戶、起終點..."
-          onRowClick={(row) => openWorkspacePath(`/subcon-rate-cards/${row.id}`)}
+          onRowClick={(row) => window.open(`/subcon-rate-cards/${row.id}`, '_blank')}
           loading={loading}
           sortBy={sortBy}
           sortOrder={sortOrder}

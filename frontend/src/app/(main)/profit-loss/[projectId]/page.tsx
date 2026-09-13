@@ -1,5 +1,4 @@
 'use client';
-import { openWorkspacePath } from '@/components/WorkspaceTabs';
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -82,7 +81,7 @@ export default function ProjectProfitLossPage() {
 
   const handleProjectChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const id = e.target.value;
-    if (id) openWorkspacePath(`/profit-loss/${id}`);
+    if (id) router.push(`/profit-loss/${id}`);
   };
 
   if (loading) {

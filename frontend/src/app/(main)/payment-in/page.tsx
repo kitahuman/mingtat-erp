@@ -1,5 +1,4 @@
 'use client';
-import { openWorkspacePath } from '@/components/WorkspaceTabs';
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import {
@@ -471,7 +470,7 @@ export default function PaymentInPage() {
         <button
           onClick={(e) => {
             e.stopPropagation();
-            openWorkspacePath(`/payment-in/${row.id}/receipt-preview`);
+            window.open(`/payment-in/${row.id}/receipt-preview`, '_blank');
           }}
           className="inline-flex items-center justify-center w-7 h-7 rounded hover:bg-gray-100 text-gray-500 hover:text-blue-600 transition-colors"
           title="開啟收據預覽"
@@ -561,7 +560,7 @@ export default function PaymentInPage() {
         limit={50}
         onPageChange={setPage}
         loading={loading}
-        onRowClick={(row) => openWorkspacePath(`/payment-in/${row.id}`)}
+        onRowClick={(row) => window.open(`/payment-in/${row.id}`, '_blank')}
         onSave={isReadOnly() ? undefined : handleSave}
         onDelete={isReadOnly() ? undefined : handleDelete}
         sortBy={sortBy}

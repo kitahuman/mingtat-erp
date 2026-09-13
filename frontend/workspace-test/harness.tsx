@@ -99,6 +99,9 @@ function FieldOptionsHarness() {
           onChange={(event) => setDraft(event.target.value)}
         />
       </label>
+      <a data-testid="navigate-system-settings" href="/settings/system">
+        Open system settings in this tab
+      </a>
     </section>
   );
 }
@@ -183,6 +186,13 @@ function HarnessRoute() {
   if (pathname === '/invoices') return <InvoiceList />;
   if (pathname === '/quotations') return <QuotationList />;
   if (pathname === '/settings/field-options') return <FieldOptionsHarness />;
+  if (pathname === '/settings/system') {
+    return (
+      <section>
+        <h1>System settings harness</h1>
+      </section>
+    );
+  }
 
   const invoice = pathname.match(/^\/invoices\/(\d+)(?:\/(?:prepare|pricing|pdf-preview))?$/);
   if (invoice) return <DetailHarness type="invoice" id={invoice[1]} />;

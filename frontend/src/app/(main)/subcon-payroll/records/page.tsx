@@ -1,5 +1,4 @@
 'use client';
-import { openWorkspacePath } from '@/components/WorkspaceTabs';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { subconPayrollApi, partnersApi } from '@/lib/api';
@@ -268,7 +267,7 @@ export default function SubconPayrollRecordsPage() {
                 <tr
                   key={row.id}
                   className="hover:bg-gray-50 cursor-pointer"
-                  onClick={() => openWorkspacePath(`/subcon-payroll/${row.id}`)}
+                  onClick={() => router.push(`/subcon-payroll/${row.id}`)}
                 >
                   <td className="px-4 py-3 text-gray-400">{row.id}</td>
                   <td className="px-4 py-3 font-medium">

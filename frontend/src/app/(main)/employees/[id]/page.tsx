@@ -1,5 +1,4 @@
 'use client';
-import { openWorkspacePath } from '@/components/WorkspaceTabs';
 import { useState, useEffect } from 'react';
 import DateInput from '@/components/DateInput';
 import { useParams, useRouter } from 'next/navigation';
@@ -318,7 +317,7 @@ export default function EmployeeDetailPage() {
         else if (typeof oc === 'string') setOtherCerts(JSON.parse(oc));
       } catch { setOtherCerts({}); }
       setLoading(false);
-    }).catch(() => openWorkspacePath('/employees'));
+    }).catch(() => router.push('/employees'));
     loadPettyCash(Number(params.id));
     employeesApi.getEmploymentHistory(Number(params.id)).then(res => {
       setEmploymentHistoryRows(buildEmploymentHistoryRows(res.data || []));

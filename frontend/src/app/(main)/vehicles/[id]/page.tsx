@@ -1,5 +1,4 @@
 'use client';
-import { openWorkspacePath } from '@/components/WorkspaceTabs';
 import { useState, useEffect } from 'react';
 import DateInput from '@/components/DateInput';
 import { useParams, useRouter } from 'next/navigation';
@@ -50,7 +49,7 @@ export default function VehicleDetailPage() {
   const [historyEventForm, setHistoryEventForm] = useState({ event_date: '', event_type: '', description: '' });
 
   const loadData = () => {
-    vehiclesApi.get(Number(params.id)).then(res => { setVehicle(res.data); setForm(res.data); setLoading(false); }).catch(() => openWorkspacePath('/vehicles'));
+    vehiclesApi.get(Number(params.id)).then(res => { setVehicle(res.data); setForm(res.data); setLoading(false); }).catch(() => router.push('/vehicles'));
   };
 
   useEffect(() => {

@@ -1,5 +1,4 @@
 'use client';
-import { openWorkspacePath } from '@/components/WorkspaceTabs';
 import { useState, useEffect, useRef } from 'react';
 import DateInput from '@/components/DateInput';
 import { useParams } from 'next/navigation';
@@ -1668,7 +1667,7 @@ export default function InvoiceDetailPage() {
                     </td>
                     <td className="px-4 py-2 text-center space-x-1">
                       <button
-                        onClick={() => openWorkspacePath(`/payment-in/${p.id}`)}
+                        onClick={() => window.open(`/payment-in/${p.id}`, '_blank')}
                         className="text-xs px-2 py-1 rounded text-blue-700 bg-blue-50 hover:bg-blue-100"
                       >
                         查看

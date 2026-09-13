@@ -1,5 +1,4 @@
 'use client';
-import { openWorkspacePath } from '@/components/WorkspaceTabs';
 import { useRef, useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { companiesApi, paymentTermTemplatesApi } from '@/lib/api';
@@ -182,7 +181,7 @@ export default function CompanyDetailPage() {
       setForm(res.data);
       setLoading(false);
       loadPaymentTerms(companyId);
-    }).catch(() => { openWorkspacePath('/companies'); });
+    }).catch(() => { router.push('/companies'); });
   }, [params.id, router]);
 
   const handleSave = async () => {
@@ -530,7 +529,7 @@ export default function CompanyDetailPage() {
               <thead><tr className="bg-gray-50 border-b"><th className="px-3 py-2 text-left">編號</th><th className="px-3 py-2 text-left">姓名</th><th className="px-3 py-2 text-left">職位</th><th className="px-3 py-2 text-left">狀態</th></tr></thead>
               <tbody>
                 {company.employees.slice(0, 10).map((emp: any) => (
-                  <tr key={emp.id} className="border-b hover:bg-gray-50 cursor-pointer" onClick={() => openWorkspacePath(`/employees/${emp.id}`)}>
+                  <tr key={emp.id} className="border-b hover:bg-gray-50 cursor-pointer" onClick={() => router.push(`/employees/${emp.id}`)}>
                     <td className="px-3 py-2 font-mono">{emp.emp_code}</td>
                     <td className="px-3 py-2 font-medium">{emp.name_zh}</td>
                     <td className="px-3 py-2">{emp.role || '-'}</td>
@@ -556,7 +555,7 @@ export default function CompanyDetailPage() {
               <thead><tr className="bg-gray-50 border-b"><th className="px-3 py-2 text-left">車牌</th><th className="px-3 py-2 text-left">車型</th><th className="px-3 py-2 text-left">噸數</th><th className="px-3 py-2 text-left">狀態</th></tr></thead>
               <tbody>
                 {company.vehicles.slice(0, 10).map((v: any) => (
-                  <tr key={v.id} className="border-b hover:bg-gray-50 cursor-pointer" onClick={() => openWorkspacePath(`/vehicles/${v.id}`)}>
+                  <tr key={v.id} className="border-b hover:bg-gray-50 cursor-pointer" onClick={() => router.push(`/vehicles/${v.id}`)}>
                     <td className="px-3 py-2 font-mono font-bold">{v.plate_number}</td>
                     <td className="px-3 py-2">{v.machine_type || '-'}</td>
                     <td className="px-3 py-2">{v.tonnage ? `${v.tonnage}T` : '-'}</td>
@@ -581,7 +580,7 @@ export default function CompanyDetailPage() {
               <thead><tr className="bg-gray-50 border-b"><th className="px-3 py-2 text-left">編號</th><th className="px-3 py-2 text-left">品牌</th><th className="px-3 py-2 text-left">型號</th><th className="px-3 py-2 text-left">噸數</th></tr></thead>
               <tbody>
                 {company.machinery.slice(0, 10).map((m: any) => (
-                  <tr key={m.id} className="border-b hover:bg-gray-50 cursor-pointer" onClick={() => openWorkspacePath(`/machinery/${m.id}`)}>
+                  <tr key={m.id} className="border-b hover:bg-gray-50 cursor-pointer" onClick={() => router.push(`/machinery/${m.id}`)}>
                     <td className="px-3 py-2 font-mono font-bold">{m.machine_code}</td>
                     <td className="px-3 py-2">{m.brand || '-'}</td>
                     <td className="px-3 py-2">{m.model || '-'}</td>

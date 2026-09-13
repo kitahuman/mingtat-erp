@@ -7,7 +7,6 @@ import { fmtDate, toInputDate } from '@/lib/dateUtils';
 import { useAuth } from '@/lib/auth';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
-import { openWorkspacePath } from '@/components/WorkspaceTabs';
 
 const fmt$ = (v: any) =>
   `$${Number(v || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -164,7 +163,7 @@ export default function InvoiceStatementDetailPage() {
       const res = await invoiceStatementsApi.get(statementId);
       applyStatement(res.data);
     } catch {
-      openWorkspacePath('/invoices?tab=statements');
+      router.push('/invoices?tab=statements');
     } finally {
       setLoading(false);
     }
@@ -236,7 +235,7 @@ export default function InvoiceStatementDetailPage() {
     if (!confirm('確定要刪除此發票清單？')) return;
     try {
       await invoiceStatementsApi.delete(statementId);
-      openWorkspacePath('/invoices?tab=statements');
+      router.push('/invoices?tab=statements');
     } catch (error: any) {
       alert(error.response?.data?.message || '刪除失敗');
     }
@@ -380,16 +379,7 @@ export default function InvoiceStatementDetailPage() {
           <p className="mt-1 text-sm text-gray-500">{statement.statement_title || '未命名發票清單'}</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Link
-            href={`/invoice-statements/${statementId}/pdf-preview`}
-            onClick={(event) => {
-              event.preventDefault();
-              openWorkspacePath(`/invoice-statements/${statementId}/pdf-preview`);
-            }}
-            className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-          >
-            PDF 預覽
-          </Link>
+          <Link href={`/invoice-statements/${statementId}/pdf-preview`} target="_blank" className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">PDF 預覽</Link>
           <button onClick={downloadPdf} disabled={pdfLoading} className="rounded-lg border border-primary-600 px-4 py-2 text-sm font-medium text-primary-700 hover:bg-primary-50 disabled:opacity-50">{pdfLoading ? '下載中...' : '下載 PDF'}</button>
           {!readOnly && !editing && <button onClick={() => setEditing(true)} className="rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700">編輯</button>}
           {!readOnly && <button onClick={remove} className="rounded-lg border border-red-300 px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-50">刪除</button>}

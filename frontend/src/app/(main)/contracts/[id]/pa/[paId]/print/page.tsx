@@ -1,5 +1,4 @@
 'use client';
-import { openWorkspacePath } from '@/components/WorkspaceTabs';
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
@@ -60,7 +59,7 @@ export default function IpaPrintPage() {
         })
         .catch(() => setCompanyName(''));
     } catch {
-      openWorkspacePath(`/contracts/${contractId}`);
+      router.push(`/contracts/${contractId}`);
     } finally {
       setLoading(false);
     }

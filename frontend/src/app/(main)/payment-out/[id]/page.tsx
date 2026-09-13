@@ -1,5 +1,4 @@
 'use client';
-import { openWorkspacePath } from '@/components/WorkspaceTabs';
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -288,7 +287,7 @@ export default function PaymentOutDetailPage() {
     if (!confirm('確定刪除此付款記錄？此操作無法復原。')) return;
     try {
       await paymentOutApi.delete(recordId);
-      openWorkspacePath('/payment-out');
+      router.push('/payment-out');
     } catch (err: unknown) {
       const msg =
         (err as { response?: { data?: { message?: string } } })?.response?.data
@@ -310,7 +309,7 @@ export default function PaymentOutDetailPage() {
       <div className="text-center py-12">
         <p className="text-red-500 mb-4">{error || '找不到付款記錄'}</p>
         <button
-          onClick={() => openWorkspacePath('/payment-out')}
+          onClick={() => router.push('/payment-out')}
           className="btn-secondary"
         >
           返回列表
@@ -327,7 +326,7 @@ export default function PaymentOutDetailPage() {
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-3">
           <button
-            onClick={() => openWorkspacePath('/payment-out')}
+            onClick={() => router.push('/payment-out')}
             className="text-gray-400 hover:text-gray-600 transition"
           >
             <svg

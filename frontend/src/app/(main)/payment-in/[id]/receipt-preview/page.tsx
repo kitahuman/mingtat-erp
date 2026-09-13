@@ -1,5 +1,4 @@
 'use client';
-import { openWorkspacePath } from '@/components/WorkspaceTabs';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
@@ -156,7 +155,7 @@ export default function ReceiptPreviewPage() {
           return loaded;
         });
       })
-      .catch(() => openWorkspacePath('/payment-in'));
+      .catch(() => router.push('/payment-in'));
   }, [paymentInId, router, getOptionsSignature]);
 
   // ── Live PDF preview ──────────────────────────────────────────
@@ -268,7 +267,7 @@ export default function ReceiptPreviewPage() {
   // ── Handlers ──────────────────────────────────────────────────
   const handleBack = async () => {
     const saved = await saveReceiptOptions();
-    if (saved) openWorkspacePath(`/payment-in/${paymentInId}`);
+    if (saved) router.push(`/payment-in/${paymentInId}`);
   };
 
   const handleDownloadPdf = async () => {

@@ -1,5 +1,4 @@
 'use client';
-import { openWorkspacePath } from '@/components/WorkspaceTabs';
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { projectsApi, companiesApi, partnersApi, quotationsApi, rateCardsApi, contractsApi, dailyReportsApi, acceptanceReportsApi } from '@/lib/api';
@@ -105,7 +104,7 @@ export default function ProjectDetailPage() {
       setProject(res.data);
       setForm({ ...res.data });
       setLoading(false);
-    }).catch(() => openWorkspacePath('/projects'));
+    }).catch(() => router.push('/projects'));
   };
 
   const loadLinked = () => {
@@ -527,7 +526,7 @@ export default function ProjectDetailPage() {
               </thead>
               <tbody>
                 {linkedQuotations.map((q: any) => (
-                  <tr key={q.id} className="border-b hover:bg-gray-50 cursor-pointer" onClick={() => openWorkspacePath(`/quotations/${q.id}`)}>
+                  <tr key={q.id} className="border-b hover:bg-gray-50 cursor-pointer" onClick={() => router.push(`/quotations/${q.id}`)}>
                     <td className="px-3 py-2 font-mono font-bold text-primary-600">{q.quotation_no}</td>
                     <td className="px-3 py-2">{fmtDate(q.quotation_date)}</td>
                     <td className="px-3 py-2">{q.client?.name || '-'}</td>
@@ -585,7 +584,7 @@ export default function ProjectDetailPage() {
               </thead>
               <tbody>
                 {linkedRateCards.map((rc: any) => (
-                  <tr key={rc.id} className="border-b hover:bg-gray-50 cursor-pointer" onClick={() => openWorkspacePath(`/rate-cards/${rc.id}`)}>
+                  <tr key={rc.id} className="border-b hover:bg-gray-50 cursor-pointer" onClick={() => router.push(`/rate-cards/${rc.id}`)}>
                     <td className="px-3 py-2">{rc.name || '-'}</td>
                     <td className="px-3 py-2">{rc.service_type || '-'}</td>
                     <td className="px-3 py-2 text-right font-mono">${Number(rc.day_rate).toLocaleString()}</td>

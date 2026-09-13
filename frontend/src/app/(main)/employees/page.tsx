@@ -1,5 +1,4 @@
 'use client';
-import { openWorkspacePath } from '@/components/WorkspaceTabs';
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import DateInput from '@/components/DateInput';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -1101,7 +1100,7 @@ export default function EmployeesPage() {
                   </div>
                   <div className="flex gap-2 flex-wrap">
                     <button
-                      onClick={() => openWorkspacePath(`/employees/${emp.id}`)}
+                      onClick={() => router.push(`/employees/${emp.id}`)}
                       className="flex-1 btn-secondary text-xs py-1.5"
                     >
                       查看資料
@@ -1214,7 +1213,7 @@ export default function EmployeesPage() {
               setPage(1);
             }}
             searchPlaceholder="搜尋姓名、編號、電話或身份證..."
-            onRowClick={(row) => openWorkspacePath(`/employees/${row.id}`)}
+            onRowClick={(row) => window.open(`/employees/${row.id}`, '_blank')}
             loading={loading}
             sortBy={sortBy}
             sortOrder={sortOrder}

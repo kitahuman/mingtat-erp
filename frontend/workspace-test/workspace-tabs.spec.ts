@@ -110,6 +110,24 @@ test('preserves each tab page instance and its local state while switching tabs'
   ).toHaveValue('temporary option');
 });
 
+test('keeps non-pilot page-to-page navigation inside the existing work tab', async ({ page }) => {
+  await page.getByTestId('menu-field-options').click();
+  await activeFrame(page).getByTestId('navigate-system-settings').click();
+
+  await expect(page).toHaveURL(/\/settings\/system$/);
+  await expect(page.getByRole('tab')).toHaveCount(2);
+  await expect(page.getByRole('tab', { name: '發票列表' })).toBeVisible();
+  await expect(page.getByRole('tab', { name: '系統參數' })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  );
+  await expect(page.getByRole('tab', { name: '選項設定' })).toHaveCount(0);
+  await expect(page.getByText('1/8', { exact: true })).toBeVisible();
+  await expect(
+    activeFrame(page).getByRole('heading', { name: 'System settings harness' }),
+  ).toBeVisible();
+});
+
 test('protects an unsaved general settings tab when the user tries to close it', async ({ page }) => {
   await page.getByTestId('menu-field-options').click();
   await activeFrame(page)

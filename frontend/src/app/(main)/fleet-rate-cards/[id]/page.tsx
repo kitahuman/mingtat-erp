@@ -1,5 +1,4 @@
 'use client';
-import { openWorkspacePath } from '@/components/WorkspaceTabs';
 import { useState, useEffect } from 'react';
 import DateInput from '@/components/DateInput';
 import { useParams, useRouter } from 'next/navigation';
@@ -57,7 +56,7 @@ export default function FleetRateCardDetailPage() {
         linked_allowances: res.data.linked_allowances || []
       });
       setLoading(false);
-    }).catch(() => openWorkspacePath('/fleet-rate-cards'));
+    }).catch(() => router.push('/fleet-rate-cards'));
   };
 
   useEffect(() => {

@@ -1,5 +1,4 @@
 'use client';
-import { openWorkspacePath } from '@/components/WorkspaceTabs';
 import { useState, useEffect, useCallback } from 'react';
 import DateInput from '@/components/DateInput';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -382,7 +381,7 @@ export default function MachineryPage() {
             setPage(1);
           }}
           searchPlaceholder="搜尋編號、品牌、型號或序號..."
-          onRowClick={(row) => openWorkspacePath(`/machinery/${row.id}`)}
+          onRowClick={(row) => window.open(`/machinery/${row.id}`, '_blank')}
           loading={loading}
           sortBy={sortBy}
           sortOrder={sortOrder}

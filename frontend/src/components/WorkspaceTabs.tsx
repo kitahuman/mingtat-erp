@@ -667,17 +667,28 @@ export function WorkspaceTabsProvider({ children }: { children: React.ReactNode 
         return;
       }
 
-      event.preventDefault();
-      if (targetDescriptor) {
+      if (targetDescriptor?.group !== 'general') {
+        event.preventDefault();
         postToParent({ action: 'open', path: targetPath });
-      } else {
+      } else if (targetDescriptor) {
+        event.preventDefault();
+        if (
+          frameDirtyRef.current &&
+          !window.confirm('此頁有未儲存的修改。確定要捨棄修改並繼續嗎？')
+        ) {
+          return;
+        }
+        frameDirtyRef.current = false;
+        router.push(addWorkspaceFrameFlag(targetPath));
+      } else if (!targetDescriptor) {
+        event.preventDefault();
         postToParent({ action: 'navigate-outside', path: targetPath });
       }
     };
 
     document.addEventListener('click', interceptLink, true);
     return () => document.removeEventListener('click', interceptLink, true);
-  }, [currentDescriptor, isWorkspaceFrame]);
+  }, [currentDescriptor, isWorkspaceFrame, router]);
 
   useEffect(() => {
     if (!isWorkspaceFrame) return;
@@ -908,6 +919,29 @@ export function WorkspaceTabsProvider({ children }: { children: React.ReactNode 
             ? describeWorkspacePath(event.data.path)
             : null;
         if (tab && reported?.path !== tab.path) {
+          if (reported?.group === 'general') {
+            updateTabs((current) =>
+              current.map((item) =>
+                item.id === tabId
+                  ? {
+                      ...item,
+                      path: reported.path,
+                      title: reported.title,
+                      group: reported.group,
+                      kind: reported.kind,
+                      canonicalKey: reported.canonicalKey,
+                      listPath: reported.listPath,
+                      dirty: false,
+                      dirtyReason: undefined,
+                    }
+                  : item,
+              ),
+            );
+            if (tab.canonicalKey === currentDescriptor?.canonicalKey) {
+              replaceWorkspacePath(reported.path);
+            }
+            return;
+          }
           navigateFrame(tabId, tab.path, 'none');
         }
         return;
@@ -952,6 +986,29 @@ export function WorkspaceTabsProvider({ children }: { children: React.ReactNode 
           descriptor.canonicalKey !== tab.canonicalKey ||
           descriptor.kind !== tab.kind
         ) {
+          if (descriptor.group === 'general') {
+            updateTabs((current) =>
+              current.map((item) =>
+                item.id === tabId
+                  ? {
+                      ...item,
+                      path: descriptor.path,
+                      title: descriptor.title,
+                      group: descriptor.group,
+                      kind: descriptor.kind,
+                      canonicalKey: descriptor.canonicalKey,
+                      listPath: descriptor.listPath,
+                      dirty: false,
+                      dirtyReason: undefined,
+                    }
+                  : item,
+              ),
+            );
+            if (tab.canonicalKey === currentDescriptor?.canonicalKey) {
+              replaceWorkspacePath(descriptor.path);
+            }
+            return;
+          }
           frameReadyIdsRef.current.delete(tabId);
           frame.src = addWorkspaceFrameFlag(tab.path);
           activateParentTab(descriptor.path, undefined, tabId);

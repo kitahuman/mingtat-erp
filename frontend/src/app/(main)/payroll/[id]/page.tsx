@@ -1,5 +1,4 @@
 'use client';
-import { openWorkspacePath } from '@/components/WorkspaceTabs';
 import { Fragment, useState, useEffect, useRef, useCallback, type ReactNode } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { payrollApi, fieldOptionsApi, pettyCashApi, bankAccountsApi, companiesApi, attachmentsApi } from '@/lib/api';
@@ -934,7 +933,7 @@ export default function PayrollDetailPage() {
         setPettyCashRecords([]);
       }
     } catch {
-      openWorkspacePath('/payroll');
+      router.push('/payroll');
     }
     setLoading(false);
   };
@@ -1050,7 +1049,7 @@ export default function PayrollDetailPage() {
     if (!confirm('確定要刪除此糧單？')) return;
     try {
       await payrollApi.remove(payroll.id);
-      openWorkspacePath('/payroll');
+      router.push('/payroll');
     } catch (err: any) {
       alert(err.response?.data?.message || '刪除失敗');
     }

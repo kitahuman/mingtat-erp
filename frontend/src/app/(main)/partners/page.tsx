@@ -1,5 +1,4 @@
 'use client';
-import { openWorkspacePath } from '@/components/WorkspaceTabs';
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { partnersApi } from '@/lib/api';
@@ -186,7 +185,7 @@ export default function PartnersPage() {
           onPageChange={setPage}
           onSearch={(s) => { setSearch(s); setPage(1); }}
           searchPlaceholder="搜尋簡稱、英文代碼、名稱、聯絡人或電話..."
-          onRowClick={(row) => openWorkspacePath(`/partners/${row.id}`)}
+          onRowClick={(row) => window.open(`/partners/${row.id}`, '_blank')}
           loading={loading}
           sortBy={sortBy}
           sortOrder={sortOrder}

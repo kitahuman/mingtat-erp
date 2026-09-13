@@ -1,5 +1,4 @@
 'use client';
-import { openWorkspacePath } from '@/components/WorkspaceTabs';
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { subconFleetDriversApi, partnersApi } from '@/lib/api';
@@ -184,7 +183,7 @@ export default function SubconFleetDriverDetailPage() {
         status: data.status,
       });
       setLoading(false);
-    }).catch(() => openWorkspacePath('/subcon-fleet-drivers'));
+    }).catch(() => router.push('/subcon-fleet-drivers'));
   }, [params.id, router]);
 
   useEffect(() => {
