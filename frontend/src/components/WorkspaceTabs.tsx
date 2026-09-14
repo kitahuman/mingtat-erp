@@ -110,6 +110,23 @@ const createInitialTabs = (
   return [createWorkspaceTab(descriptor, undefined, undefined, true)];
 };
 
+/**
+ * Exactly one surviving tab is the protected singleton/base tab. The first tab
+ * is therefore not permanently special: once another tab exists it can close,
+ * and a surviving tab inherits the singleton protection.
+ */
+const assignBaseTab = (
+  tabs: WorkspaceTab[],
+  preferredBaseTabId?: string,
+): WorkspaceTab[] => {
+  if (tabs.length === 0) return tabs;
+  const nextBase =
+    tabs.find((tab) => tab.id === preferredBaseTabId) ||
+    tabs.find((tab) => tab.isBase) ||
+    tabs[0];
+  return tabs.map((tab) => ({ ...tab, isBase: tab.id === nextBase.id }));
+};
+
 const isExternalOpenEvent = (event?: OpenTabEvent) =>
   Boolean(
     event?.ctrlKey ||
@@ -314,7 +331,6 @@ export function WorkspaceTabsProvider({ children }: { children: React.ReactNode 
 
   const requestCloseApproval = useCallback(
     (tab: WorkspaceTab): Promise<boolean> => {
-      if (tab.isBase) return Promise.resolve(false);
       const frame = document.querySelector<HTMLIFrameElement>(
         `iframe[data-workspace-tab-id="${tab.id}"]`,
       );
@@ -526,7 +542,7 @@ export function WorkspaceTabsProvider({ children }: { children: React.ReactNode 
       if (index < 0) return;
 
       const closing = current[index];
-      if (closing.isBase) return;
+      if (current.length <= 1) return;
       pendingCloseTabIdsRef.current.add(tabId);
       const approved = await requestCloseApproval(closing);
       pendingCloseTabIdsRef.current.delete(tabId);
@@ -534,15 +550,22 @@ export function WorkspaceTabsProvider({ children }: { children: React.ReactNode 
 
       const latest = tabsRef.current;
       const latestClosing = latest.find((tab) => tab.id === tabId);
-      if (!latestClosing) return;
+      if (!latestClosing || latest.length <= 1) return;
       const nextTabs = latest.filter((tab) => tab.id !== tabId);
-      commitTabs(nextTabs);
+      const activeSurvivor = nextTabs.find(
+        (tab) => tab.canonicalKey === currentDescriptor?.canonicalKey,
+      );
+      const opener = latestClosing.openerTabId
+        ? nextTabs.find((tab) => tab.id === latestClosing.openerTabId)
+        : null;
+      const existingBase = nextTabs.find((tab) => tab.isBase);
+      const fallback = opener || activeSurvivor || existingBase || nextTabs[0];
+      const nextBase = latestClosing.isBase
+        ? activeSurvivor || opener || nextTabs[0]
+        : existingBase || nextTabs[0];
+      commitTabs(assignBaseTab(nextTabs, nextBase.id));
 
       if (currentDescriptor?.canonicalKey === latestClosing.canonicalKey) {
-        const opener = latestClosing.openerTabId
-          ? nextTabs.find((tab) => tab.id === latestClosing.openerTabId)
-          : null;
-        const fallback = opener || nextTabs.find((tab) => tab.isBase);
         pushWorkspacePath(fallback?.path || latestClosing.listPath);
       }
     },
@@ -1146,14 +1169,13 @@ export function WorkspaceTabsProvider({ children }: { children: React.ReactNode 
     const active = current.find(
       (tab) => tab.canonicalKey === currentDescriptor?.canonicalKey,
     );
-    const base = current.find((tab) => tab.isBase);
-    const keepIds = new Set([base?.id, active?.id].filter(Boolean));
-    const closing = current.filter((tab) => !keepIds.has(tab.id));
+    if (!active) return;
+    const closing = current.filter((tab) => tab.id !== active.id);
     if (closing.length === 0) return;
     for (const tab of closing) {
       if (!(await requestCloseApproval(tab))) return;
     }
-    commitTabs(tabsRef.current.filter((tab) => keepIds.has(tab.id)));
+    commitTabs(assignBaseTab([active], active.id));
   }, [commitTabs, currentDescriptor, requestCloseApproval]);
 
   const contextValue = useMemo(
@@ -1324,6 +1346,7 @@ function WorkspaceTabBar({
   onCloseOthers: () => void;
 }) {
   const extraCount = tabs.filter((tab) => !tab.isBase).length;
+  const canCloseTabs = tabs.length > 1;
 
   return (
     <div className="mb-3 flex items-center gap-2 border-b border-gray-200 bg-white">
@@ -1358,7 +1381,7 @@ function WorkspaceTabBar({
                 )}
                 {tab.title}
               </button>
-              {!tab.isBase && (
+              {canCloseTabs && (
                 <>
                   <button
                     type="button"
@@ -1397,7 +1420,7 @@ function WorkspaceTabBar({
       <span className="mb-1 shrink-0 text-xs text-gray-400">
         {extraCount}/{MAX_WORKSPACE_EXTRA_TABS}
       </span>
-      {extraCount > 1 && activeCanonicalKey && (
+      {tabs.length > 1 && activeCanonicalKey && (
         <button
           type="button"
           onClick={onCloseOthers}

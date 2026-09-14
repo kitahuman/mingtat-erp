@@ -62,6 +62,6 @@ Push 後，使用 GitHub Connector / `gh run view` 或 GitHub API 按 commit SHA
 
 ## WorkspaceTabs 特別門檻
 
-涉及 WorkspaceTabs 的變更除了常規 gate 外，必須驗證：使用者最先開啟的頁面是唯一不可關閉的基底頁；其後從 Sidebar 開啟的內部頁面成為可關閉工作頁籤，合計最多 8 個，不得以第二個列表取代基底。2026-09-13 已核准把這個 1+8 規則套用至主 ERP 所有合資格的列表→既存實體詳情流程；建立流程、純報表、列印、下載、inline/modal 操作、`/contracts` redirect、打卡與 upload 流程仍不建立獨立 entity tab。這與列表資料分頁（API page/limit/total、DataTable、頁碼保存）是兩個獨立工作範圍，不得混合擴張。滿額對話框只能提供「取消」與「在新瀏覽器分頁開啟」，不可自動關閉既有 tab。切換頁籤必須保留各 iframe 頁面實例及其搜尋、篩選、表單草稿、展開狀態和 scroll 等頁內狀態；相同 entity 子頁須復用 tab 並保留 query/hash；dirty close / navigation 必須 fail-closed；browser Back/Forward 可恢復；iframe late-ready 不遺失導航；popup blocker 必須提供可理解回饋；隱藏 iframe 的週期性工作必須暫停並在重新啟用時更新。
+涉及 WorkspaceTabs 的變更除了常規 gate 外，必須驗證：**只有唯一剩下的頁籤不可關閉**；只要同時存在兩張或以上頁籤，包含最先開啟的頁面在內都可關閉並提供「在新瀏覽器分頁開啟」控制。關閉原先基底頁後，現存頁籤會自動成為唯一受保護的基底頁。後續從 Sidebar 開啟的內部頁面計入工作頁籤，最多合計 8 個額外頁籤，不得以第二個列表取代目前唯一基底。2026-09-13 已核准把這個 1+8 規則套用至主 ERP 所有合資格的列表→既存實體詳情流程；建立流程、純報表、列印、下載、inline/modal 操作、`/contracts` redirect、打卡與 upload 流程仍不建立獨立 entity tab。這與列表資料分頁（API page/limit/total、DataTable、頁碼保存）是兩個獨立工作範圍，不得混合擴張。滿額對話框只能提供「取消」與「在新瀏覽器分頁開啟」，不可自動關閉既有 tab。切換頁籤必須保留各 iframe 頁面實例及其搜尋、篩選、表單草稿、展開狀態和 scroll 等頁內狀態；相同 entity 子頁須復用 tab 並保留 query/hash；dirty close / navigation 必須 fail-closed；browser Back/Forward 可恢復；iframe late-ready 不遺失導航；popup blocker 必須提供可理解回饋；隱藏 iframe 的週期性工作必須暫停並在重新啟用時更新。
 
 **完成定義：** 推送 SHA、成功 Actions URL、version.json SHA、容器狀態、`/api/health`、前端 HTTP status 與最近 error-log 結論都已被記錄。任何一項缺失時，狀態是「尚未完成」，不是「大致成功」。

@@ -47,7 +47,7 @@ test.beforeEach(async ({ page }) => {
   ).toBeVisible();
 });
 
-test('makes an initially opened detail deep link the single non-closable base', async ({ page }) => {
+test('protects the only initially opened detail tab from closure', async ({ page }) => {
   await page.goto('/invoices/1');
   await expect(
     activeFrame(page).getByRole('heading', { name: 'Invoice 1' }),
@@ -128,14 +128,31 @@ test('keeps modified and middle clicks outside the current workspace quota', asy
   await middlePopup.close();
 });
 
-test('keeps the invoice list as base and opens Sidebar pages as closable extra tabs', async ({ page }) => {
+test('allows the first tab to close once other tabs exist and promotes a survivor to singleton base', async ({ page }) => {
+  await openInvoice(page, 1);
+
+  await expect(page.getByRole('button', { name: '在新瀏覽器分頁開啟 發票列表' })).toBeVisible();
+  await expect(page.getByRole('button', { name: '關閉 發票列表' })).toBeVisible();
+  await page.getByRole('button', { name: '關閉 發票列表' }).click();
+
+  await expect(page.getByRole('tab', { name: '發票列表' })).toHaveCount(0);
+  await expect(page.getByRole('tab', { name: 'Invoice 1' })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  );
+  await expect(page.getByRole('tab')).toHaveCount(1);
+  await expect(page.getByRole('button', { name: '關閉 Invoice 1' })).toHaveCount(0);
+  await expect(page.getByText('0/8', { exact: true })).toBeVisible();
+});
+
+test('shows first-tab controls while opening Sidebar pages as closable extra tabs', async ({ page }) => {
   await openInvoice(page, 1);
   await page.getByTestId('menu-field-options').click();
 
   await expect(page).toHaveURL(/\/settings\/field-options$/);
   await expect(page.getByRole('tab')).toHaveCount(3);
   await expect(page.getByRole('tab', { name: '發票列表' })).toBeVisible();
-  await expect(page.getByRole('button', { name: '關閉 發票列表' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: '關閉 發票列表' })).toBeVisible();
   await expect(page.getByRole('tab', { name: 'Invoice 1' })).toBeVisible();
   await expect(page.getByRole('tab', { name: '選項設定' })).toHaveAttribute(
     'aria-selected',
@@ -246,7 +263,7 @@ test('opens another list selected from Sidebar as an extra tab instead of replac
   await expect(page.getByText('1/8', { exact: true })).toBeVisible();
 });
 
-test('uses whichever page was opened first as the single base and counts a later invoice list as one extra', async ({ page }) => {
+test('shows first-tab controls when a later invoice list is open', async ({ page }) => {
   await page.goto('/dashboard');
   await expect(
     activeFrame(page).getByRole('heading', { name: 'Dashboard harness' }),
@@ -255,7 +272,7 @@ test('uses whichever page was opened first as the single base and counts a later
 
   await expect(page.getByRole('tab')).toHaveCount(2);
   await expect(page.getByRole('tab', { name: '儀表板' })).toBeVisible();
-  await expect(page.getByRole('button', { name: '關閉 儀表板' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: '關閉 儀表板' })).toBeVisible();
   await expect(page.getByRole('tab', { name: '發票管理' })).toHaveAttribute(
     'aria-selected',
     'true',
@@ -316,6 +333,8 @@ test('dirty close is fail-closed on cancel and closes only after explicit confir
   ]);
   await expect(page.getByRole('tab', { name: /Invoice 1/ })).toHaveCount(0);
   await expect(page).toHaveURL(/\/invoices$/);
+  await expect(page.getByRole('tab')).toHaveCount(1);
+  await expect(page.getByRole('button', { name: '關閉 發票列表' })).toHaveCount(0);
 });
 
 test('dirty browser Back cancellation restores the original history entry without losing draft', async ({ page }) => {
