@@ -522,6 +522,7 @@ export const quotationsApi = {
     id: number,
     data?: { quotation_no?: string; quotation_date?: string; date?: string },
   ) => api.post(`/quotations/${id}/revision`, data || {}),
+  duplicate: (id: number) => api.post(`/quotations/${id}/duplicate`, {}),
   setActiveRevision: (id: number) => api.patch(`/quotations/${id}/set-active`),
   updateStatus: (id: number, status: string) =>
     api.patch(`/quotations/${id}/status`, { status }),

@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { AuditLogsService } from '../audit-logs/audit-logs.service';
+import { formatDateInHongKong } from '../common/date.helper';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   AcceptQuotationDto,
@@ -177,29 +178,54 @@ export class QuotationsService {
       }
     }
 
-    const d = new Date(date);
-    const yy = String(d.getFullYear()).slice(-2);
-    const mm = String(d.getMonth() + 1).padStart(2, '0');
-    const yearMonth = `${yy}${mm}`;
+    const quotationDate = formatDateInHongKong(date);
+    if (!quotationDate) throw new BadRequestException('無效日期');
+    const yearMonth = `${quotationDate.slice(2, 4)}${quotationDate.slice(5, 7)}`;
 
     const prefix = clientCode
       ? `${company.internal_prefix}Q${clientCode}`
       : `${company.internal_prefix}Q`;
 
     return await this.prisma.$transaction(async (tx) => {
-      let seq = await tx.quotationSequence.findFirst({
-        where: { prefix, year_month: yearMonth },
+      // Serializes allocation for this exact number series. The advisory lock
+      // protects the sequence table and the actual quotation-number scan from
+      // concurrent creates before the unique database constraints are reached.
+      await tx.$executeRaw`
+        SELECT pg_advisory_xact_lock(hashtext(${`${prefix}:${yearMonth}`}))
+      `;
+
+      const sequence = await tx.quotationSequence.findUnique({
+        where: {
+          prefix_year_month: { prefix, year_month: yearMonth },
+        },
       });
 
-      if (!seq) {
-        seq = await tx.quotationSequence.create({
-          data: { prefix, year_month: yearMonth, last_seq: 0 },
-        });
+      // Sequence records can predate manually entered or imported quotations.
+      // Derive the true high-water mark from every matching number, including
+      // soft-deleted records, so a number is never reissued.
+      const existingQuotations = await tx.quotation.findMany({
+        where: {
+          quotation_no: { startsWith: `${prefix}${yearMonth}` },
+        },
+        select: { quotation_no: true },
+      });
+      let actualMax = 0;
+      for (const quotation of existingQuotations) {
+        const sequencePart = quotation.quotation_no.slice(
+          prefix.length + yearMonth.length,
+        );
+        if (!/^[0-9A-Fa-f]{4}$/.test(sequencePart)) continue;
+        const parsedSequence = parseInt(sequencePart, 16);
+        if (parsedSequence > actualMax) actualMax = parsedSequence;
       }
 
-      const updated = await tx.quotationSequence.update({
-        where: { id: seq.id },
-        data: { last_seq: seq.last_seq + 1 },
+      const nextSequence = Math.max(sequence?.last_seq ?? 0, actualMax) + 1;
+      const updated = await tx.quotationSequence.upsert({
+        where: {
+          prefix_year_month: { prefix, year_month: yearMonth },
+        },
+        create: { prefix, year_month: yearMonth, last_seq: nextSequence },
+        update: { last_seq: nextSequence },
       });
 
       const seqHex = updated.last_seq
@@ -237,10 +263,9 @@ export class QuotationsService {
       }
     }
 
-    const d = new Date(date);
-    const yy = String(d.getFullYear()).slice(-2);
-    const mm = String(d.getMonth() + 1).padStart(2, '0');
-    const yearMonth = `${yy}${mm}`;
+    const quotationDate = formatDateInHongKong(date);
+    if (!quotationDate) throw new BadRequestException('無效日期');
+    const yearMonth = `${quotationDate.slice(2, 4)}${quotationDate.slice(5, 7)}`;
 
     const prefix = clientCode
       ? `${company.internal_prefix}Q${clientCode}`
@@ -256,7 +281,6 @@ export class QuotationsService {
     const existingQuotations = await this.prisma.quotation.findMany({
       where: {
         quotation_no: { startsWith: `${prefix}${yearMonth}` },
-        deleted_at: null,
       },
       select: { quotation_no: true },
     });
@@ -266,7 +290,7 @@ export class QuotationsService {
       const seqPart = q.quotation_no.slice(prefix.length + yearMonth.length);
       // Only consider valid hex sequence parts (system-generated)
       // Skip old system imported quotations with non-standard numbers
-      if (!/^[0-9A-Fa-f]+$/.test(seqPart)) continue;
+      if (!/^[0-9A-Fa-f]{4}$/.test(seqPart)) continue;
       const parsed = parseInt(seqPart, 16);
       if (!isNaN(parsed) && parsed > actualMax) {
         actualMax = parsed;
@@ -1005,6 +1029,95 @@ export class QuotationsService {
     return revisions.map((revision) => this.withRateOnlyTotal(revision));
   }
 
+  /**
+   * Duplicate a quotation into an independent draft quotation.
+   * The duplicate receives a new quotation number and today's date, while
+   * retaining the source quotation's document data, PDF settings, and items.
+   */
+  async duplicate(id: number, userId?: number, ipAddress?: string) {
+    const source = await this.prisma.quotation.findUnique({
+      where: { id },
+      include: { items: { orderBy: { sort_order: 'asc' } } },
+    });
+    if (!source || source.deleted_at) {
+      throw new NotFoundException('報價單不存在');
+    }
+
+    const quotationDateString = formatDateInHongKong(new Date());
+    if (!quotationDateString) throw new BadRequestException('無效日期');
+    const quotationDate = new Date(quotationDateString);
+    const quotationNo = await this.generateQuotationNo(
+      source.company_id,
+      source.client_id,
+      quotationDateString,
+    );
+
+    const quotation = await this.prisma.quotation.create({
+      data: {
+        quotation_no: quotationNo,
+        quotation_parent_id: null,
+        quotation_revision_number: 0,
+        quotation_is_active: true,
+        quotation_type: source.quotation_type,
+        company_id: source.company_id,
+        client_id: source.client_id,
+        quotation_date: quotationDate,
+        contract_name: source.contract_name,
+        display_client_name: source.display_client_name,
+        project_name: source.project_name,
+        project_id: source.project_id,
+        total_amount: source.total_amount,
+        status: 'draft',
+        validity_period: source.validity_period,
+        payment_terms: source.payment_terms,
+        exclusions: source.exclusions,
+        external_remark: source.external_remark,
+        internal_remark: source.internal_remark,
+        pdf_font_sizes: this.toNullableJson(source.pdf_font_sizes),
+        created_by: userId || null,
+        items: {
+          create: source.items.map((item) => ({
+            sort_order: item.sort_order,
+            item_name: item.item_name,
+            item_description: item.item_description,
+            quantity: item.quantity,
+            unit: item.unit,
+            unit_price: item.unit_price,
+            amount: item.amount,
+            remarks: item.remarks,
+            qi_service_type: item.qi_service_type,
+            qi_day_night: item.qi_day_night,
+            qi_tonnage: item.qi_tonnage,
+            qi_machine_type: item.qi_machine_type,
+            qi_origin: item.qi_origin,
+            qi_destination: item.qi_destination,
+            qi_ot_rate: item.qi_ot_rate,
+            qi_mid_shift_rate: item.qi_mid_shift_rate,
+            qi_sync_to_rate_card: item.qi_sync_to_rate_card,
+          })),
+        },
+      },
+      include: this.includeRelations,
+    });
+
+    if (userId) {
+      try {
+        await this.auditLogsService.log({
+          userId,
+          action: 'create',
+          targetTable: 'quotations',
+          targetId: quotation.id,
+          changesAfter: quotation,
+          ipAddress,
+        });
+      } catch (e) {
+        console.error('Audit log error:', e);
+      }
+    }
+
+    return this.withRateOnlyTotal(quotation);
+  }
+
   async create(dto: CreateQuotationDto, userId?: number, ipAddress?: string) {
     const {
       items,
@@ -1033,7 +1146,10 @@ export class QuotationsService {
     }
 
     const quotationDate =
-      quotationData.quotation_date || date || new Date().toISOString();
+      quotationData.quotation_date ||
+      date ||
+      formatDateInHongKong(new Date());
+    if (!quotationDate) throw new BadRequestException('無效日期');
 
     // Generate quotation number
     const quotation_no = await this.generateQuotationNo(

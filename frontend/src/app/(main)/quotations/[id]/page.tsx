@@ -209,6 +209,19 @@ export default function QuotationDetailPage() {
     }
   };
 
+  const handleDuplicate = async () => {
+    if (readOnly) return;
+    try {
+      const res = await quotationsApi.duplicate(currentQuotationId);
+      const newQuotationId = Number(res.data?.id);
+      if (newQuotationId) {
+        openTab(`/quotations/${newQuotationId}`);
+      }
+    } catch (err: any) {
+      alert(err.response?.data?.message || '複製報價單失敗');
+    }
+  };
+
   const handleSetActiveRevision = async (revisionId: number) => {
     if (readOnly) return;
     if (!confirm('確定要將此版本設為正式版嗎？同組其他版本會改為非正式。')) return;
@@ -387,6 +400,14 @@ export default function QuotationDetailPage() {
           <Link href={`/quotations/${currentQuotationId}/pdf-preview`} className="btn-secondary">
             <span className="mr-1">📄</span> 匯出 PDF
           </Link>
+          {!readOnly && (
+            <button
+              onClick={handleDuplicate}
+              className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 text-sm"
+            >
+              複製
+            </button>
+          )}
           <button onClick={() => { setSyncResult(null); setSyncForm({ effective_date: quotation.quotation_date || new Date().toISOString().slice(0, 10), expiry_date: '', overwrite: false }); setShowSyncModal(true); }} className="btn-secondary">同步至價目表</button>
           {quotation?.status === 'draft' && (
             <button onClick={() => handleStatusChange('sent')} className="btn-secondary">標記已發送</button>

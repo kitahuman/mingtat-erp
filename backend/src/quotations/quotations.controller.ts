@@ -286,6 +286,15 @@ export class QuotationsController {
     return this.service.createRevision(Number(id), dto);
   }
 
+  @Post(':id/duplicate')
+  duplicate(@Param('id') id: number, @Request() req: AuthenticatedRequest) {
+    return this.service.duplicate(
+      Number(id),
+      getUserId(req),
+      getIpAddress(req),
+    );
+  }
+
   @Put(':id')
   update(
     @Param('id') id: number,
