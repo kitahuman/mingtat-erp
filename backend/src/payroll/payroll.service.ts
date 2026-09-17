@@ -708,9 +708,29 @@ export class PayrollService {
     const payroll = await this.prisma.payroll.findUnique({
       where: { id },
       include: {
-        employee: { include: { company: true } },
+        employee: {
+          include: {
+            company: {
+              include: {
+                profiles: {
+                  select: { chinese_name: true, english_name: true, office_address: true },
+                  take: 1,
+                  orderBy: { id: 'asc' },
+                },
+              },
+            },
+          },
+        },
         company_profile: true,
-        company: true,
+        company: {
+          include: {
+            profiles: {
+              select: { chinese_name: true, english_name: true, office_address: true },
+              take: 1,
+              orderBy: { id: 'asc' },
+            },
+          },
+        },
         items: { orderBy: { sort_order: 'asc' } },
         adjustments: { orderBy: { sort_order: 'asc' } },
         daily_allowances: true,

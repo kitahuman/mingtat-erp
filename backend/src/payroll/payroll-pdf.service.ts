@@ -52,8 +52,8 @@ export class PayrollPdfService {
 
   private renderPayrollHtml(payroll: any, options: Required<PayrollPdfOptions>) {
     const emp = payroll.employee || {};
-    const cp = payroll.company_profile || {};
     const company = payroll.company || emp.company || {};
+    const cp = payroll.company_profile || company.profiles?.[0] || {};
     const items = (payroll.items || []).filter((item: any) => !item.payroll_item_excluded);
     const adjustments = payroll.adjustments || [];
     const payrollExpenses = payroll.payroll_expenses || [];
