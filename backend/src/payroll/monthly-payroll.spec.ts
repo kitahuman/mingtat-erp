@@ -31,6 +31,44 @@ describe('monthly payroll calendar', () => {
     expect(calendar.days.get('2026-09-13')?.sundayQuantity).toBe(0);
   });
 
+  it('pays a monthly Sunday when the employee resumes work after a weekday absence', () => {
+    const calendar = buildMonthlyPayCalendar([
+      { date: '2026-08-15', workQuantity: 1 },
+      { date: '2026-08-18', workQuantity: 1 },
+    ], {
+      dateFrom: '2026-08-01',
+      dateTo: '2026-08-31',
+      joinDate: '2026-04-01',
+      holidayDates: [],
+    });
+
+    // 16 Aug is Sunday; 17 Aug is an unworked weekday, but work resumes on 18 Aug.
+    expect(calendar.days.get('2026-08-16')).toMatchObject({
+      sundayEligible: true,
+      sundayQuantity: 1,
+    });
+  });
+
+  it('does not relax the statutory-holiday block rule when Sunday eligibility is relaxed', () => {
+    const calendar = buildMonthlyPayCalendar([
+      { date: '2026-08-15', workQuantity: 1 },
+      { date: '2026-08-19', workQuantity: 1 },
+    ], {
+      dateFrom: '2026-08-01',
+      dateTo: '2026-08-31',
+      joinDate: '2026-04-01',
+      holidayDates: ['2026-08-17'],
+    });
+
+    // Work resumes after the gap, so Sunday is payable; the statutory holiday
+    // remains unpayable because its immediate contiguous block is not bracketed.
+    expect(calendar.days.get('2026-08-16')?.sundayQuantity).toBe(1);
+    expect(calendar.days.get('2026-08-17')).toMatchObject({
+      holidayEligible: false,
+      holidayQuantity: 0,
+    });
+  });
+
   it('keeps Sunday and statutory-holiday components separate and removable', () => {
     const date = '2026-09-26';
     const calendar = buildMonthlyPayCalendar([

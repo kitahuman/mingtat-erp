@@ -11,10 +11,11 @@ export function monthlyDailyRate(baseSalary: number, dateFrom: string): number {
 
 /**
  * Creates the single monthly-pay calendar used by payroll totals and the daily
- * UI. An automatic rest/holiday block must be bracketed by qualifying ordinary
- * days. Only full-period attendance can qualify an unbracketed period edge;
- * work outside the payroll period is never inferred. Manual money is not an
- * attendance anchor.
+ * UI. Statutory-holiday blocks must be bracketed by qualifying ordinary days.
+ * A monthly Sunday qualifies when the employee worked earlier and resumes work
+ * later in the same eligible payroll period. Only full-period attendance can
+ * qualify a period edge; work outside the payroll period is never inferred.
+ * Manual money is not an attendance anchor.
  */
 export function buildMonthlyPayCalendar(
   days: MonthlyAttendanceDay[],
@@ -71,10 +72,11 @@ export function buildMonthlyPayCalendar(
     ordinary.length > 0 &&
     ordinary.every((day) => day.workQuantity >= 1);
 
-  for (let i = 0; i < calendar.length;) {
-    if (!calendar[i].isSunday && !calendar[i].isEligibleHoliday) {
-      i++;
-      continue;
+    // Statutory holidays retain the existing strict contiguous-block rule.
+    for (let i = 0; i < calendar.length;) {
+      if (!calendar[i].isSunday && !calendar[i].isEligibleHoliday) {
+        i++;
+        continue;
     }
     const first = i;
     while (i < calendar.length && (calendar[i].isSunday || calendar[i].isEligibleHoliday)) i++;
@@ -87,15 +89,28 @@ export function buildMonthlyPayCalendar(
 
     for (let j = first; j < i; j++) {
       const day = calendar[j];
-      day.sundayEligible = day.isSunday;
-      day.holidayEligible = day.isEligibleHoliday;
-      // Sunday and statutory-holiday amounts remain separate, including overlap.
-      day.sundayQuantity = day.sundayEligible && !excludedPayKeys.has(`monthly_sunday_${day.date}`) ? 1 : 0;
-      day.holidayQuantity =
-        day.holidayEligible && !excludedPayKeys.has(`monthly_statutory_holiday_${day.date}`)
+      if (day.isEligibleHoliday) {
+        day.holidayEligible = true;
+        day.holidayQuantity = !excludedPayKeys.has(`monthly_statutory_holiday_${day.date}`)
           ? 1
           : 0;
+      }
     }
+  }
+
+  // A Sunday is payable when it sits within a continuing monthly employment
+  // period: the employee worked before it and later resumed work. This lets a
+  // weekday absence after Sunday remain a leave day without erasing that
+  // Sunday. It deliberately applies only to Sunday/rest-day eligibility.
+  for (let i = 0; i < calendar.length; i++) {
+    const day = calendar[i];
+    if (!day.isSunday) continue;
+    const workedBefore = calendar.slice(0, i).some((candidate) => candidate.workQuantity > 0);
+    const workedAfter = calendar.slice(i + 1).some((candidate) => candidate.workQuantity > 0);
+    if (!fullAttendance && !(workedBefore && workedAfter)) continue;
+
+    day.sundayEligible = true;
+    day.sundayQuantity = !excludedPayKeys.has(`monthly_sunday_${day.date}`) ? 1 : 0;
   }
 
   return { days: new Map(calendar.map((day) => [day.date, day])), fullAttendance };
