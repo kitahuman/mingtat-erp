@@ -2967,7 +2967,9 @@ export class PayrollService {
       });
     }
 
-    // Update payroll totals (preserve mpf_relevant_income)
+    // Update payroll totals and persist the resolved MPF base. This prevents a
+    // prior automatic value from becoming an unintended manual override after
+    // the payroll's earnings are corrected to zero.
     await this.prisma.payroll.update({
       where: { id },
       data: {
@@ -2982,6 +2984,7 @@ export class PayrollService {
         mpf_deduction: calc.mpf_deduction,
         mpf_plan: calc.mpf_plan,
         mpf_employer: calc.mpf_employer,
+        mpf_relevant_income: calc.mpf_relevant_income,
         adjustment_total: adjustmentTotal,
         net_amount: calc.net_amount + adjustmentTotal,
       },

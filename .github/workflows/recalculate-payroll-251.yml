@@ -24,10 +24,18 @@ jobs:
             # The workflow deliberately has no payroll-id input: it may only
             # recalculate approved draft payroll #251 through the deployed API.
             TOKEN="$(docker exec mingtat-erp-backend node -e "const jwt=require('jsonwebtoken'); const {PrismaClient}=require('@prisma/client'); (async()=>{const prisma=new PrismaClient(); try { const user=await prisma.user.findFirst({where:{isActive:true,role:{in:['admin','manager']}},orderBy:{id:'asc'}}); if(!user) throw new Error('No active admin or manager available'); process.stdout.write(jwt.sign({sub:user.id,username:user.username},process.env.JWT_SECRET,{expiresIn:'5m'})); } finally { await prisma.\$disconnect(); }})().catch(error=>{console.error(error.message);process.exit(1)})")"
+            # #251's former automatic MPF base predates this correction. Reset
+            # it before the one permitted recalculation so it is not treated as
+            # a user-entered MPF override.
+            curl --fail --silent --show-error --request PUT \
+              --header "Authorization: Bearer ${TOKEN}" \
+              --header 'Content-Type: application/json' \
+              --data '{"mpf_relevant_income":null}' \
+              http://127.0.0.1:3001/api/payroll/251 >/dev/null
             RESPONSE="$(curl --fail --silent --show-error --request POST \
               --header "Authorization: Bearer ${TOKEN}" \
               --header 'Content-Type: application/json' \
               --data '{"override_manual_rates":false}' \
               http://127.0.0.1:3001/api/payroll/251/recalculate)"
             unset TOKEN
-            RESPONSE="${RESPONSE}" node -e "const value=JSON.parse(process.env.RESPONSE); const output={id:Number(value.id),status:value.status,base_amount:Number(value.base_amount),mpf_deduction:Number(value.mpf_deduction),mpf_employer:Number(value.mpf_employer),net_amount:Number(value.net_amount),payroll_work_log_count:(value.payroll_work_logs||[]).length,daily_calc_count:(value.daily_calculation||[]).length}; if(output.id!==251||output.status!=='draft'||output.base_amount!==0||output.mpf_deduction!==0||output.mpf_employer!==0||output.net_amount!==0||output.payroll_work_log_count!==0) { console.error(JSON.stringify(output)); process.exit(1); } console.log(JSON.stringify(output));"
+            RESPONSE="${RESPONSE}" node -e "const value=JSON.parse(process.env.RESPONSE); const output={id:Number(value.id),status:value.status,base_amount:Number(value.base_amount),mpf_relevant_income:Number(value.mpf_relevant_income),mpf_deduction:Number(value.mpf_deduction),mpf_employer:Number(value.mpf_employer),net_amount:Number(value.net_amount),payroll_work_log_count:(value.payroll_work_logs||[]).length,daily_calc_count:(value.daily_calculation||[]).length}; if(output.id!==251||output.status!=='draft'||output.base_amount!==0||output.mpf_relevant_income!==0||output.mpf_deduction!==0||output.mpf_employer!==0||output.net_amount!==0||output.payroll_work_log_count!==0) { console.error(JSON.stringify(output)); process.exit(1); } console.log(JSON.stringify(output));"
