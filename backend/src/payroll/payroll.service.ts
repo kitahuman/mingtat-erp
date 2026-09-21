@@ -3534,6 +3534,9 @@ export class PayrollService {
   async excludeBadge(id: number, date: string, badgeKey: string) {
     const payroll = await this.prisma.payroll.findUnique({ where: { id } });
     if (!payroll) throw new NotFoundException('Payroll not found');
+    if (payroll.status !== 'draft' && payroll.status !== 'preparing') {
+      throw new BadRequestException('只能編輯草稿或準備中狀態的糧單');
+    }
 
     const excludedKey = `excluded_${badgeKey}`;
     const excludedDate = new Date(date);
@@ -3558,12 +3561,20 @@ export class PayrollService {
       });
     }
 
+    if (badgeKey.startsWith('monthly_')) {
+      // The exclusion is part of the monthly daily calendar, not an allowance;
+      // recalculate immediately so the item totals and daily labels agree.
+      await this.recalculate(id, false);
+    }
     return { success: true };
   }
 
   async restoreBadge(id: number, date: string, badgeKey: string) {
     const payroll = await this.prisma.payroll.findUnique({ where: { id } });
     if (!payroll) throw new NotFoundException('Payroll not found');
+    if (payroll.status !== 'draft' && payroll.status !== 'preparing') {
+      throw new BadRequestException('只能編輯草稿或準備中狀態的糧單');
+    }
 
     const excludedDate = new Date(date);
     const excludedKey = `excluded_${badgeKey}`;
@@ -3614,6 +3625,9 @@ export class PayrollService {
       }
     }
 
+    if (badgeKey.startsWith('monthly_')) {
+      await this.recalculate(id, false);
+    }
     return { success: true };
   }
 

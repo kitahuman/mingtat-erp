@@ -267,6 +267,12 @@ type DailyCalculationRecord = {
   manual_night_shift_quantity?: number | null;
   is_manual_day_quantity?: boolean | null;
   effective_day_quantity?: number | null;
+  monthly_daily_rate?: number | string | null;
+  monthly_sunday_quantity?: number | null;
+  monthly_holiday_quantity?: number | null;
+  monthly_sunday_eligible?: boolean | null;
+  monthly_holiday_eligible?: boolean | null;
+  effective_income?: number | string | null;
   daily_allowances?: DailyAllowance[];
   allowances?: DailyAllowance[];
   allowance_badges?: DailyBadge[];
@@ -1183,7 +1189,9 @@ function PayrollTabs({
   }
 
   async function excludeBadge(date: string, badgeKey: string) {
-    const ok = window.confirm("確定要移除此津貼？");
+    const ok = window.confirm(
+      badgeKey.startsWith("monthly_") ? "確定要移除此日計薪？" : "確定要移除此津貼？",
+    );
     if (!ok) return;
     if (!payrollId) return;
     await mutateAndReload(() => payrollApi.excludeBadge(payrollId, { date, badge_key: badgeKey }), "移除津貼失敗");
@@ -2144,6 +2152,11 @@ function DailyTab({ days, allowanceOptions, adjustments, expandedDay, readOnly, 
               const datedAdjustments = adjustments.filter((adjustment) => isAdjustmentOnDate(adjustment, day.date));
               const holidayName = getDailyHolidayName(day);
               const restDayLabel = !day.is_holiday ? day.special_label : null;
+              const restDayBadgeKey = day.date ? `monthly_sunday_${dateOnly(day.date)}` : "";
+              const isMonthlyRestDay = Boolean(day.monthly_sunday_eligible);
+              const isRestDayExcluded = isMonthlyRestDay && isDailyBadgeExcluded(day, restDayBadgeKey);
+              const canRemoveRestDayPay = !readOnly && isMonthlyRestDay && !isRestDayExcluded && toNumber(day.monthly_sunday_quantity) > 0;
+              const canRestoreRestDayPay = !readOnly && isMonthlyRestDay && isRestDayExcluded;
               const isLeave = isLeaveDay(day);
               const statutoryHolidayBadgeKey = getStatutoryHolidayBadgeKey(day);
               const canRestoreHolidayAllowance = Boolean(
@@ -2195,7 +2208,14 @@ function DailyTab({ days, allowanceOptions, adjustments, expandedDay, readOnly, 
                             onClick={day.date ? () => onRestoreBadge(day.date || "", statutoryHolidayBadgeKey) : undefined}
                           />
                         )}
-                        {restDayLabel && <SpecialDateBadge label={restDayLabel} />}
+                        {restDayLabel && <SpecialDateBadge
+                          label={restDayLabel}
+                          clickable={canRestoreRestDayPay}
+                          removable={canRemoveRestDayPay}
+                          title={canRestoreRestDayPay ? "點擊還原休息日計薪" : canRemoveRestDayPay ? "移除此日休息日計薪" : undefined}
+                          onClick={day.date ? () => onRestoreBadge(day.date || "", restDayBadgeKey) : undefined}
+                          onRemove={day.date ? () => onExcludeBadge(day.date || "", restDayBadgeKey) : undefined}
+                        />}
                         {isLeave && <span className="rounded bg-gray-200 px-1.5 py-0.5 text-xs font-medium text-gray-600">休假</span>}
                       </div>
                     </td>
@@ -2349,7 +2369,7 @@ function isLeaveDay(day: DailyCalculationRecord): boolean {
   return workLogs.length === 0;
 }
 
-function SpecialDateBadge({ label, clickable = false, title, onClick }: { label: string; clickable?: boolean; title?: string; onClick?: () => void }) {
+function SpecialDateBadge({ label, clickable = false, removable = false, title, onClick, onRemove }: { label: string; clickable?: boolean; removable?: boolean; title?: string; onClick?: () => void; onRemove?: () => void }) {
   const className = `rounded bg-green-100 px-2 py-0.5 text-xs font-bold text-green-700 ${clickable ? "cursor-pointer border border-green-300 hover:bg-green-200 hover:text-green-800" : ""}`;
 
   if (clickable && onClick) {
@@ -2360,7 +2380,9 @@ function SpecialDateBadge({ label, clickable = false, title, onClick }: { label:
     );
   }
 
-  return <span className={className}>{label}</span>;
+  return <span className={className} title={title}>{label}
+    {removable && onRemove && <button type="button" onClick={onRemove} className="ml-1 text-[10px] opacity-70 hover:text-red-600 hover:opacity-100" aria-label="移除本日計薪">×</button>}
+  </span>;
 }
 
 function getDailyTopUpAmount(day: DailyCalculationRecord): number {
@@ -2420,6 +2442,11 @@ function formatDailyOtMidShift(totals: { otAmount: number; midShiftAmount: numbe
 }
 
 function getDailyBaseWorkIncome(day: DailyCalculationRecord): number {
+  // The backend monthly daily calendar is the source of truth. Do not
+  // recompute a fractional rate in the UI.
+  if (day.monthly_daily_rate !== null && day.monthly_daily_rate !== undefined) {
+    return toNumber(day.effective_income ?? day.work_income);
+  }
   const workLogs = day.work_logs || day.logs || [];
   if (workLogs.length === 0) return toNumber(day.base_amount);
   return workLogs.reduce((sum, row) => {

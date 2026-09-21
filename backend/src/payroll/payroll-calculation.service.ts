@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { PricingService } from '../common/pricing.service';
+import { buildMonthlyPayCalendar, monthlyDailyRate as getMonthlyDailyRate } from './monthly-payroll';
 
 type PayrollDailyAllowanceForCalculation = {
   allowance_key: string;
@@ -115,6 +116,8 @@ export class PayrollCalculationService {
         dateFrom,
         dateTo,
         holidayDates,
+        employeeJoinDate: emp.join_date ? toDateStr(emp.join_date) : null,
+        employeeTerminationDate: emp.termination_date ? toDateStr(emp.termination_date) : null,
         manualDayQuantityMap,
       },
     );
@@ -226,84 +229,55 @@ export class PayrollCalculationService {
     let holidayDayCount = 0;
     
     if (salaryType === 'monthly' && baseSalary > 0) {
-      // 日薪 = 月薪 × 12 / 365（或 366，看該年是否閏年）
-      const year = Number(dateFrom.slice(0, 4));
-      const isLeapYear = (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
-      const daysInYear = isLeapYear ? 366 : 365;
-      monthlyDailyRate = Math.floor(baseSalary * 12 / daysInYear);
-
-      // 計算計糧天數
-      const periodStart = new Date(dateFrom);
-      const periodEnd = new Date(dateTo);
-      const joinDate = emp.join_date ? new Date(toDateStr(emp.join_date)) : null;
-      const terminationDate = emp.termination_date ? new Date(toDateStr(emp.termination_date)) : null;
-
-      // 確定有效起止日（考慮月中入職/離職）
-      const effectiveStart = joinDate && joinDate > periodStart ? joinDate : periodStart;
-      const effectiveEnd = terminationDate && terminationDate < periodEnd ? terminationDate : periodEnd;
-
-      // 入職滿 3 個月才計法定假日
-      const threeMonthsAfterJoin = joinDate ? new Date(joinDate) : null;
-      if (threeMonthsAfterJoin) {
-        threeMonthsAfterJoin.setMonth(threeMonthsAfterJoin.getMonth() + 3);
-      }
-      const isEligibleForHoliday = !threeMonthsAfterJoin || new Date(dateTo) >= threeMonthsAfterJoin;
-
-      // (a) 有 workLog 的天數
-      const workLogDates = new Set<string>();
-      for (const day of dailyCalc) {
-        if (day.work_logs && day.work_logs.length > 0) {
-          workLogDates.add(toDateStr(day.date));
-        }
-      }
-      workLogDayCount = workLogDates.size;
-
-      // (b) 有效期間內的星期日天數
-      for (let d = new Date(effectiveStart); d <= effectiveEnd; d.setDate(d.getDate() + 1)) {
-        if (d.getDay() === 0) sundayCount++;
-      }
-
-      // (c) 有效期間內的法定假日天數（入職滿 3 個月後才計）
-      if (isEligibleForHoliday && holidayDates) {
-        for (const h of holidayDates) {
-          const hDate = new Date(toDateStr(h.date));
-          if (hDate >= effectiveStart && hDate <= effectiveEnd) {
-            holidayDayCount++;
-          }
-        }
-      }
-
-      // 計糧天數 = 工作天 + 星期日 + 法定假日（不扣除重複）
+      monthlyDailyRate = getMonthlyDailyRate(baseSalary, dateFrom);
+      // Use exactly the same gated calendar and integer rate as daily display.
+      workLogDayCount = dailyCalc.reduce((sum, day) => sum + (day.monthly_work_quantity || 0), 0);
+      sundayCount = dailyCalc.reduce((sum, day) => sum + (day.monthly_sunday_quantity || 0), 0);
+      holidayDayCount = dailyCalc.reduce((sum, day) => sum + (day.monthly_holiday_quantity || 0), 0);
       monthlyPayableDays = workLogDayCount + sundayCount + holidayDayCount;
-
-      // 基本薪金 = 日薪 × 計糧天數
-      monthlySalaryAmount = Math.round(monthlyDailyRate * monthlyPayableDays * 100) / 100;
-
-      // 覆蓋 baseAmount（月薪員工不用 workIncome + topUp，改用按天比例）
-      baseAmount = monthlySalaryAmount;
+      const monthlyAttendanceAmount = monthlyDailyRate * monthlyPayableDays;
+      const monthlyManualIncome = dailyCalc.reduce(
+        (sum, day) => sum + (day.monthly_manual_income || 0),
+        0,
+      );
+      monthlySalaryAmount = monthlyAttendanceAmount;
+      // Manual income remains payable but never qualifies rest/holiday pay.
+      baseAmount = monthlyAttendanceAmount + monthlyManualIncome;
     }
 
     // ── (2) 計算明細項目 ──
 
-    if (salaryType === 'monthly' && monthlySalaryAmount > 0) {
+    if (salaryType === 'monthly') {
       const remarksText = `月薪 $${baseSalary} × 12 / ${(new Date(dateFrom).getFullYear() % 4 === 0 && new Date(dateFrom).getFullYear() % 100 !== 0) || new Date(dateFrom).getFullYear() % 400 === 0 ? 366 : 365} = 日薪 $${monthlyDailyRate}`;
       // 應工作天數 = 當月天數 - 星期日天數 - 法定假日天數
       const daysInMonth = Math.floor((new Date(dateTo).getTime() - new Date(dateFrom).getTime()) / (1000 * 60 * 60 * 24)) + 1;
       const requiredWorkDays = daysInMonth - sundayCount - holidayDayCount;
       // 判斷有沒有請假：實際工作天數 < 應工作天數
-      const hasLeave = workLogDayCount < requiredWorkDays;
+      const hasLeave = !dailyCalc.some(day => day.monthly_full_attendance) || workLogDayCount < requiredWorkDays;
 
+      const monthlyManualIncome = dailyCalc.reduce(
+        (sum, day) => sum + (day.monthly_manual_income || 0),
+        0,
+      );
       if (hasLeave) {
-        // 有請假：基本薪金 = 計糧天數 × 日薪
-        items.push({
-          item_type: 'base_salary',
-          item_name: '基本薪金',
-          unit_price: monthlyDailyRate,
-          quantity: monthlyPayableDays,
-          amount: monthlySalaryAmount,
-          remarks: remarksText,
-          sort_order: sortOrder++,
-        });
+        // Partial periods are strictly paid from the qualified daily calendar.
+        if (monthlySalaryAmount > 0) {
+          items.push({
+            item_type: 'base_salary',
+            item_name: '基本薪金',
+            unit_price: monthlyDailyRate,
+            quantity: monthlyPayableDays,
+            amount: monthlySalaryAmount,
+            remarks: remarksText,
+            sort_order: sortOrder++,
+          });
+        }
+        if (monthlyManualIncome !== 0) {
+          items.push({
+            item_type: 'base_salary', item_name: '手動收入', unit_price: 0,
+            quantity: 1, amount: monthlyManualIncome, sort_order: sortOrder++,
+          });
+        }
       } else {
         // 沒請假：基本薪金 = 月薪（封頂）
         items.push({
@@ -315,9 +289,13 @@ export class PayrollCalculationService {
           remarks: remarksText,
           sort_order: sortOrder++,
         });
-        // 覆蓋 baseAmount 為月薪（封頂）
-        baseAmount = baseSalary;
-        monthlySalaryAmount = baseSalary;
+        // Preserve explicit daily manual income separately from the monthly cap.
+        if (monthlyManualIncome !== 0) {
+          items.push({ item_type: 'base_salary', item_name: '手動收入', unit_price: 0,
+            quantity: 1, amount: monthlyManualIncome, sort_order: sortOrder++ });
+        }
+        baseAmount = baseSalary + monthlyManualIncome;
+        monthlySalaryAmount = baseAmount;
         // 額外天數 = 實際工作天數 - 應工作天數
         const extraWorkDays = workLogDayCount - requiredWorkDays;
         if (extraWorkDays > 0) {
@@ -1025,18 +1003,12 @@ export class PayrollCalculationService {
     // 月薪員工：計算日薪
     const monthlyBaseSalary = options.monthlySalary || (salaryType === 'monthly' ? (Number(salarySetting?.base_salary) || 0) : 0);
     let monthlyDailyRate = 0;
-    let monthlyJoinDate: Date | null = null;
-    let monthlyThreeMonthDate: Date | null = null;
     if (salaryType === 'monthly' && monthlyBaseSalary > 0 && options.dateFrom) {
-      const year = Number(options.dateFrom.slice(0, 4));
-      const isLeapYear = (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
-      const daysInYear = isLeapYear ? 366 : 365;
-      monthlyDailyRate = Math.round((monthlyBaseSalary * 12 / daysInYear) * 100) / 100;
-      if (options.employeeJoinDate) {
-        monthlyJoinDate = new Date(options.employeeJoinDate);
-        monthlyThreeMonthDate = new Date(monthlyJoinDate);
-        monthlyThreeMonthDate.setMonth(monthlyThreeMonthDate.getMonth() + 3);
-      }
+      monthlyDailyRate = getMonthlyDailyRate(monthlyBaseSalary, options.dateFrom);
+    }
+    // Ignore inactive/leave source rows even when the caller has not filtered them.
+    if (salaryType === 'monthly') {
+      pwls = pwls.filter(pwl => !pwl.is_excluded && !pwl.deleted_at && pwl.service_type !== '請假/休息');
     }
     const salaryOtSlots = [
       'ot_1800_1900',
@@ -1094,7 +1066,7 @@ export class PayrollCalculationService {
       }
     }
 
-    const allDates = new Set([...dateMap.keys(), ...daMap.keys()]);
+    const allDates = new Set([...dateMap.keys(), ...daMap.keys(), ...manualDayQuantityMap.keys()]);
     if (options.dateFrom && options.dateTo) {
       const start = new Date(options.dateFrom);
       const end = new Date(options.dateTo);
@@ -1104,7 +1076,7 @@ export class PayrollCalculationService {
     }
 
     const sortedDates = Array.from(allDates).sort();
-    return sortedDates.map((date) => {
+    const result = sortedDates.map((date) => {
       const dayPwls = dateMap.get(date) || [];
       const dayAllowances = daMap.get(date) || [];
       const isSunday = new Date(date).getDay() === 0;
@@ -1162,7 +1134,8 @@ export class PayrollCalculationService {
         (manualEntry.manual_day_shift_quantity != null || manualEntry.manual_night_shift_quantity != null || manualEntry.manual_day_quantity != null);
       // 日夜分開讀取手動覆蓋值
       const manualDayShiftQty = isManualDayQuantity
-        ? (manualEntry!.manual_day_shift_quantity != null ? Number(manualEntry!.manual_day_shift_quantity) : 0)
+        ? (manualEntry!.manual_day_shift_quantity != null ? Number(manualEntry!.manual_day_shift_quantity)
+          : manualEntry!.manual_night_shift_quantity == null ? Number(manualEntry!.manual_day_quantity) || 0 : 0)
         : null;
       const manualNightShiftQty = isManualDayQuantity
         ? (manualEntry!.manual_night_shift_quantity != null ? Number(manualEntry!.manual_night_shift_quantity) : 0)
@@ -1205,50 +1178,8 @@ export class PayrollCalculationService {
       const nightTopUpAmount = isTopUpOverridden ? 0 : autoNightTopUpAmount;
       const needsTopUp = !isHolidayDay && topUpAmount > 0;
 
-      // 月薪員工：計算當日日薪金額
-      let monthlyDayIncome = 0;
-      if (salaryType === 'monthly' && monthlyDailyRate > 0) {
-        const currentDate = new Date(date);
-        const periodStart = options.dateFrom ? new Date(options.dateFrom) : null;
-        const periodEnd = options.dateTo ? new Date(options.dateTo) : null;
-        const effectiveStart = monthlyJoinDate && periodStart && monthlyJoinDate > periodStart ? monthlyJoinDate : periodStart;
-        const effectiveEnd = options.employeeTerminationDate
-          ? (new Date(options.employeeTerminationDate) < (periodEnd || currentDate) ? new Date(options.employeeTerminationDate) : periodEnd)
-          : periodEnd;
-
-        // 確認當日在有效期間內
-        const isInRange = (!effectiveStart || currentDate >= effectiveStart) && (!effectiveEnd || currentDate <= effectiveEnd);
-
-        if (isInRange) {
-          if (dayPwls.length > 0) {
-            // 有 workLog 的天：計一天日薪
-            monthlyDayIncome += monthlyDailyRate;
-            // 如果同時是星期日或法定假日，再加一天（不扣除重複）
-            if (isSunday) {
-              monthlyDayIncome += monthlyDailyRate;
-            }
-            if (holidayName) {
-              const isHolidayEligible = !monthlyThreeMonthDate || currentDate >= monthlyThreeMonthDate;
-              if (isHolidayEligible) {
-                monthlyDayIncome += monthlyDailyRate;
-              }
-            }
-          } else {
-            // 沒有 workLog 的天
-            if (isSunday) {
-              // 星期日（休息日）：計一天日薪
-              monthlyDayIncome += monthlyDailyRate;
-            }
-            if (holidayName) {
-              // 法定假日：入職滿 3 個月後才計
-              const isHolidayEligible = !monthlyThreeMonthDate || currentDate >= monthlyThreeMonthDate;
-              if (isHolidayEligible) {
-                monthlyDayIncome += monthlyDailyRate;
-              }
-            }
-          }
-        }
-      }
+      // Filled below using the shared monthly calendar after all attendance is known.
+      const monthlyDayIncome = 0;
 
       const effectiveIncome = salaryType === 'monthly'
         ? monthlyDayIncome
@@ -1348,6 +1279,7 @@ export class PayrollCalculationService {
         is_top_up_overridden: salaryType === 'monthly' ? false : isTopUpOverridden,
         top_up_override_id: salaryType === 'monthly' ? null : (override?.id ?? null),
         effective_income: effectiveIncome,
+        monthly_manual_income: salaryType === 'monthly' ? topUpAmount : 0,
         monthly_daily_rate: salaryType === 'monthly' ? monthlyDailyRate : undefined,
         daily_allowances: displayDayAllowances.map((da: any) => ({
           id: da.id,
@@ -1363,6 +1295,42 @@ export class PayrollCalculationService {
         day_total: dayTotal,
       };
     });
+    if (salaryType === 'monthly' && options.dateFrom && options.dateTo) {
+      const excludedMonthlyPayKeys = new Set(
+        dailyAllowances
+          .filter((allowance: any) => String(allowance.allowance_key || '').startsWith('excluded_monthly_'))
+          .map((allowance: any) => String(allowance.allowance_key).replace(/^excluded_/, '')),
+      );
+      const calendar = buildMonthlyPayCalendar(result.map(day => ({
+        date: day.date,
+        // Existing monthly work dates count once; explicit manual quantities win.
+        workQuantity: day.is_manual_day_quantity ? Math.max(0, day.effective_day_quantity)
+          : day.auto_day_quantity > 0 ? 1 : 0,
+      })), {
+        dateFrom: options.dateFrom,
+        dateTo: options.dateTo,
+        joinDate: options.employeeJoinDate,
+        terminationDate: options.employeeTerminationDate,
+        holidayDates: (options.holidayDates || []).map(h => toDateStr(h.date)),
+        excludedPayKeys: excludedMonthlyPayKeys,
+      });
+      for (const day of result as any[]) {
+        const pay = calendar.days.get(day.date);
+        day.monthly_work_quantity = pay?.workQuantity || 0;
+        day.monthly_sunday_quantity = pay?.sundayQuantity || 0;
+        day.monthly_holiday_quantity = pay?.holidayQuantity || 0;
+        day.monthly_full_attendance = calendar.fullAttendance;
+        day.monthly_sunday_eligible = pay?.sundayEligible || false;
+        day.monthly_holiday_eligible = pay?.holidayEligible || false;
+        const income = monthlyDailyRate * (day.monthly_work_quantity + day.monthly_sunday_quantity + day.monthly_holiday_quantity)
+          + day.monthly_manual_income;
+        day.work_income = income;
+        day.day_work_income = income;
+        day.effective_income = income;
+        day.day_total += income;
+      }
+    }
+    return result;
   }
 
   buildDailyCalculationFromWorkLogs(
