@@ -162,9 +162,21 @@ type PayrollItem = {
   quantity?: number | string | null;
   amount?: number | string | null;
   remarks?: string | null;
+  sort_order?: number | null;
   payroll_item_excluded?: boolean | null;
   payroll_item_is_manual_amount?: boolean | null;
+  payroll_item_system_amount?: number | string | null;
+  payroll_item_system_quantity?: number | string | null;
+  payroll_item_system_remarks?: string | null;
+  payroll_item_manual_amount?: number | string | null;
+  payroll_item_manual_remarks?: string | null;
 };
+
+const PAYROLL_ITEM_OVERRIDE_NAMES = ["基本薪金", "工作收入", "底薪"] as const;
+
+function isPayrollItemOverrideEligible(item: PayrollItem): boolean {
+  return item.item_type === "base_salary" && PAYROLL_ITEM_OVERRIDE_NAMES.includes((item.item_name || "") as (typeof PAYROLL_ITEM_OVERRIDE_NAMES)[number]);
+}
 
 type Adjustment = {
   id?: number | string;
@@ -386,6 +398,7 @@ export type PayrollTabsProps = {
   payrollSnapshot?: PayrollSnapshot | null;
   readOnly?: boolean;
   className?: string;
+  allowItemOverrides?: boolean;
   onUpdateWorkLog?: (id: number | string, updates: WorkLogUpdatePayload) => Promise<unknown>;
   onBatchUpdateWorkLogs?: (ids: Array<number | string>, updates: WorkLogUpdatePayload) => Promise<unknown>;
   onBatchDeleteWorkLogs?: (ids: Array<number | string>) => Promise<unknown>;
@@ -800,6 +813,7 @@ function PayrollTabs({
   payrollSnapshot = null,
   readOnly = false,
   className = "",
+  allowItemOverrides,
   onUpdateWorkLog,
   onBatchUpdateWorkLogs,
   onBatchDeleteWorkLogs,
@@ -1275,7 +1289,7 @@ function PayrollTabs({
       {activeTab === "grouped" && <GroupedTab groups={groups} readOnly={readOnly || saving || !payrollId} onBillingTypeChange={setGroupBillingQuantityType} onSetGroupRate={setGroupRate} onSetGroupOtRate={setGroupOtRate} onSetGroupMidShiftRate={setGroupMidShiftRate} onOpenRateCard={openRateCardModal} onAmountSelectionChange={updateGroupedAmountSelection} onOpenManualMatch={(group) => setManualMatchGroup(group)} onUnmatch={unmatchGroupRateCard} onViewRateCard={(id) => setViewRateCardId(id)} />}
       {activeTab === "daily" && <DailyTab days={dailyRows} allowanceOptions={calculation.allowance_options || []} adjustments={calculation.adjustments || []} expandedDay={expandedDay} readOnly={readOnly || saving || !payrollId} onToggleExpand={(date) => setExpandedDay((prev) => (prev === date ? null : date))} onAddAllowance={addDailyAllowance} onRemoveAllowance={removeDailyAllowance} onAddAdjustment={addAdjustment} onRemoveAdjustment={removeAdjustment} onExcludeBadge={excludeBadge} onRestoreBadge={restoreBadge} onSaveTopUpOverride={saveTopUpOverride} onSaveDayQuantity={saveDayQuantity} onResetDayQuantity={resetDayQuantity} onDirtyChange={setDailyTabDirty} />}
       {activeTab === "unmatched" && <UnmatchedTab groups={computedUnmatchedGroups} readOnly={readOnly || saving || !payrollId} onOpenRateCard={openRateCardModal} />}
-      {activeTab === "calculation" && <CalculationTab calculation={calculation} snapshot={snapshot} salarySetting={snapshot?.salary_setting} workLogs={rows} dailyCalculation={dailyRows} payrollId={payrollId} readOnly={readOnly} onItemUpdated={loadSnapshot} onDirtyChange={setCalculationTabDirty} />}
+      {activeTab === "calculation" && <CalculationTab calculation={calculation} snapshot={snapshot} salarySetting={snapshot?.salary_setting} workLogs={rows} dailyCalculation={dailyRows} payrollId={payrollId} readOnly={allowItemOverrides === undefined ? readOnly : !allowItemOverrides} onItemUpdated={loadSnapshot} onDirtyChange={setCalculationTabDirty} />}
       {activeTab === "print" && <PrintTab payrollId={payrollId} showGroupedInPrint={showGroupedInPrint} onShowGroupedChange={setShowGroupedInPrint} />}
 
       {rateCardSource && <RateCardModal source={rateCardSource} form={rateCardForm} saving={rateCardSaving} onChange={setRateCardForm} onClose={() => setRateCardSource(null)} onSubmit={submitRateCard} />}
@@ -2956,56 +2970,30 @@ function PayrollItemsGroupedTable({
   onItemUpdated?: () => Promise<void>;
   onDirtyChange?: (dirty: boolean) => void;
 }) {
-  const [editingItemId, setEditingItemId] = useState<number | string | null>(null);
-  const [editAmount, setEditAmount] = useState("");
-  const [saving, setSaving] = useState(false);
+  const [savingItemId, setSavingItemId] = useState<number | string | null>(null);
+  const [draftAmounts, setDraftAmounts] = useState<Record<string, string>>({});
+  const [draftRemarks, setDraftRemarks] = useState<Record<string, string>>({});
+  const saving = savingItemId !== null;
 
   useEffect(() => {
-    onDirtyChange?.(editingItemId !== null || saving);
-  }, [editingItemId, onDirtyChange, saving]);
+    onDirtyChange?.(saving);
+  }, [onDirtyChange, saving]);
 
   useEffect(() => () => onDirtyChange?.(false), [onDirtyChange]);
 
-  const handleDoubleClickAmount = (item: PayrollItem) => {
-    if (readOnly || !payrollId || !item.id) return;
-    setEditingItemId(item.id);
-    setEditAmount(String(Math.abs(toNumber(item.amount))));
-  };
-
-  const handleAmountSave = async (item: PayrollItem) => {
+  const updateOverrideItem = async (
+    item: PayrollItem,
+    data: { use_manual_amount?: boolean; amount?: number; remarks?: string; reset_manual_amount?: boolean },
+  ) => {
     if (!payrollId || !item.id) return;
-    const newAmount = parseFloat(editAmount);
-    if (isNaN(newAmount)) { setEditingItemId(null); return; }
-    const finalAmount = toNumber(item.amount) < 0 ? -Math.abs(newAmount) : Math.abs(newAmount);
-    if (finalAmount === toNumber(item.amount)) { setEditingItemId(null); return; }
-    setSaving(true);
+    setSavingItemId(item.id);
     try {
-      await payrollApi.updateItem(payrollId, Number(item.id), { amount: finalAmount });
+      await payrollApi.updateItem(payrollId, Number(item.id), data);
       if (onItemUpdated) await onItemUpdated();
     } catch (err: unknown) {
-      alert(err instanceof Error ? err.message : "更新金額失敗");
+      alert(getApiMessage(err, "更新項目失敗"));
     } finally {
-      setSaving(false);
-      setEditingItemId(null);
-    }
-  };
-
-  const handleAmountKeyDown = (e: React.KeyboardEvent, item: PayrollItem) => {
-    if (e.key === "Enter") { e.preventDefault(); handleAmountSave(item); }
-    if (e.key === "Escape") { setEditingItemId(null); }
-  };
-
-  const handleResetManualAmount = async (item: PayrollItem) => {
-    if (!payrollId || !item.id) return;
-    if (!confirm("確定要還原為系統計算金額？")) return;
-    setSaving(true);
-    try {
-      await payrollApi.updateItem(payrollId, Number(item.id), { reset_manual_amount: true });
-      if (onItemUpdated) await onItemUpdated();
-    } catch (err: unknown) {
-      alert(err instanceof Error ? err.message : "還原金額失敗");
-    } finally {
-      setSaving(false);
+      setSavingItemId(null);
     }
   };
 
@@ -3027,61 +3015,87 @@ function PayrollItemsGroupedTable({
 
   const renderItemRow = (item: PayrollItem, key: string | number | undefined, extraClass = "", groupedQuantity?: number, groupedAmount?: number, groupSize?: number) => {
     const isDeduction = toNumber(item.amount) < 0;
+    const overrideEligible = isPayrollItemOverrideEligible(item);
     const isManual = Boolean(item.payroll_item_is_manual_amount);
-    const isEditing = editingItemId === item.id;
-    const canEdit = !readOnly && !!payrollId && !!item.id;
+    const canEdit = !readOnly && !!payrollId && !!item.id && overrideEligible;
+    const itemKey = String(item.id || key);
     const displayQuantity = groupedQuantity !== undefined ? groupedQuantity : toNumber(item.quantity);
     const displayAmount = groupedAmount !== undefined ? groupedAmount : toNumber(item.amount);
+    const amountDraft = draftAmounts[itemKey] ?? String(Math.abs(toNumber(item.amount)));
+    const remarksDraft = draftRemarks[itemKey] ?? (item.remarks || "");
+    const isSavingThis = savingItemId === item.id;
     return (
       <tr key={String(key)} className={`border-b ${extraClass}`}>
         <td className="px-3 py-2 font-medium text-gray-800">
-          {item.item_name || "—"}
-          {groupSize && groupSize > 1 && <span className="ml-2 text-xs text-gray-500">（{groupSize} 筆合併）</span>}
+          <div className="flex flex-col gap-1">
+            <div>
+              {item.item_name || "—"}
+              {groupSize && groupSize > 1 && <span className="ml-2 text-xs text-gray-500">（{groupSize} 筆合併）</span>}
+            </div>
+            {overrideEligible && (
+              <div className="flex items-center gap-2">
+                <select
+                  className="h-7 rounded border border-gray-300 bg-white px-2 text-xs text-gray-700 disabled:bg-gray-50"
+                  value={isManual ? "manual" : "system"}
+                  disabled={!canEdit || isSavingThis}
+                  onChange={(e) => {
+                    const nextManual = e.target.value === "manual";
+                    if (nextManual === isManual) return;
+                    void updateOverrideItem(item, nextManual
+                      ? { use_manual_amount: true, amount: toNumber(item.amount), remarks: item.remarks || undefined }
+                      : { use_manual_amount: false });
+                  }}
+                >
+                  <option value="system">系統計算</option>
+                  <option value="manual">手動金額</option>
+                </select>
+                {isManual && <span className="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium bg-blue-100 text-blue-700">手動覆蓋</span>}
+              </div>
+            )}
+          </div>
         </td>
         <td className="px-3 py-2 text-right font-mono text-gray-700">{item.item_type === "mpf_deduction" && mpfPlan !== "industry" ? `${(toNumber(item.quantity) * 100).toFixed(0)}%` : toNumber(item.unit_price) === 0 ? "—" : formatMoney(item.unit_price)}</td>
         <td className="px-3 py-2 text-right font-mono text-gray-700">{item.item_type === "mpf_deduction" && mpfPlan !== "industry" ? "—" : formatPlainNumber(displayQuantity)}</td>
         <td className={`px-3 py-2 text-right font-mono font-bold ${isDeduction ? "text-red-600" : "text-primary-600"}`}>
-          <div className="flex items-center justify-end gap-1">
-            {isEditing ? (
-              <input
-                type="number"
-                step="0.01"
-                className="w-24 rounded border border-blue-400 px-2 py-0.5 text-right text-sm font-mono focus:outline-none focus:ring-1 focus:ring-blue-500"
-                value={editAmount}
-                onChange={(e) => setEditAmount(e.target.value)}
-                onKeyDown={(e) => handleAmountKeyDown(e, item)}
-                onBlur={() => handleAmountSave(item)}
-                autoFocus
-                disabled={saving}
-              />
-            ) : (
-              <span
-                className={canEdit ? "cursor-pointer hover:bg-blue-50 px-1 rounded" : ""}
-                onDoubleClick={() => handleDoubleClickAmount(item)}
-                title={canEdit ? "雙擊編輯金額" : undefined}
-              >
-                {isDeduction ? "-" : ""}{formatMoney(Math.abs(displayAmount))}
-              </span>
-            )}
-            {isManual && (
-              <>
-                <span className="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium bg-blue-100 text-blue-700">手動</span>
-                {canEdit && (
-                  <button
-                    type="button"
-                    onClick={() => handleResetManualAmount(item)}
-                    className="text-[11px] text-gray-500 hover:text-blue-600 ml-0.5"
-                    title="還原為系統計算金額"
-                    disabled={saving}
-                  >
-                    ↺
-                  </button>
-                )}
-              </>
-            )}
-          </div>
+          {canEdit && isManual ? (
+            <input
+              type="number"
+              step="0.01"
+              className="w-28 rounded border border-blue-400 px-2 py-0.5 text-right text-sm font-mono focus:outline-none focus:ring-1 focus:ring-blue-500"
+              value={amountDraft}
+              onChange={(e) => setDraftAmounts((current) => ({ ...current, [itemKey]: e.target.value }))}
+              onBlur={() => {
+                const parsed = parseFloat(amountDraft);
+                if (Number.isNaN(parsed)) {
+                  setDraftAmounts((current) => ({ ...current, [itemKey]: String(Math.abs(toNumber(item.amount))) }));
+                  return;
+                }
+                if (Math.abs(parsed - toNumber(item.amount)) < 0.0001) return;
+                void updateOverrideItem(item, { amount: parsed, remarks: remarksDraft });
+              }}
+              disabled={isSavingThis}
+            />
+          ) : (
+            <span>{isDeduction ? "-" : ""}{formatMoney(Math.abs(displayAmount))}</span>
+          )}
         </td>
-        <td className="px-3 py-2 text-xs text-gray-500">{item.remarks || "—"}</td>
+        <td className="px-3 py-2 text-xs text-gray-500">
+          {canEdit && isManual ? (
+            <input
+              type="text"
+              className="w-full min-w-[160px] rounded border border-gray-300 px-2 py-1 text-xs text-gray-700 focus:border-blue-400 focus:outline-none"
+              value={remarksDraft}
+              onChange={(e) => setDraftRemarks((current) => ({ ...current, [itemKey]: e.target.value }))}
+              onBlur={() => {
+                if ((item.remarks || "") === remarksDraft) return;
+                void updateOverrideItem(item, { remarks: remarksDraft, amount: toNumber(item.amount) });
+              }}
+              disabled={isSavingThis}
+            />
+          ) : (
+            item.remarks || "—"
+          )}
+        </td>
       </tr>
     );
   };
@@ -3109,9 +3123,14 @@ function PayrollItemsGroupedTable({
     rows.push(renderSectionHeader(group.title, `header-${group.type}`));
     
     // Group items by name + unit_price
-    const groupedByNameAndPrice = groupItems.reduce((acc: any[], item: PayrollItem) => {
+    const overrideItems = groupItems.filter((item) => isPayrollItemOverrideEligible(item));
+    const otherItems = groupItems.filter((item) => !isPayrollItemOverrideEligible(item));
+    overrideItems.forEach((item) => {
+      rows.push(renderItemRow(item, item.id || `${item.item_name}-${item.sort_order}`));
+    });
+    const groupedByNameAndPrice = otherItems.reduce((acc: Array<{ groupKey: string; items: PayrollItem[]; totalQuantity: number; totalAmount: number }>, item: PayrollItem) => {
       const key = `${item.item_name}|${item.unit_price}`;
-      const existing = acc.find((g: any) => g.groupKey === key);
+      const existing = acc.find((group) => group.groupKey === key);
       if (existing) {
         existing.items.push(item);
         existing.totalQuantity += toNumber(item.quantity);
@@ -3127,7 +3146,7 @@ function PayrollItemsGroupedTable({
       return acc;
     }, []);
     
-    groupedByNameAndPrice.forEach((group: any, index: number) => {
+    groupedByNameAndPrice.forEach((group) => {
       const firstItem = group.items[0];
       rows.push(renderItemRow(firstItem, group.groupKey, "", group.totalQuantity, group.totalAmount, group.items.length));
     });

@@ -51,11 +51,12 @@ export class UpdatePayrollWorkLogDto {
   @IsOptional() @Type(() => Number) @IsNumber() matched_ot_rate?: number;
 }
 
-
 export class UpdatePayrollItemDto {
   @IsOptional() @IsBoolean() payroll_item_excluded?: boolean;
   @IsOptional() @Type(() => Number) @IsNumber() amount?: number;
   @IsOptional() @IsBoolean() reset_manual_amount?: boolean;
+  @IsOptional() @IsBoolean() use_manual_amount?: boolean;
+  @IsOptional() @IsString() remarks?: string;
 }
 
 export class UpdateDayQuantityDto {

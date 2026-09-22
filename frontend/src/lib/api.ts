@@ -771,8 +771,17 @@ export const payrollApi = {
   summary: (params?: any) => api.get('/payroll/summary', { params }),
 
   // ── 薪酬項目管理 ──
-  updateItem: (payrollId: number, itemId: number, data: any) =>
-    api.put(`/payroll/${payrollId}/items/${itemId}`, data),
+  updateItem: (
+    payrollId: number,
+    itemId: number,
+    data: {
+      payroll_item_excluded?: boolean;
+      amount?: number;
+      remarks?: string;
+      reset_manual_amount?: boolean;
+      use_manual_amount?: boolean;
+    },
+  ) => api.put(`/payroll/${payrollId}/items/${itemId}`, data),
 
   // ── 糧單工作記錄管理 ──
   updateWorkLog: (payrollId: number, pwlId: number, data: any) =>

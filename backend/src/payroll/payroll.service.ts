@@ -17,6 +17,17 @@ import { PettyCashService } from '../petty-cash/petty-cash.service';
 import { PaymentOutAllocationService } from '../payment-out/payment-out-allocation.service';
 import { PayrollQuery } from '../common/types';
 import { formatDateInHongKong } from '../common/date.helper';
+import {
+  applyOverridesToCalculatedResult,
+  computeMpfFromEffectiveItems,
+  isPayrollItemOverrideEligible,
+  payrollItemPersistData,
+  switchPayrollItemToManual,
+  switchPayrollItemToSystem,
+  sumEffectiveAmountsByType,
+  updateManualPayrollItemValues,
+} from './payroll-item-override';
+import { UpdatePayrollItemDto } from './dto/update-payroll.dto';
 
 type PayrollColumnFilters = Record<string, string[]>;
 
@@ -1019,15 +1030,131 @@ export class PayrollService {
     return [item.item_type || '', item.item_name || '', item.sort_order ?? ''].join('|');
   }
 
+  private mergeCalcWithOverrides(
+    calc: any,
+    previousItems: any[] | null | undefined,
+    extra?: {
+      existingMpfRelevantIncome?: number;
+      adjustmentTotal?: number;
+    },
+  ) {
+    const previouslyExcludedItemKeys = new Set(
+      (previousItems || [])
+        .filter((item: { payroll_item_excluded?: boolean }) => item.payroll_item_excluded)
+        .map((item: { item_type?: string; item_name?: string; sort_order?: number }) =>
+          this.buildPayrollItemSignature(item),
+        ),
+    );
+    return applyOverridesToCalculatedResult(calc, previousItems || [], {
+      previouslyExcludedKeys: previouslyExcludedItemKeys,
+      adjustmentTotal: extra?.adjustmentTotal || 0,
+      mpfRelevantIncome: extra?.existingMpfRelevantIncome,
+    });
+  }
+
+  private async replacePayrollItems(
+    payrollId: number,
+    calc: any,
+    previousItems: any[] | null | undefined,
+    extra?: {
+      existingMpfRelevantIncome?: number;
+      adjustmentTotal?: number;
+    },
+  ) {
+    const merged = this.mergeCalcWithOverrides(calc, previousItems, extra);
+    await this.prisma.payrollItem.deleteMany({ where: { payroll_id: payrollId } });
+    for (const item of merged.items) {
+      await this.prisma.payrollItem.create({
+        data: payrollItemPersistData(item, payrollId),
+      });
+    }
+    return merged;
+  }
+
+  private async refreshMpfFromEffectiveItems(payrollId: number) {
+    const payroll = await this.prisma.payroll.findUnique({
+      where: { id: payrollId },
+      include: { items: true, adjustments: true },
+    });
+    if (!payroll) return;
+    const items = payroll.items || [];
+    const adjustmentTotal = (payroll.adjustments || []).reduce(
+      (sum: number, adj: { amount: unknown }) => sum + Number(adj.amount || 0),
+      0,
+    );
+    const storedMpfRelevantIncome =
+      payroll.mpf_relevant_income !== null && payroll.mpf_relevant_income !== undefined
+        ? Number(payroll.mpf_relevant_income)
+        : undefined;
+    const previousGrossAmount =
+      (Number(payroll.base_amount) || 0) +
+      (Number(payroll.allowance_total) || 0) +
+      (Number(payroll.ot_total) || 0) +
+      (Number(payroll.commission_total) || 0);
+    const previousMpfItem = items.find(
+      (item: { item_type?: string }) => item.item_type === "mpf_deduction",
+    );
+    const previousMpfDays = Math.max(0, Number(previousMpfItem?.quantity) || 0);
+    const previousAutoMpfBaseCandidates =
+      payroll.mpf_plan === "industry"
+        ? [
+            previousGrossAmount,
+            previousGrossAmount + adjustmentTotal,
+            previousMpfDays > 0 ? previousGrossAmount / previousMpfDays : 0,
+            previousMpfDays > 0
+              ? (previousGrossAmount + adjustmentTotal) / previousMpfDays
+              : 0,
+          ]
+        : [previousGrossAmount, previousGrossAmount + adjustmentTotal];
+    const existingMpfRelevantIncome =
+      storedMpfRelevantIncome !== undefined &&
+      previousAutoMpfBaseCandidates.every(
+        (candidate) => Math.abs(storedMpfRelevantIncome - candidate) >= 0.01,
+      )
+        ? storedMpfRelevantIncome
+        : undefined;
+    const isMpfExempt =
+      payroll.mpf_plan === "exempt_age65" ||
+      (previousMpfItem?.item_name || "").includes("過65歲");
+    const mpf = computeMpfFromEffectiveItems({
+      items: items.filter((item: { item_type?: string }) => item.item_type !== "mpf_deduction"),
+      mpfPlan: payroll.mpf_plan || "industry",
+      adjustmentTotal,
+      mpfDays: previousMpfDays,
+      mpfRelevantIncome: existingMpfRelevantIncome,
+      isMpfExempt,
+    });
+    if (!mpf || !previousMpfItem) return;
+    await this.prisma.payrollItem.update({
+      where: { id: previousMpfItem.id },
+      data: {
+        item_name: mpf.item_name,
+        unit_price: mpf.unit_price,
+        quantity: mpf.quantity,
+        amount: mpf.amount,
+        remarks: mpf.remarks,
+      },
+    });
+    await this.prisma.payroll.update({
+      where: { id: payrollId },
+      data: {
+        mpf_deduction: mpf.mpf_deduction,
+        mpf_employer: mpf.mpf_employer,
+        mpf_relevant_income: mpf.mpf_relevant_income,
+      },
+    });
+  }
+
+
+
   private async rebuildPayrollTotalsFromItems(payrollId: number) {
+    await this.refreshMpfFromEffectiveItems(payrollId);
     const [items, adjustments] = await Promise.all([
       this.prisma.payrollItem.findMany({ where: { payroll_id: payrollId } }),
       this.prisma.payrollAdjustment.findMany({ where: { payroll_id: payrollId } }),
     ]);
     const activeItems = items.filter((item: any) => !item.payroll_item_excluded);
-    const sumByType = (type: string) => activeItems
-      .filter((item: any) => item.item_type === type)
-      .reduce((sum: number, item: any) => sum + Number(item.amount), 0);
+    const sumByType = (type: string) => sumEffectiveAmountsByType(activeItems, type);
     const baseAmount = sumByType('base_salary');
     const allowanceTotal = sumByType('allowance');
     const otTotal = sumByType('ot');
@@ -1633,55 +1760,30 @@ export class PayrollService {
       excludedBadgeKeysGen,
       calculationDailyAllowancesFinalize,
     );
-    // Update payroll items; preserve manually excluded items by stable item signature.
-    const previouslyExcludedItemKeys = new Set(
-      ((payroll as any).items || [])
-        .filter((item: any) => item.payroll_item_excluded)
-        .map((item: any) => this.buildPayrollItemSignature(item)),
+    const mergedFinalize = await this.replacePayrollItems(
+      id,
+      calc,
+      (payroll as any).items || [],
     );
-
-    // Preserve manual amount items: record their amounts before deletion
-    const manualAmountItemsFinalize = new Map<string, { amount: number }>();
-    for (const item of ((payroll as any).items || [])) {
-      if (item.payroll_item_is_manual_amount) {
-        const key = `${item.item_type || ''}|${item.item_name || ''}`;
-        manualAmountItemsFinalize.set(key, { amount: Number(item.amount) });
-      }
-    }
-
-    await this.prisma.payrollItem.deleteMany({ where: { payroll_id: id } });
-    for (const item of calc.items) {
-      const signature = this.buildPayrollItemSignature(item);
-      const manualKey = `${item.item_type || ''}|${item.item_name || ''}`;
-      const manualEntry = manualAmountItemsFinalize.get(manualKey);
-      await this.prisma.payrollItem.create({
-        data: {
-          ...item,
-          payroll_id: id,
-          payroll_item_excluded: Boolean(item.payroll_item_excluded) || previouslyExcludedItemKeys.has(signature),
-          ...(manualEntry ? { amount: manualEntry.amount, payroll_item_is_manual_amount: true } : {}),
-        },
-      });
-    }
 
     // Update payroll totals and change status to draft
     await this.prisma.payroll.update({
       where: { id },
       data: {
-        salary_type: calc.salary_type,
-        base_rate: calc.base_rate,
-        work_days: calc.work_days,
-        work_nights: calc.work_nights || 0,
-        base_amount: calc.base_amount,
-        allowance_total: calc.allowance_total,
-        ot_total: calc.ot_total,
-        commission_total: calc.commission_total,
-        mpf_deduction: calc.mpf_deduction,
-        mpf_plan: calc.mpf_plan,
-        mpf_employer: calc.mpf_employer,
-        mpf_relevant_income: calc.mpf_relevant_income,
+        salary_type: mergedFinalize.salary_type,
+        base_rate: mergedFinalize.base_rate,
+        work_days: mergedFinalize.work_days,
+        work_nights: mergedFinalize.work_nights || 0,
+        base_amount: mergedFinalize.base_amount,
+        allowance_total: mergedFinalize.allowance_total,
+        ot_total: mergedFinalize.ot_total,
+        commission_total: mergedFinalize.commission_total,
+        mpf_deduction: mergedFinalize.mpf_deduction,
+        mpf_plan: mergedFinalize.mpf_plan,
+        mpf_employer: mergedFinalize.mpf_employer,
+        mpf_relevant_income: mergedFinalize.mpf_relevant_income,
         adjustment_total: 0,
-        net_amount: calc.net_amount,
+        net_amount: mergedFinalize.net_amount,
         status: 'draft',
       },
     });
@@ -1693,7 +1795,7 @@ export class PayrollService {
           action: 'update',
           targetTable: 'payrolls',
           targetId: id,
-          changesAfter: { status: 'draft', net_amount: calc.net_amount },
+          changesAfter: { status: 'draft', net_amount: mergedFinalize.net_amount },
         });
       } catch (e) {
         console.error('Audit log error:', e);
@@ -1846,15 +1948,7 @@ export class PayrollService {
       },
     });
 
-    // Save payroll items
-    for (const item of calc.items) {
-      await this.prisma.payrollItem.create({
-        data: {
-          ...item,
-          payroll_id: saved.id,
-        },
-      });
-    }
+    await this.replacePayrollItems(saved.id, calc, []);
 
     // Save payroll work logs with price info
     const enrichedWorkLogs =
@@ -1948,32 +2042,24 @@ export class PayrollService {
       calculationDailyAllowancesGenerate,
     );
 
-    await this.prisma.payrollItem.deleteMany({ where: { payroll_id: saved.id } });
-    for (const item of finalCalc.items) {
-      await this.prisma.payrollItem.create({
-        data: {
-          ...item,
-          payroll_id: saved.id,
-        },
-      });
-    }
+    const mergedGenerate = await this.replacePayrollItems(saved.id, finalCalc, []);
     await this.prisma.payroll.update({
       where: { id: saved.id },
       data: {
-        salary_type: finalCalc.salary_type,
-        base_rate: finalCalc.base_rate,
-        work_days: finalCalc.work_days,
-        work_nights: finalCalc.work_nights || 0,
-        base_amount: finalCalc.base_amount,
-        allowance_total: finalCalc.allowance_total,
-        ot_total: finalCalc.ot_total,
-        commission_total: finalCalc.commission_total,
-        mpf_deduction: finalCalc.mpf_deduction,
-        mpf_plan: finalCalc.mpf_plan,
-        mpf_employer: finalCalc.mpf_employer,
-        mpf_relevant_income: finalCalc.mpf_relevant_income,
+        salary_type: mergedGenerate.salary_type,
+        base_rate: mergedGenerate.base_rate,
+        work_days: mergedGenerate.work_days,
+        work_nights: mergedGenerate.work_nights || 0,
+        base_amount: mergedGenerate.base_amount,
+        allowance_total: mergedGenerate.allowance_total,
+        ot_total: mergedGenerate.ot_total,
+        commission_total: mergedGenerate.commission_total,
+        mpf_deduction: mergedGenerate.mpf_deduction,
+        mpf_plan: mergedGenerate.mpf_plan,
+        mpf_employer: mergedGenerate.mpf_employer,
+        mpf_relevant_income: mergedGenerate.mpf_relevant_income,
         adjustment_total: 0,
-        net_amount: finalCalc.net_amount,
+        net_amount: mergedGenerate.net_amount,
         status: 'draft',
       },
     });
@@ -2575,12 +2661,13 @@ export class PayrollService {
         await tx.payrollWorkLog.createMany({ data: payrollWorkLogData });
       }
 
-      if (calc.items.length > 0) {
+      const mergedResetPre = this.mergeCalcWithOverrides(calc, (payroll as any).items || [], {
+        existingMpfRelevantIncome,
+        adjustmentTotal,
+      });
+      if (mergedResetPre.items.length > 0) {
         await tx.payrollItem.createMany({
-          data: calc.items.map((item: any) => ({
-            ...item,
-            payroll_id: id,
-          })),
+          data: mergedResetPre.items.map((item: any) => payrollItemPersistData(item, id)),
         });
       }
 
@@ -2589,20 +2676,20 @@ export class PayrollService {
         data: {
           company_profile_id: actualCpId ?? undefined,
           company_id: actualCompanyId ?? undefined,
-          salary_type: calc.salary_type,
-          base_rate: calc.base_rate,
-          work_days: calc.work_days,
-          work_nights: calc.work_nights || 0,
-          base_amount: calc.base_amount,
-          allowance_total: calc.allowance_total,
-          ot_total: calc.ot_total,
-          commission_total: calc.commission_total,
-          mpf_deduction: calc.mpf_deduction,
-          mpf_plan: calc.mpf_plan,
-          mpf_employer: calc.mpf_employer,
-          mpf_relevant_income: calc.mpf_relevant_income,
+          salary_type: mergedResetPre.salary_type,
+          base_rate: mergedResetPre.base_rate,
+          work_days: mergedResetPre.work_days,
+          work_nights: mergedResetPre.work_nights || 0,
+          base_amount: mergedResetPre.base_amount,
+          allowance_total: mergedResetPre.allowance_total,
+          ot_total: mergedResetPre.ot_total,
+          commission_total: mergedResetPre.commission_total,
+          mpf_deduction: mergedResetPre.mpf_deduction,
+          mpf_plan: mergedResetPre.mpf_plan,
+          mpf_employer: mergedResetPre.mpf_employer,
+          mpf_relevant_income: mergedResetPre.mpf_relevant_income,
           adjustment_total: adjustmentTotal,
-          net_amount: calc.net_amount + adjustmentTotal,
+          net_amount: mergedResetPre.net_amount + adjustmentTotal,
           status: 'draft',
         },
       });
@@ -2644,32 +2731,29 @@ export class PayrollService {
       calculationDailyAllowancesReset,
       adjustmentTotal,
     );
-    await this.prisma.payrollItem.deleteMany({ where: { payroll_id: id } });
-    if (finalResetCalc.items.length > 0) {
-      await this.prisma.payrollItem.createMany({
-        data: finalResetCalc.items.map((item: any) => ({
-          ...item,
-          payroll_id: id,
-        })),
-      });
-    }
+    const mergedReset = await this.replacePayrollItems(
+      id,
+      finalResetCalc,
+      (payroll as any).items || [],
+      { existingMpfRelevantIncome, adjustmentTotal },
+    );
     await this.prisma.payroll.update({
       where: { id },
       data: {
-        salary_type: finalResetCalc.salary_type,
-        base_rate: finalResetCalc.base_rate,
-        work_days: finalResetCalc.work_days,
-        work_nights: finalResetCalc.work_nights || 0,
-        base_amount: finalResetCalc.base_amount,
-        allowance_total: finalResetCalc.allowance_total,
-        ot_total: finalResetCalc.ot_total,
-        commission_total: finalResetCalc.commission_total,
-        mpf_deduction: finalResetCalc.mpf_deduction,
-        mpf_plan: finalResetCalc.mpf_plan,
-        mpf_employer: finalResetCalc.mpf_employer,
-        mpf_relevant_income: finalResetCalc.mpf_relevant_income,
+        salary_type: mergedReset.salary_type,
+        base_rate: mergedReset.base_rate,
+        work_days: mergedReset.work_days,
+        work_nights: mergedReset.work_nights || 0,
+        base_amount: mergedReset.base_amount,
+        allowance_total: mergedReset.allowance_total,
+        ot_total: mergedReset.ot_total,
+        commission_total: mergedReset.commission_total,
+        mpf_deduction: mergedReset.mpf_deduction,
+        mpf_plan: mergedReset.mpf_plan,
+        mpf_employer: mergedReset.mpf_employer,
+        mpf_relevant_income: mergedReset.mpf_relevant_income,
         adjustment_total: adjustmentTotal,
-        net_amount: finalResetCalc.net_amount + adjustmentTotal,
+        net_amount: mergedReset.net_amount + adjustmentTotal,
         status: 'draft',
       },
     });
@@ -2936,36 +3020,12 @@ export class PayrollService {
       manualDayQuantityMap,
     );
 
-    // Update payroll items; preserve manually excluded items by stable item signature.
-    const previouslyExcludedItemKeys = new Set(
-      ((payroll as any).items || [])
-        .filter((item: any) => item.payroll_item_excluded)
-        .map((item: any) => this.buildPayrollItemSignature(item)),
+    const mergedRecalc = await this.replacePayrollItems(
+      id,
+      calc,
+      (payroll as any).items || [],
+      { existingMpfRelevantIncome, adjustmentTotal },
     );
-
-    // Preserve manual amount items: record their amounts before deletion
-    const manualAmountItems = new Map<string, { amount: number }>();
-    for (const item of ((payroll as any).items || [])) {
-      if (item.payroll_item_is_manual_amount) {
-        const key = `${item.item_type || ''}|${item.item_name || ''}`;
-        manualAmountItems.set(key, { amount: Number(item.amount) });
-      }
-    }
-
-    await this.prisma.payrollItem.deleteMany({ where: { payroll_id: id } });
-    for (const item of calc.items) {
-      const signature = this.buildPayrollItemSignature(item);
-      const manualKey = `${item.item_type || ''}|${item.item_name || ''}`;
-      const manualEntry = manualAmountItems.get(manualKey);
-      await this.prisma.payrollItem.create({
-        data: {
-          ...item,
-          payroll_id: id,
-          payroll_item_excluded: Boolean(item.payroll_item_excluded) || previouslyExcludedItemKeys.has(signature),
-          ...(manualEntry ? { amount: manualEntry.amount, payroll_item_is_manual_amount: true } : {}),
-        },
-      });
-    }
 
     // Update payroll totals and persist the resolved MPF base. This prevents a
     // prior automatic value from becoming an unintended manual override after
@@ -2973,20 +3033,20 @@ export class PayrollService {
     await this.prisma.payroll.update({
       where: { id },
       data: {
-        salary_type: calc.salary_type,
-        base_rate: calc.base_rate,
-        work_days: calc.work_days,
-        work_nights: calc.work_nights || 0,
-        base_amount: calc.base_amount,
-        allowance_total: calc.allowance_total,
-        ot_total: calc.ot_total,
-        commission_total: calc.commission_total,
-        mpf_deduction: calc.mpf_deduction,
-        mpf_plan: calc.mpf_plan,
-        mpf_employer: calc.mpf_employer,
-        mpf_relevant_income: calc.mpf_relevant_income,
+        salary_type: mergedRecalc.salary_type,
+        base_rate: mergedRecalc.base_rate,
+        work_days: mergedRecalc.work_days,
+        work_nights: mergedRecalc.work_nights || 0,
+        base_amount: mergedRecalc.base_amount,
+        allowance_total: mergedRecalc.allowance_total,
+        ot_total: mergedRecalc.ot_total,
+        commission_total: mergedRecalc.commission_total,
+        mpf_deduction: mergedRecalc.mpf_deduction,
+        mpf_plan: mergedRecalc.mpf_plan,
+        mpf_employer: mergedRecalc.mpf_employer,
+        mpf_relevant_income: mergedRecalc.mpf_relevant_income,
         adjustment_total: adjustmentTotal,
-        net_amount: calc.net_amount + adjustmentTotal,
+        net_amount: mergedRecalc.net_amount + adjustmentTotal,
       },
     });
     await this.rebuildPayrollTotalsFromItems(id);
@@ -2995,7 +3055,7 @@ export class PayrollService {
   }
 
 
-  async updatePayrollItem(payrollId: number, itemId: number, body: { payroll_item_excluded?: boolean; amount?: number; reset_manual_amount?: boolean }) {
+  async updatePayrollItem(payrollId: number, itemId: number, body: UpdatePayrollItemDto) {
     const payroll = await this.prisma.payroll.findUnique({
       where: { id: payrollId },
     });
@@ -3009,26 +3069,54 @@ export class PayrollService {
     });
     if (!item) throw new NotFoundException('Payroll item not found');
 
-    // Handle reset_manual_amount: clear flag and trigger recalculate to restore system amount
-    if (body.reset_manual_amount === true) {
+    const eligible = isPayrollItemOverrideEligible(item);
+    const useManualAmount = body.use_manual_amount;
+    const resetManualAmount = body.reset_manual_amount === true || useManualAmount === false;
+    const requestsOverrideWrite =
+      body.amount !== undefined ||
+      body.remarks !== undefined ||
+      body.use_manual_amount !== undefined;
+
+    if (!eligible && requestsOverrideWrite && !resetManualAmount) {
+      throw new BadRequestException('此項目不支援手動金額覆蓋');
+    }
+
+    if (!eligible && resetManualAmount) {
       await this.prisma.payrollItem.update({
         where: { id: itemId },
         data: { payroll_item_is_manual_amount: false },
       });
-      // Recalculate to restore system-computed amount for this item
       await this.recalculate(payrollId, false);
       return this.findOne(payrollId);
     }
 
-    const updateData: { payroll_item_excluded?: boolean; amount?: number; payroll_item_is_manual_amount?: boolean } = {};
+    const updateData: Record<string, unknown> = {};
 
-    // Handle excluded toggle
     if (body.payroll_item_excluded !== undefined) {
       updateData.payroll_item_excluded = Boolean(body.payroll_item_excluded);
     }
 
-    // Handle manual amount update
-    if (body.amount !== undefined && Number(body.amount) !== Number(item.amount)) {
+    if (eligible) {
+      if (resetManualAmount) {
+        Object.assign(updateData, switchPayrollItemToSystem(item));
+      } else if (useManualAmount === true) {
+        Object.assign(
+          updateData,
+          switchPayrollItemToManual(item, {
+            amount: body.amount,
+            remarks: body.remarks,
+          }),
+        );
+      } else if (item.payroll_item_is_manual_amount && (body.amount !== undefined || body.remarks !== undefined)) {
+        Object.assign(
+          updateData,
+          updateManualPayrollItemValues(item, {
+            amount: body.amount,
+            remarks: body.remarks,
+          }),
+        );
+      }
+    } else if (body.amount !== undefined && Number(body.amount) !== Number(item.amount)) {
       updateData.amount = Number(body.amount);
       updateData.payroll_item_is_manual_amount = true;
     }

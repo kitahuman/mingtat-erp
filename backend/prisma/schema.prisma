@@ -1562,11 +1562,17 @@ model PayrollItem {
   sort_order            Int     @default(0)
   payroll_item_excluded Boolean @default(false)
   payroll_item_is_manual_amount Boolean @default(false)
+  payroll_item_system_amount    Decimal? @db.Decimal(12, 2)
+  payroll_item_system_quantity  Decimal? @db.Decimal(10, 2)
+  payroll_item_system_remarks   String?  @db.Text
+  payroll_item_manual_amount    Decimal? @db.Decimal(12, 2)
+  payroll_item_manual_remarks   String?  @db.Text
 
   payroll Payroll @relation(fields: [payroll_id], references: [id], onDelete: Cascade)
 
   @@map("payroll_items")
 }
+
 
 model PayrollWorkLog {
   id                                Int       @id @default(autoincrement())
