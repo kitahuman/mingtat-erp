@@ -4,7 +4,7 @@ import {
   useWorkspaceTabDirty,
   useWorkspaceTabTitle,
 } from '@/components/WorkspaceTabs';
-import { Fragment, useState, useEffect, useRef, useCallback, type ReactNode } from 'react';
+import { Fragment, useState, useEffect, useRef, useCallback, useMemo, type ReactNode } from 'react';
 import { useParams } from 'next/navigation';
 import { payrollApi, fieldOptionsApi, pettyCashApi, bankAccountsApi, companiesApi, attachmentsApi } from '@/lib/api';
 import Link from 'next/link';
@@ -923,6 +923,27 @@ export default function PayrollDetailPage() {
   const [reimbursementLoading, setReimbursementLoading] = useState(false);
   const [pettyCashRecords, setPettyCashRecords] = useState<any[]>([]);
 
+  // Keep this prop referentially stable during child-only saves. PayrollTabs
+  // reloads its own latest snapshot after an item update; a fresh object here
+  // would otherwise overwrite that snapshot with the parent page's older data.
+  const payrollTabsCalculationDetails = useMemo(() => {
+    if (!payroll) return null;
+    return {
+      payroll_summary: {
+        gross_amount: payroll.gross_amount,
+        adjustment_total: payroll.adjustment_total,
+        deduction_total: payroll.deduction_total,
+        mpf_employer: payroll.mpf_employer,
+        net_amount: payroll.net_amount,
+        reimbursement_total: payroll.reimbursement_total,
+      },
+      items: payroll.items || [],
+      adjustments: payroll.adjustments || [],
+      allowance_options: payroll.allowance_options || [],
+      mpf_plan: payroll.mpf_plan,
+    };
+  }, [payroll]);
+
   const loadData = async () => {
     try {
       const res = await payrollApi.get(Number(params.id));
@@ -1558,20 +1579,7 @@ export default function PayrollDetailPage() {
           groupedSettlement={grouped}
           dailyCalculation={dailyCalc}
           unmatchedRecords={pwls.filter((p: any) => !p.is_excluded && p.price_match_status !== 'matched')}
-          calculationDetails={{
-            payroll_summary: {
-              gross_amount: payroll.gross_amount,
-              adjustment_total: payroll.adjustment_total,
-              deduction_total: payroll.deduction_total,
-              mpf_employer: payroll.mpf_employer,
-              net_amount: payroll.net_amount,
-              reimbursement_total: payroll.reimbursement_total,
-            },
-            items,
-            adjustments,
-            allowance_options: allowanceOptions,
-            mpf_plan: payroll.mpf_plan,
-          }}
+          calculationDetails={payrollTabsCalculationDetails}
           payrollSnapshot={payroll}
           readOnly={!isDraft || isReadOnly('payroll')}
           allowItemOverrides={canEditPayrollItemOverrides && !isReadOnly('payroll')}
