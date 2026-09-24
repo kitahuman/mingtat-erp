@@ -1394,6 +1394,7 @@ export default function PayrollDetailPage() {
   const allowanceOptions = payroll.allowance_options || [];
   const unmatchedGroups = buildUnmatchedGroups(pwls);
   const isDraft = payroll.status === 'draft';
+  const canEditPayrollItemOverrides = payroll.status === 'draft' || payroll.status === 'preparing';
   const selectablePwls = pwls.filter((pwl: any) => isDraft && !pwl.is_excluded);
   const allSelectableSelected = selectablePwls.length > 0 && selectablePwls.every((pwl: any) => selectedPwlIds.has(Number(pwl.id)));
   const pettyCashDeducted = pettyCashRecords
@@ -1573,6 +1574,7 @@ export default function PayrollDetailPage() {
           }}
           payrollSnapshot={payroll}
           readOnly={!isDraft || isReadOnly('payroll')}
+          allowItemOverrides={canEditPayrollItemOverrides && !isReadOnly('payroll')}
         />
       </div>
 
